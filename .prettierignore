@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+.specify/
+.agents/
+pnpm-lock.yaml
+var/
+*.mp4

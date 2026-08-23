@@ -1,0 +1,34 @@
+{
+  "name": "comfyuiflow",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.30.0",
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "spike": "tsx apps/spike-cli/src/index.ts",
+    "mcp:comfyui": "tsx apps/comfyui-mcp/src/index.ts",
+    "secret:scan": "node scripts/secret-scan.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@types/node": "^24.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.40.0",
+    "@typescript-eslint/parser": "^8.40.0",
+    "eslint": "^9.34.0",
+    "prettier": "^3.6.2",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.40.0",
+    "vitest": "^4.0.0",
+    "zod": "^4.4.3"
+  }
+}

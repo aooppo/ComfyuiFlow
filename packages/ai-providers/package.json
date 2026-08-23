@@ -1,0 +1,16 @@
+{
+  "name": "@comfyuiflow/ai-providers",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean"
+  },
+  "dependencies": {
+    "@comfyuiflow/contracts": "workspace:*",
+    "openai": "^7.5.0",
+    "zod": "^4.1.0"
+  }
+}

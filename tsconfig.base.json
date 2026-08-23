@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@comfyuiflow/contracts": ["packages/contracts/src/index.ts"],
+      "@comfyuiflow/spike-core": ["packages/spike-core/src/index.ts"],
+      "@comfyuiflow/comfyui-bridge": ["packages/comfyui-bridge/src/index.ts"],
+      "@comfyuiflow/ai-providers": ["packages/ai-providers/src/index.ts"]
+    }
+  }
+}
