@@ -2,7 +2,11 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { Command } from "commander";
-import { OpenAiResponsesProvider, OPENAI_DIRECTOR_MODEL } from "@comfyuiflow/ai-providers";
+import {
+  CODEXMANAGER_LOCAL_DIRECTOR_MODEL,
+  CODEXMANAGER_LOCAL_PROVIDER_ID,
+  CodexManagerLocalProvider,
+} from "@comfyuiflow/ai-providers";
 import { WorkflowRegistry } from "@comfyuiflow/comfyui-bridge";
 import {
   AuthorizationService,
@@ -36,12 +40,14 @@ program
     const config = loadRuntimeConfig();
     const value = JSON.parse(await readFile(request, "utf8"));
     const mcp = new McpComfyUiClient();
+    const director = new CodexManagerLocalProvider();
     await mcp.connect();
     try {
       const output = await buildDryRun(value, {
         dataRoot: config.spikeDataDir,
         registry: new WorkflowRegistry(config.workflowRegistryPath),
         readiness: (workflowId) => mcp.checkReadiness(workflowId),
+        directorReadiness: () => director.validateConfiguration(),
       });
       process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
     } finally {
@@ -62,11 +68,13 @@ async function withMcp<T>(callback: (mcp: McpComfyUiClient) => Promise<T>): Prom
 async function dryRunFromPath(requestPath: string) {
   const config = loadRuntimeConfig();
   const value = JSON.parse(await readFile(requestPath, "utf8"));
+  const director = new CodexManagerLocalProvider();
   return withMcp((mcp) =>
     buildDryRun(value, {
       dataRoot: config.spikeDataDir,
       registry: new WorkflowRegistry(config.workflowRegistryPath),
       readiness: (workflowId) => mcp.checkReadiness(workflowId),
+      directorReadiness: () => director.validateConfiguration(),
     }),
   );
 }
@@ -114,10 +122,10 @@ program
   .requiredOption("--generation-grant <id>")
   .action(async (options: { request: string; directorGrant: string; generationGrant: string }) => {
     const config = loadRuntimeConfig();
-    if (!config.openaiLiveEnabled || !config.comfyuiLiveEnabled) {
-      throw new Error("Both OPENAI_LIVE_ENABLED=1 and COMFYUI_LIVE_ENABLED=1 are required");
+    if (!config.codexManagerLiveEnabled || !config.comfyuiLiveEnabled) {
+      throw new Error("Both CODEX_MANAGER_LIVE_ENABLED=1 and COMFYUI_LIVE_ENABLED=1 are required");
     }
-    if (!config.openaiConfigured) throw new Error("OPENAI_API_KEY is missing");
+    if (!config.codexManagerConfigured) throw new Error("CODEX_MANAGER_API_KEY is missing");
     const preview = await dryRunFromPath(options.request);
     if (!preview.readiness.ready) throw new Error("ComfyUI workflow is not ready");
     const runId = randomUUID();
@@ -188,7 +196,11 @@ program
           );
         },
       };
-      const director = new OpenAiResponsesProvider();
+      const director = new CodexManagerLocalProvider();
+      const directorConfiguration = await director.validateConfiguration();
+      if (!directorConfiguration.configured) {
+        throw new Error(directorConfiguration.reason ?? "CodexManager local provider is disabled");
+      }
       const service = await SpikeRunService.create({
         dataRoot: config.spikeDataDir,
         director,
@@ -205,8 +217,8 @@ program
           })),
           creativeDescription: preview.shotPreview.creativeDescription,
           director: {
-            providerId: "openai",
-            modelId: OPENAI_DIRECTOR_MODEL,
+            providerId: CODEXMANAGER_LOCAL_PROVIDER_ID,
+            modelId: CODEXMANAGER_LOCAL_DIRECTOR_MODEL,
             promptTemplateVersion: "director-one-shot-v1",
             responseSchema: "ShotSpecification@1.0.0",
           },
@@ -220,7 +232,10 @@ program
         directorScopeHash: preview.scopeHash,
         directorRequest: {
           taskType: "STORYBOARD_GENERATION",
-          modelRef: { providerId: "openai", modelId: OPENAI_DIRECTOR_MODEL },
+          modelRef: {
+            providerId: CODEXMANAGER_LOCAL_PROVIDER_ID,
+            modelId: CODEXMANAGER_LOCAL_DIRECTOR_MODEL,
+          },
           creativeDescription: preview.shotPreview.creativeDescription,
           imageInputs: preview.assets,
           promptTemplateVersion: "director-one-shot-v1",

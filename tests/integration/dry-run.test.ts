@@ -84,7 +84,11 @@ describe("vertical spike dry-run", () => {
     expect(output).toMatchObject({
       mode: "DRY_RUN",
       providerCalls: 0,
-      director: { providerId: "openai", modelId: "gpt-5.4-2026-03-05" },
+      director: {
+        providerId: "codexmanager-local",
+        modelId: "gpt-5.4",
+        destination: "loopback-local",
+      },
       workflow: { workflowId: "ready-video" },
       readiness: { ready: true },
     });

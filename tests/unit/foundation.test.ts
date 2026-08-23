@@ -29,12 +29,21 @@ describe("foundation", () => {
     expect(config.comfyuiBaseUrl).toBe("http://127.0.0.1:8188");
     expect(config.comfyuiLiveEnabled).toBe(false);
     expect(config.openaiLiveEnabled).toBe(false);
+    expect(config.codexManagerLiveEnabled).toBe(false);
+    expect(config.codexManagerConfigured).toBe(false);
+    expect(config.codexManagerBaseUrl).toBe("http://127.0.0.1:48760/v1");
     expect(() => loadRuntimeConfig({ COMFYUI_BASE_URL: "https://example.com" })).toThrow(
       "must use http",
     );
     expect(() => loadRuntimeConfig({ COMFYUI_BASE_URL: "http://192.168.1.2:8188" })).toThrow(
       "loopback-local",
     );
+    expect(
+      loadRuntimeConfig({
+        CODEX_MANAGER_API_KEY: "local-test-key-not-real",
+        CODEX_MANAGER_LIVE_ENABLED: "1",
+      }),
+    ).toMatchObject({ codexManagerConfigured: true, codexManagerLiveEnabled: true });
   });
 
   it("creates a verifiable append-only evidence chain", async () => {

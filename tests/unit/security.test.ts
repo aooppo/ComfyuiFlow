@@ -12,11 +12,13 @@ describe("secret safety", () => {
       {
         message: `Bearer abcdefghijklmnopqrstuvwxyz ${secret}`,
         provider: "s" + "k-proj-abcdefghijklmnopqrstuvwxyz",
+        CODEX_MANAGER_API_KEY: "local-gateway-secret-value",
       },
       [secret],
     );
     expect(JSON.stringify(output)).not.toContain(secret);
     expect(JSON.stringify(output)).not.toContain("sk-proj-");
+    expect(JSON.stringify(output)).not.toContain("local-gateway-secret-value");
     expect(JSON.stringify(output)).toContain("[REDACTED_SECRET]");
   });
 

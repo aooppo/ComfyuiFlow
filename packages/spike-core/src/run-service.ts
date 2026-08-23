@@ -170,7 +170,7 @@ export class SpikeRunService {
       }
       if (pollIntervalMs > 0) await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
-    await this.evidence.append(stream, "FAILED", {
+    await this.evidence.append(stream, "AMBIGUOUS", {
       promptId: submission.promptId,
       status: "POLL_LIMIT",
     });
@@ -180,14 +180,16 @@ export class SpikeRunService {
   async reconcile(input: { runId: string; promptId: string; workflowId: string }) {
     const stream = `run_${input.runId.replaceAll("-", "_")}`;
     const events = await this.evidence.read(stream);
-    const ambiguous = events.find(
+    const reconcilable = events.find(
       (event) =>
-        event.eventType === "AMBIGUOUS" &&
+        (event.eventType === "AMBIGUOUS" || event.eventType === "FAILED") &&
         typeof event.payload === "object" &&
         event.payload !== null &&
-        (event.payload as Record<string, unknown>).promptId === input.promptId,
+        (event.payload as Record<string, unknown>).promptId === input.promptId &&
+        (event.eventType === "AMBIGUOUS" ||
+          (event.payload as Record<string, unknown>).status === "POLL_LIMIT"),
     );
-    if (!ambiguous) throw new Error("Run has no matching ambiguous prompt ID");
+    if (!reconcilable) throw new Error("Run has no matching reconcilable prompt ID");
     const status = await this.dependencies.generation.status(input.promptId);
     await this.evidence.append(stream, "STATUS_OBSERVED", {
       promptId: input.promptId,

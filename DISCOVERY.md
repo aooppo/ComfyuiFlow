@@ -2,9 +2,13 @@
 
 **Observed**: 2026-08-23
 
-**External provider calls**: 0
+**CodexManager Director calls**: 4 separately authorized calls
 
-**ComfyUI generation submissions**: 0
+**Official OpenAI calls**: 0
+
+**ComfyUI generation submissions**: 1 separately authorized submission
+
+**Default Creative AI test Provider**: `codexmanager-local`
 
 ## Capability matrix
 
@@ -23,7 +27,7 @@
 | Reference-conditioned workflow | Hash-locked dual-reference Wan2.2 graph   | Ready                |
 | Usable video model weights     | Three official artifacts; SHA verified    | Ready                |
 | Duration/resolution/fps limits | 2.0625 s / 512x288 / 16 fps               | Fixed pilot profile  |
-| Character/scene fidelity       | Requires real shot and human review       | Unknown              |
+| Character/scene fidelity       | Real shot plus owner review               | FAIL — severe drift  |
 | Audio                          | Outside vertical spike                    | Unsupported by scope |
 
 ## Local inventory
@@ -40,7 +44,10 @@
 - Workflow input path: scene scale plus alpha-aware character composite produces the single Wan2.2
   start frame; positive prompt is an independent allowlisted binding
 - Workflow output: node `20`, `images` media key, H.264 MP4
-- Outputs: no real generated video artifact discovered
+- Output: one retained H.264 MP4, 512x288, 16 fps, 2.0625 seconds, no audio; SHA-256
+  `86de7ccb94a84a5e051b6ce2cbc3d77db35a8b5304df5583a2e23421fefe03e3`
+- CodexManager local gateway: `127.0.0.1:48760`, fixed loopback registration; `/health` is reachable
+  and model endpoints require the environment-only platform key
 - Runtime warning: OpenCV and PyAV bundle different FFmpeg dynamic libraries. Startup and prompt
   validation succeed, but the warning remains a risk to observe during the one real run.
 
@@ -64,7 +71,9 @@ dry-run identified two distinct immutable input hashes and the fixed 2.0625-seco
 profile. Two local input uploads were separately used for no-queue native prompt validation;
 ComfyUI returned `valid: true`, output node `20`, and no node errors.
 
-The real one-shot run has not started. It still requires owner-selected character and scene images,
-an environment-only OpenAI key, review of the resulting exact dry-run, and two new one-call LIVE
-grants. Implementation, validation, and model setup have made zero OpenAI calls and zero ComfyUI
-generation submissions.
+The exact-scope one-shot run completed with `codexmanager-local` and one ComfyUI submission. The
+local 120-second polling limit expired while the same prompt continued, so query-only
+reconciliation retained and validated that existing artifact without resubmission. Run
+`6255990b-2870-4762-9a32-faa0a1728002` has a valid technical chain and an append-only owner `FAIL`:
+the first frame was recognizable, but the middle and final frames showed severe color blocks,
+stretching, and structural collapse. The productization gate remains closed as `OWNER_FAIL`.

@@ -121,6 +121,55 @@ describe("one-shot live safety", () => {
     expect(generation.submit).toHaveBeenCalledTimes(1);
   });
 
+  it("reconciles a completed prompt after the local polling limit without resubmitting", async () => {
+    const root = await mkdtemp(join(tmpdir(), "comfyuiflow-poll-limit-"));
+    const promptId = randomUUID();
+    const generation = {
+      submit: vi.fn().mockResolvedValue({ promptId }),
+      status: vi
+        .fn()
+        .mockResolvedValueOnce({ status: "IN_PROGRESS", artifacts: [] })
+        .mockResolvedValueOnce({ status: "COMPLETED", artifacts: [] }),
+      retainArtifacts: vi.fn().mockResolvedValue([{ sha256: "e".repeat(64) }]),
+    };
+    const service = await SpikeRunService.create({
+      dataRoot: root,
+      director: {
+        generateStructured: vi.fn().mockResolvedValue({ structuredOutput: { action: "walk" } }),
+      },
+      generation,
+      maxPolls: 1,
+      pollIntervalMs: 0,
+    });
+    const scopeHash = hashCanonical({ director: "poll-limit" });
+    const grant = await service.authorization.createGrant({
+      operation: "DIRECTOR_GENERATE",
+      scopeHash,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    const runId = randomUUID();
+    await expect(
+      service.execute({
+        runId,
+        provenance,
+        directorGrantId: grant.id,
+        directorScopeHash: scopeHash,
+        directorRequest: {},
+        generationRequest: {},
+      }),
+    ).rejects.toThrow("polling limit");
+
+    const events = await new EvidenceStore(root).read(`run_${runId.replaceAll("-", "_")}`);
+    expect(events.at(-1)).toMatchObject({
+      eventType: "AMBIGUOUS",
+      payload: { promptId, status: "POLL_LIMIT" },
+    });
+
+    const reconciled = await service.reconcile({ runId, promptId, workflowId: "ready-video" });
+    expect(reconciled.status).toBe("COMPLETED");
+    expect(generation.submit).toHaveBeenCalledTimes(1);
+  });
+
   it("records FAILED when artifact validation fails after provider completion", async () => {
     const root = await mkdtemp(join(tmpdir(), "comfyuiflow-artifact-fail-"));
     const promptId = randomUUID();

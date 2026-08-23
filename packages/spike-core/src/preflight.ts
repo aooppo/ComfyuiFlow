@@ -17,6 +17,7 @@ export interface DryRunDependencies {
     }>;
   };
   readiness(workflowId: string): Promise<WorkflowReadiness>;
+  directorReadiness?(): Promise<{ configured: boolean; reason?: string }>;
 }
 
 export class DuplicateInputAssetsError extends Error {
@@ -39,6 +40,9 @@ export async function createDryRun(requestValue: unknown, dependencies: DryRunDe
   if (assets[0].sha256 === assets[1].sha256) throw new DuplicateInputAssetsError();
   const loaded = await dependencies.registry.load(request.workflowId);
   const readiness = await dependencies.readiness(request.workflowId);
+  const directorReadiness = dependencies.directorReadiness
+    ? await dependencies.directorReadiness()
+    : { configured: false, reason: "Director readiness was not checked" };
   const shotPreview = ShotSpecificationSchema.parse({
     id: randomUUID(),
     schemaVersion: "1.0.0",
@@ -59,7 +63,8 @@ export async function createDryRun(requestValue: unknown, dependencies: DryRunDe
   const scope = {
     assetHashes: assets.map((asset) => ({ role: asset.role, sha256: asset.sha256 })),
     creativeDescription: request.creativeDescription,
-    directorModel: "gpt-5.4-2026-03-05",
+    directorProvider: "codexmanager-local",
+    directorModel: "gpt-5.4",
     promptTemplateVersion: "director-one-shot-v1",
     workflowId: loaded.manifest.workflowId,
     workflowSha256: loaded.actualHash,
@@ -69,11 +74,12 @@ export async function createDryRun(requestValue: unknown, dependencies: DryRunDe
     providerCalls: 0 as const,
     assets,
     director: {
-      providerId: "openai",
-      modelId: "gpt-5.4-2026-03-05",
-      region: "provider-managed",
+      providerId: "codexmanager-local",
+      modelId: "gpt-5.4",
+      destination: "loopback-local",
       promptTemplateVersion: "director-one-shot-v1",
       responseSchema: "ShotSpecification@1.0.0",
+      readiness: directorReadiness,
     },
     shotPreview,
     workflow: {
