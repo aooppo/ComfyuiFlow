@@ -1,4 +1,71 @@
 {
   "schemaVersion": "1.0.0",
-  "workflows": []
+  "workflows": [
+    {
+      "workflowId": "wan22-ti2v-5b-dual-reference",
+      "version": "1.0.0",
+      "displayName": "Wan2.2 TI2V 5B Dual Reference Pilot",
+      "enabled": true,
+      "apiWorkflowPath": "wan22-ti2v-5b-dual-reference.api.json",
+      "sha256": "755d1bb9babb6c218eafa02c8bc7005c44232135e81d47b85f8de78e76c815a0",
+      "requiredNodeClasses": [
+        "LoadImage",
+        "ImageScale",
+        "MaskToImage",
+        "ImageToMask",
+        "InvertMask",
+        "ImageCompositeMasked",
+        "UNETLoader",
+        "ModelSamplingSD3",
+        "CLIPLoader",
+        "VAELoader",
+        "CLIPTextEncode",
+        "Wan22ImageToVideoLatent",
+        "KSampler",
+        "VAEDecode",
+        "CreateVideo",
+        "SaveVideo"
+      ],
+      "requiredModels": [
+        {
+          "folder": "diffusion_models",
+          "filename": "wan2.2_ti2v_5B_fp16.safetensors"
+        },
+        {
+          "folder": "text_encoders",
+          "filename": "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+        },
+        {
+          "folder": "vae",
+          "filename": "wan2.2_vae.safetensors"
+        }
+      ],
+      "constraints": {
+        "durationSeconds": {
+          "min": 2,
+          "max": 2.1,
+          "default": 2.0625
+        },
+        "width": 512,
+        "height": 288,
+        "fps": 16,
+        "outputMediaType": "video"
+      },
+      "bindings": {
+        "character": {
+          "pointer": "/1/inputs/image"
+        },
+        "scene": {
+          "pointer": "/2/inputs/image"
+        },
+        "positivePrompt": {
+          "pointer": "/14/inputs/text"
+        }
+      },
+      "output": {
+        "nodeId": "20",
+        "mediaKey": "images"
+      }
+    }
+  ]
 }

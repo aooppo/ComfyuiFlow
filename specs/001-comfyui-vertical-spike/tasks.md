@@ -221,3 +221,10 @@ checklist and traceability format.
 - [x] T049 Aggregate per-workflow hash, binding, node, and model readiness into `pnpm spike discover` so a reachable server plus registered workflow cannot be misreported ready per SC-001 and US1/AC2 (partial)
 - [x] T050 Reject identical character and scene source hashes during preflight with a zero-call `DUPLICATE_INPUT_ASSETS` failure per the duplicate-input edge case and FR-004 (partial)
 - [x] T051 Append terminal `FAILED` evidence when Director authorization is missing, expired, reused, or scope-mismatched before any Provider request in `packages/spike-core/src/run-service.ts` per the authorization edge case and FR-010 through FR-012 (partial)
+
+## Phase 10: Convergence
+
+- [x] T052 Install the three official Wan2.2 TI2V 5B model artifacts under the local ComfyUI model inventory, verify their published SHA-256 values, and record environment-only evidence in `DISCOVERY.md` and `specs/001-comfyui-vertical-spike/verification.md` per US2 and SC-001 (missing)
+- [x] T053 Add and register a hash-locked Wan2.2 TI2V 5B API workflow in `workflows/` that composes both character and scene inputs, exposes only allowlisted bindings, and produces one MP4 output per FR-006 and FR-007 (missing)
+- [x] T054 Constrain the OpenAI Director request to the selected workflow duration and cover the provider contract in `packages/ai-providers/src/openai-provider.ts`, `apps/spike-cli/src/index.ts`, and `tests/contract/openai-director.test.ts` per FR-008 (partial)
+- [x] T055 Run live local readiness plus a zero-provider-call dry-run against the registered workflow and record the exact output in `DISCOVERY.md` and `specs/001-comfyui-vertical-spike/verification.md` per US1/AC3 and SC-002 (missing)

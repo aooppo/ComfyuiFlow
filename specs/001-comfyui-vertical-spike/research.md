@@ -70,6 +70,21 @@ consume additional generation grants.
 **Rationale**: AI creative generation and GPU video generation have separate cost/failure
 boundaries. A successful Director call must not implicitly authorize a video submission.
 
+### R-007: Use the official Wan2.2 TI2V 5B pilot profile
+
+**Decision**: Use the official Comfy-Org Wan2.2 TI2V 5B diffusion model, Wan2.2 VAE, and FP8 UMT5
+encoder with only core ComfyUI nodes. The versioned pilot graph composes the character reference
+over the scene reference before image-to-video conditioning and fixes generation to 512x288,
+33 frames, 16 fps, 12 steps, one batch, and one H.264 MP4.
+
+**Rationale**: Official ComfyUI guidance identifies the 5B hybrid as supporting image-to-video and
+native offloading at an 8 GB-class memory floor. It is the smallest official native Wan2.2 option
+for the M1 Pro 32 GB host. A fixed low-resolution profile bounds the first feasibility attempt.
+
+**Alternatives rejected**: The Wan2.2 14B variants require materially larger weights and memory;
+partner/API nodes add another paid provider boundary; unreviewed custom-node workflows expand the
+network and dependency surface before the local path is proven.
+
 ## Confirmed local facts
 
 - ComfyUI checkout: `/Users/tj/Applications/ComfyUI-LadyLala`, version `v0.33.2`, commit `7cee3ce`.
@@ -83,18 +98,19 @@ boundaries. A successful Director call must not implicitly authorize a video sub
   reconciliation after an ambiguous response.
 - `SaveVideo` exists as a base node, but that does not prove an installed generation model or a
   working image-to-video graph.
-- ComfyUI was not running and port 8188 was not listening during discovery.
-- Standard model directories contain no usable model weights; only configuration/placeholders and
-  an incomplete Hugging Face lock were found.
-- No saved reference-conditioned API workflow or generated video artifact was found.
+- The historical baseline had no listener or model weights. ComfyUI is now running on loopback with
+  Apple MPS, and the three official Wan2.2 pilot artifacts are installed with verified hashes.
+- `wan22-ti2v-5b-dual-reference` is registered at version `1.0.0`; its graph hash, nodes, models,
+  bindings, output declaration, and native no-queue prompt validation pass.
+- A zero-call dry-run reports `ready: true`; no generated video artifact exists yet.
 - The InstantID custom node source is present, but its required InstantID, ControlNet, and related
   model assets are absent.
 
 ## Unknown until a real workflow/model is supplied
 
-- Which video model and workflow meet the character plus scene reference requirement.
-- Exact supported duration, resolution, frame rate, VRAM use, and runtime on Apple M1 Pro.
-- Whether the chosen graph uses both references semantically and produces an MP4 output record.
+- Actual peak memory and runtime of the fixed 512x288, 33-frame profile on Apple M1 Pro.
+- Whether the generated result preserves both references semantically and produces the declared
+  H.264 MP4 at the expected media facts.
 - Character, scene, action, and continuity quality.
 - Audio support (explicitly outside this spike).
 

@@ -19,6 +19,15 @@ function numericUsage(value: unknown): Record<string, number> | undefined {
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
+function requiredDurationSeconds(request: AiTaskRequest): number | undefined {
+  const value = request.metadata.requiredDurationSeconds;
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value > 30) {
+    throw new Error("requiredDurationSeconds metadata is invalid");
+  }
+  return value;
+}
+
 export class OpenAiResponsesProvider implements AiModelProvider {
   constructor(private readonly client: OpenAI = new OpenAI()) {}
 
@@ -44,6 +53,7 @@ export class OpenAiResponsesProvider implements AiModelProvider {
     ) {
       throw new Error("OpenAI Director model is not registered");
     }
+    const requiredDuration = requiredDurationSeconds(request);
     const images = await Promise.all(
       request.imageInputs.map(async (asset) => {
         const bytes = await readFile(asset.storedPath);
@@ -65,8 +75,11 @@ export class OpenAiResponsesProvider implements AiModelProvider {
               type: "input_text",
               text:
                 "Create exactly one continuous video shot from the character and scene references. " +
-                "Preserve identity, wardrobe, scene layout, and lighting. Return only the required " +
-                `structured fields. Creative intent: ${request.creativeDescription}`,
+                "Preserve identity, wardrobe, scene layout, and lighting. Return only the required structured fields. " +
+                (requiredDuration === undefined
+                  ? ""
+                  : `Set durationSeconds exactly to ${requiredDuration}. `) +
+                `Creative intent: ${request.creativeDescription}`,
             },
             ...images,
           ],
@@ -75,6 +88,12 @@ export class OpenAiResponsesProvider implements AiModelProvider {
       text: { format: zodTextFormat(ShotSpecificationSchema, "shot_specification") },
     });
     const structuredOutput = ShotSpecificationSchema.parse(response.output_parsed);
+    if (
+      requiredDuration !== undefined &&
+      Math.abs(structuredOutput.durationSeconds - requiredDuration) > Number.EPSILON
+    ) {
+      throw new Error("Structured output does not match the selected workflow duration");
+    }
     const usage = numericUsage(response.usage);
     return AiProviderResultSchema.parse({
       providerId: "openai",

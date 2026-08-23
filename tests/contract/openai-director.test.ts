@@ -30,7 +30,7 @@ describe("OpenAI Director adapter", () => {
       camera: "Medium tracking shot",
       composition: "Character centered",
       continuityRequirements: ["Keep wardrobe stable"],
-      durationSeconds: 2,
+      durationSeconds: 2.0625,
       directorRunId: randomUUID(),
     };
     const parse = vi.fn().mockResolvedValue({
@@ -47,7 +47,7 @@ describe("OpenAI Director adapter", () => {
       creativeDescription: "walk in",
       imageInputs: assets,
       promptTemplateVersion: "director-one-shot-v1",
-      metadata: {},
+      metadata: { requiredDurationSeconds: 2.0625 },
     });
     expect(result.structuredOutput).toEqual(output);
     expect(parse).toHaveBeenCalledTimes(1);
@@ -56,6 +56,41 @@ describe("OpenAI Director adapter", () => {
     expect(
       request.input[0].content.filter((item: any) => item.type === "input_image"),
     ).toHaveLength(2);
+    expect(request.input[0].content[0].text).toContain("Set durationSeconds exactly to 2.0625");
+  });
+
+  it("rejects a structured duration that does not match the selected workflow", async () => {
+    const parse = vi.fn().mockResolvedValue({
+      id: "resp_duration_mismatch",
+      model: "gpt-5.4-2026-03-05",
+      output_parsed: {
+        id: randomUUID(),
+        schemaVersion: "1.0.0",
+        promptTemplateVersion: "director-one-shot-v1",
+        creativeDescription: "walk in",
+        startState: "At the doorway",
+        action: "Walks into the room",
+        endState: "Stops near the table",
+        camera: "Medium tracking shot",
+        composition: "Character centered",
+        continuityRequirements: ["Keep wardrobe stable"],
+        durationSeconds: 4,
+        directorRunId: randomUUID(),
+      },
+      status: "completed",
+    });
+    const provider = new OpenAiResponsesProvider({ responses: { parse } } as any);
+    await expect(
+      provider.generateStructured({
+        taskType: "STORYBOARD_GENERATION",
+        modelRef: { providerId: "openai", modelId: "gpt-5.4-2026-03-05" },
+        creativeDescription: "walk in",
+        imageInputs: [] as any,
+        promptTemplateVersion: "director-one-shot-v1",
+        metadata: { requiredDurationSeconds: 2.0625 },
+      }),
+    ).rejects.toThrow("selected workflow duration");
+    expect(parse).toHaveBeenCalledTimes(1);
   });
 
   it("rejects invalid structured output without a repair or fallback request", async () => {

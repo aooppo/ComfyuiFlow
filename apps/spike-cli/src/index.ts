@@ -224,7 +224,10 @@ program
           creativeDescription: preview.shotPreview.creativeDescription,
           imageInputs: preview.assets,
           promptTemplateVersion: "director-one-shot-v1",
-          metadata: { runId },
+          metadata: {
+            runId,
+            requiredDurationSeconds: preview.workflow.constraints.durationSeconds.default,
+          },
         },
         generationRequest: { workflowId: preview.workflow.workflowId },
       });

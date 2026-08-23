@@ -18,18 +18,22 @@ These commands must not contact OpenAI or submit ComfyUI work.
 pnpm spike discover
 ```
 
-On the discovery baseline this is expected to report: ComfyUI unreachable, no enabled workflow,
-no usable video model, and `generationCalls: 0`.
+The historical baseline reported an unreachable ComfyUI, no workflow, and no model. The current
+prepared machine reports `ready: true`, no blockers, and `generationCalls: 0` for
+`wan22-ti2v-5b-dual-reference` while the local ComfyUI process is running.
 
-## 3. Register an owner-reviewed workflow
+## 3. Start and inspect the registered workflow
 
-Export a ComfyUI workflow in API format. Add it under `workflows/` with a manifest that declares
-the character image, scene image, shot prompt/settings, required node classes/models, and video
-output. Review the graph for hidden API/network nodes before enabling it. Do not commit model files
-or secrets.
+Start the currently verified checkout on loopback:
 
-Start ComfyUI locally only after its model requirements are installed, then rerun discovery. A
-reachable server alone is not `ready`.
+```bash
+cd /Users/tj/Applications/ComfyUI-LadyLala
+./.venv/bin/python main.py --listen 127.0.0.1 --port 8188 --disable-auto-launch
+```
+
+The registered graph and manifest are under `workflows/`. The three Wan2.2 model artifacts stay in
+the local ComfyUI model directories and have been SHA-256 verified. Rerun `pnpm spike discover`
+after any restart or model/workflow change; a reachable server alone is not readiness.
 
 ## 4. Produce a zero-call preview
 

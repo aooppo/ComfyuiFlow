@@ -21,10 +21,11 @@ feasibility risk.
 - Project-owned stdio MCP bridge: implemented and fake-contract-tested.
 - OpenAI Director adapter: implemented with `gpt-5.4-2026-03-05`, image input, structured output,
   and `store: false`.
-- Local ComfyUI: control API confirmed at source version `v0.33.2`.
-- Real video readiness: blocked. No enabled reference-conditioned workflow or usable video model
-  was found, and ComfyUI was not running during discovery.
-- Real calls made by this implementation: zero OpenAI calls and zero ComfyUI submissions.
+- Local ComfyUI: running on loopback at source version `v0.33.2`, using Apple MPS.
+- Real video readiness: `ready: true` for the registered Wan2.2 TI2V 5B dual-reference pilot;
+  official model files, graph hash, node classes, bindings, and native prompt validation pass.
+- Real calls made by this implementation: zero OpenAI calls and zero ComfyUI generation
+  submissions. No playable real artifact is claimed yet.
 
 See [DISCOVERY.md](./DISCOVERY.md) and the active
 [feature specification](./specs/001-comfyui-vertical-spike/spec.md).
@@ -68,19 +69,17 @@ The CLI talks to ComfyUI through these MCP tools. The bridge translates to the l
 HTTP endpoints; ordinary CLI input cannot supply raw workflow JSON, node IDs, arbitrary base URLs,
 or output paths.
 
-## Safe workflow registration
+## Registered workflow
 
-[`workflows/registry.json`](./workflows/registry.json) is intentionally empty. Before enabling a
-workflow:
+[`workflows/registry.json`](./workflows/registry.json) registers only
+`wan22-ti2v-5b-dual-reference`. Its reviewed API graph uses ComfyUI core nodes to scale the scene,
+composite the character reference, generate 33 frames with Wan2.2 TI2V 5B, and save one H.264 MP4.
+The fixed pilot profile is 512x288 at 16 fps for 2.0625 seconds. See
+[`workflows/README.md`](./workflows/README.md) for input and revision constraints.
 
-1. Install and identify the exact video model files.
-2. Export an API-format workflow that consumes both character and scene references.
-3. Review every node, especially custom network/API nodes.
-4. Declare required node classes/models, exact workflow SHA-256, allowlisted JSON Pointer bindings,
-   bounded duration/resolution/fps, and the one expected video output.
-5. Start ComfyUI on loopback and run a zero-call readiness check.
-
-A reachable server or the presence of the base `SaveVideo` node is not sufficient readiness.
+The three model files are installed only in the local ComfyUI model directories and never in this
+repository. Any graph, model, duration, resolution, fps, or output change requires a new workflow
+version, SHA-256, dry-run, and authorization.
 
 ## Dry-run and authorization
 
@@ -92,7 +91,7 @@ contain only three owner inputs and a registered workflow ID:
   "characterImage": "/absolute/path/character.png",
   "sceneImage": "/absolute/path/scene.png",
   "creativeDescription": "The character enters and looks toward camera.",
-  "workflowId": "owner-reviewed-workflow"
+  "workflowId": "wan22-ti2v-5b-dual-reference"
 }
 ```
 
