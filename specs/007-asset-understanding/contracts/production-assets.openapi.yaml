@@ -1,0 +1,624 @@
+openapi: 3.1.0
+info:
+  title: ComfyuiFlow Production Assets and Understanding API
+  version: 1.0.0
+paths:
+  /api/projects/{projectId}/assets:
+    get:
+      summary: Page and search project file assets
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/Cursor"
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 30 },
+          }
+        - { name: query, in: query, schema: { type: string, maxLength: 120 } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ProjectAssetStatus" } }
+        - { name: mediaType, in: query, schema: { type: string, enum: [IMAGE, VIDEO, AUDIO] } }
+      responses:
+        "200":
+          description: Stable cursor page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectAssetPage" }
+  /api/projects/{projectId}/assets/revalidate:
+    post:
+      summary: Revalidate preserved project assets without external provider calls
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assetIds]
+              properties:
+                assetIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  uniqueItems: true
+                  items: { type: string, format: uuid }
+      responses:
+        "200": { description: Per-item terminal validation results }
+        "409": { $ref: "#/components/responses/OwnerError" }
+  /api/projects/{projectId}/production-assets:
+    get:
+      summary: Page production assets
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/Cursor"
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 30 },
+          }
+        - { name: type, in: query, schema: { $ref: "#/components/schemas/ProductionAssetType" } }
+      responses:
+        "200": { description: Production asset page }
+    post:
+      summary: Create a stable production asset and draft version
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateProductionAsset" }
+      responses:
+        "201": { description: Asset and draft created }
+        "409": { $ref: "#/components/responses/OwnerError" }
+  /api/production-assets/{assetId}/versions:
+    post:
+      summary: Create a new draft based on an optional historical version
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                basedOnVersionId: { type: string, format: uuid }
+      responses:
+        "201": { description: Draft version created }
+        "409": { $ref: "#/components/responses/OwnerError" }
+  /api/production-asset-versions/{versionId}/files:
+    post:
+      summary: Bind a ready project file to a draft production asset version
+      parameters:
+        - $ref: "#/components/parameters/VersionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AssetVersionFileInput" }
+      responses:
+        "201": { description: Binding created }
+        "409": { $ref: "#/components/responses/OwnerError" }
+  /api/production-asset-versions/{versionId}/relations:
+    post:
+      summary: Create a versioned relation to another production asset version
+      parameters:
+        - $ref: "#/components/parameters/VersionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [toAssetVersionId, relationType]
+              properties:
+                toAssetVersionId: { type: string, format: uuid }
+                relationType:
+                  type: string
+                  enum:
+                    [DEFAULT_VOICE, IDENTITY_LORA, REQUIRES, COMPATIBLE_WITH, PART_OF, DERIVED_FROM]
+      responses:
+        "201": { description: Relation created }
+        "409": { $ref: "#/components/responses/OwnerError" }
+  /api/production-asset-versions/{versionId}/publish:
+    post:
+      summary: Atomically publish an immutable active version
+      parameters:
+        - $ref: "#/components/parameters/VersionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200": { description: Version published and prior active version retired }
+        "409": { $ref: "#/components/responses/OwnerError" }
+  /api/character-versions/{characterVersionId}/states:
+    post:
+      summary: Create a character state draft
+      parameters:
+        - name: characterVersionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCharacterState" }
+      responses:
+        "201": { description: State draft created }
+        "409": { $ref: "#/components/responses/OwnerError" }
+  /api/character-profiles/{characterProfileId}/versions:
+    post:
+      summary: Create a character identity version linked to a character production asset draft
+      parameters:
+        - name: characterProfileId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productionAssetVersionId]
+              properties:
+                productionAssetVersionId: { type: string, format: uuid }
+                basedOnCharacterVersionId: { type: string, format: uuid }
+      responses:
+        "201": { description: Character version created }
+        "409": { $ref: "#/components/responses/OwnerError" }
+  /api/character-state-versions/{stateVersionId}/components:
+    post:
+      summary: Bind an outfit, hair, makeup, or accessory version
+      parameters:
+        - name: stateVersionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CharacterStateComponentInput" }
+      responses:
+        "201": { description: Component bound }
+        "409": { $ref: "#/components/responses/OwnerError" }
+  /api/character-state-versions/{stateVersionId}/publish:
+    post:
+      summary: Publish an immutable active revision for one state key
+      parameters:
+        - name: stateVersionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200": { description: State revision published }
+        "409": { $ref: "#/components/responses/OwnerError" }
+  /api/projects/{projectId}/asset-candidates/preview:
+    post:
+      summary: Deterministically preview eligible file candidates without creating a shot
+      parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AssetCandidateRequirement" }
+      responses:
+        "200":
+          description: Explainable eligible and rejected candidates
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssetCandidateResult" }
+        "409": { $ref: "#/components/responses/OwnerError" }
+  /api/projects/{projectId}/asset-analyses/preview:
+    post:
+      summary: Prepare an immutable zero-call analysis manifest
+      parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assetIds]
+              properties:
+                assetIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 9
+                  uniqueItems: true
+                  items: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Zero-call preview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnalysisPreview" }
+        "409": { $ref: "#/components/responses/OwnerError" }
+  /api/projects/{projectId}/asset-analyses:
+    post:
+      summary: Confirm an exact external analysis and queue at most one attempt
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [manifestHash, acknowledgeExternalImageUpload]
+              properties:
+                manifestHash: { type: string, pattern: "^[a-f0-9]{64}$" }
+                acknowledgeExternalImageUpload: { const: true }
+      responses:
+        "202":
+          description: Existing or newly queued run
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnalysisRun" }
+        "409": { $ref: "#/components/responses/OwnerError" }
+  /api/asset-analyses/{runId}:
+    get:
+      summary: Read owner-safe analysis status
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Run state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnalysisRun" }
+        "404": { $ref: "#/components/responses/OwnerError" }
+  /api/understanding-revisions/{revisionId}/reviews:
+    post:
+      summary: Append an accept or reject review
+      parameters:
+        - name: revisionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [ACCEPTED, REJECTED] }
+                notes: { type: string, maxLength: 2000 }
+      responses:
+        "201": { description: Review appended }
+        "409": { $ref: "#/components/responses/OwnerError" }
+  /api/understanding-revisions/{revisionId}/corrections:
+    post:
+      summary: Append and accept an owner correction without changing the machine revision
+      parameters:
+        - name: revisionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [facts, acceptCorrection]
+              properties:
+                facts: { $ref: "#/components/schemas/UnderstandingFacts" }
+                acceptCorrection: { const: true }
+      responses:
+        "201": { description: Owner revision and acceptance appended }
+        "409": { $ref: "#/components/responses/OwnerError" }
+  /api/understanding-revisions/{revisionId}/applications:
+    post:
+      summary: Apply approved facts to an explicit draft semantic target
+      parameters:
+        - name: revisionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetType, targetId, fieldMappings]
+              properties:
+                targetType:
+                  { type: string, enum: [PRODUCTION_ASSET_DRAFT, ASSET_VERSION_FILE_DRAFT] }
+                targetId: { type: string, format: uuid }
+                fieldMappings:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  items:
+                    type: object
+                    required: [sourceField, targetField]
+                    properties:
+                      sourceField: { type: string, maxLength: 120 }
+                      targetField: { type: string, maxLength: 120 }
+      responses:
+        "201": { description: Approved fields applied and provenance recorded }
+        "409": { $ref: "#/components/responses/OwnerError" }
+components:
+  parameters:
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    VersionId:
+      name: versionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string, maxLength: 500 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 16, maxLength: 120 }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: { type: string, pattern: '^"[0-9]+"$' }
+  schemas:
+    ProjectAssetStatus:
+      type: string
+      enum: [PRESERVED, READY, INVALID, REMOVED]
+    ProductionAssetType:
+      type: string
+      enum: [CHARACTER, OUTFIT, PROP, SCENE, VOICE, LORA, HAIR, MAKEUP, ACCESSORY, OTHER]
+    ReferenceUsage:
+      type: string
+      enum:
+        [
+          IDENTITY,
+          FACE,
+          FULL_BODY,
+          OUTFIT_DETAIL,
+          PROP_DETAIL,
+          SCENE_STYLE,
+          POSE,
+          CONTROL,
+          TRAINING_SOURCE,
+        ]
+    Viewpoint:
+      type: string
+      enum:
+        [FRONT, FRONT_THREE_QUARTER, SIDE, REAR_THREE_QUARTER, REAR, TOP, LOW, DETAIL, UNSPECIFIED]
+    ShotScale:
+      type: string
+      enum:
+        [
+          EXTREME_CLOSE_UP,
+          CLOSE_UP,
+          MEDIUM_CLOSE_UP,
+          MEDIUM,
+          MEDIUM_FULL,
+          FULL,
+          WIDE,
+          EXTREME_WIDE,
+          UNSPECIFIED,
+        ]
+    ProjectAssetPage:
+      type: object
+      required: [items, total, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, displayName, mediaType, status, sha256]
+            properties:
+              id: { type: string, format: uuid }
+              displayName: { type: string, maxLength: 120 }
+              mediaType: { type: string, enum: [IMAGE, VIDEO, AUDIO] }
+              status: { $ref: "#/components/schemas/ProjectAssetStatus" }
+              sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        total: { type: integer, minimum: 0 }
+        nextCursor: { type: [string, "null"] }
+    CreateProductionAsset:
+      type: object
+      required: [type, name]
+      properties:
+        type: { $ref: "#/components/schemas/ProductionAssetType" }
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 4000 }
+    AssetVersionFileInput:
+      type: object
+      required: [projectAssetId, referenceUsage]
+      properties:
+        projectAssetId: { type: string, format: uuid }
+        referenceUsage: { $ref: "#/components/schemas/ReferenceUsage" }
+        viewpoint: { $ref: "#/components/schemas/Viewpoint" }
+        shotScale: { $ref: "#/components/schemas/ShotScale" }
+        isPreferred: { type: boolean, default: false }
+        notes: { type: string, maxLength: 1000 }
+    CreateCharacterState:
+      type: object
+      required: [stateKey, name]
+      properties:
+        stateKey: { type: string, pattern: "^[a-z0-9-]{1,80}$" }
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 4000 }
+    CharacterStateComponentInput:
+      type: object
+      required: [slotType, componentAssetVersionId]
+      properties:
+        slotType: { type: string, enum: [OUTFIT, HAIR, MAKEUP, ACCESSORY] }
+        componentAssetVersionId: { type: string, format: uuid }
+        slotKey: { type: string, maxLength: 80 }
+        sortOrder: { type: integer, minimum: 0, maximum: 1000, default: 0 }
+        required: { type: boolean, default: true }
+    AssetCandidateRequirement:
+      type: object
+      required: [contractVersion, projectId, requirementId, assetType, referenceUsages]
+      properties:
+        contractVersion: { const: asset-candidate-v1 }
+        projectId: { type: string, format: uuid }
+        requirementId: { type: string, minLength: 1, maxLength: 120 }
+        assetType: { $ref: "#/components/schemas/ProductionAssetType" }
+        productionAssetId: { type: string, format: uuid }
+        productionAssetVersionId: { type: string, format: uuid }
+        characterProfileId: { type: string, format: uuid }
+        characterVersionId: { type: string, format: uuid }
+        characterStateVersionId: { type: string, format: uuid }
+        referenceUsages:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/ReferenceUsage" }
+        viewpoints:
+          type: array
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/Viewpoint" }
+        shotScales:
+          type: array
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/ShotScale" }
+    AssetCandidateResult:
+      type: object
+      required: [policyVersion, inputHash, eligible, rejected, gaps, formalSelectionCreated]
+      properties:
+        policyVersion: { const: deterministic-assets-v1 }
+        inputHash: { type: string, pattern: "^[a-f0-9]{64}$" }
+        eligible:
+          type: array
+          items: { $ref: "#/components/schemas/Candidate" }
+        rejected:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/Candidate"
+              - type: object
+                required: [reasonCodes]
+                properties:
+                  reasonCodes:
+                    type: array
+                    minItems: 1
+                    items: { type: string }
+        gaps:
+          type: array
+          items: { type: string }
+        formalSelectionCreated: { const: false }
+    Candidate:
+      type: object
+      required: [projectAssetId, productionAssetVersionId, bindingId]
+      properties:
+        projectAssetId: { type: string, format: uuid }
+        productionAssetVersionId: { type: string, format: uuid }
+        bindingId: { type: string, format: uuid }
+        scoreFacts: { type: object, additionalProperties: { type: number } }
+    AnalysisPreview:
+      type: object
+      required: [manifestHash, provider, assets, maxCalls, externalCalls, expiresAt]
+      properties:
+        manifestHash: { type: string, pattern: "^[a-f0-9]{64}$" }
+        provider:
+          type: object
+          required: [providerId, modelId, contractVersion]
+          properties:
+            providerId: { type: string }
+            modelId: { type: string }
+            contractVersion: { const: asset-understanding-v1 }
+        assets:
+          type: array
+          minItems: 1
+          maxItems: 9
+          items:
+            type: object
+            required: [slot, displayName, sha256, byteSize]
+            properties:
+              slot: { type: string, pattern: "^A[1-9]$" }
+              displayName: { type: string }
+              sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+              byteSize: { type: integer, minimum: 1 }
+        maxCalls: { const: 1 }
+        externalCalls: { const: 0 }
+        expiresAt: { type: string, format: date-time }
+    AnalysisRun:
+      type: object
+      required: [status, externalAttempts, createdAt]
+      properties:
+        status: { type: string, enum: [QUEUED, RUNNING, COMPLETED, FAILED, AMBIGUOUS] }
+        resultCode: { type: [string, "null"] }
+        externalAttempts: { type: integer, minimum: 0, maximum: 1 }
+        createdAt: { type: string, format: date-time }
+        finishedAt: { type: [string, "null"], format: date-time }
+    UnderstandingFacts:
+      type: object
+      required:
+        [
+          summary,
+          directObservations,
+          uncertainInterpretations,
+          referenceUsageSuggestions,
+          confidence,
+        ]
+      additionalProperties: false
+      properties:
+        summary: { type: string, maxLength: 2000 }
+        directObservations:
+          type: array
+          maxItems: 30
+          items: { type: string, maxLength: 500 }
+        uncertainInterpretations:
+          type: array
+          maxItems: 30
+          items: { type: string, maxLength: 500 }
+        subjectTypeSuggestions:
+          type: array
+          maxItems: 10
+          items: { $ref: "#/components/schemas/ProductionAssetType" }
+        referenceUsageSuggestions:
+          type: array
+          maxItems: 10
+          items: { $ref: "#/components/schemas/ReferenceUsage" }
+        viewpointSuggestion: { $ref: "#/components/schemas/Viewpoint" }
+        shotScaleSuggestion: { $ref: "#/components/schemas/ShotScale" }
+        confidence: { type: string, enum: [LOW, MEDIUM, HIGH] }
+  responses:
+    OwnerError:
+      description: Actionable owner-safe failure
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: object
+                required: [code, message]
+                properties:
+                  code: { type: string }
+                  message: { type: string }

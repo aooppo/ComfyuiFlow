@@ -2,7 +2,8 @@ import path from "node:path";
 import type { Asset, StoredObject } from "./generated/client/index.js";
 import type { AssetFilter, AssetPatch, AssetRoleValue } from "./contracts.js";
 import { ProjectAssetError } from "./contracts.js";
-import { inspectMedia } from "./media-probe.js";
+import type { ProjectAssetFilter } from "./project-asset-contracts.js";
+import { MEDIA_PROBE_VERSION, probeMedia } from "./media-probe.js";
 import { LocalContentStorage, sanitizeFilename, type StorageProvider } from "./local-storage.js";
 import { prisma, type ProjectPrisma } from "./prisma.js";
 
@@ -47,9 +48,39 @@ export class AssetService {
         ...(filter.role ? { role: filter.role } : {}),
       },
       include: { storedObject: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });
     return { assets: assets.map(assetDto), count: assets.length };
+  }
+
+  async listPage(projectId: string, filter: ProjectAssetFilter) {
+    await this.requireProject(projectId, false);
+    const offset = decodeCursor(filter.cursor);
+    const where = {
+      projectId,
+      ...(filter.status ? { status: filter.status } : { status: { not: "REMOVED" as const } }),
+      ...(filter.mediaType ? { mediaType: filter.mediaType } : {}),
+      ...(filter.role ? { role: filter.role } : {}),
+      ...(filter.query
+        ? { displayName: { contains: filter.query, mode: "insensitive" as const } }
+        : {}),
+    };
+    const [total, assets] = await this.client.$transaction([
+      this.client.asset.count({ where }),
+      this.client.asset.findMany({
+        where,
+        include: { storedObject: true },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        skip: offset,
+        take: filter.limit + 1,
+      }),
+    ]);
+    const page = assets.slice(0, filter.limit);
+    return {
+      assets: page.map(assetDto),
+      total,
+      nextCursor: assets.length > filter.limit ? encodeCursor(offset + filter.limit) : null,
+    };
   }
 
   async get(id: string, includeRemoved = false) {
@@ -63,11 +94,64 @@ export class AssetService {
     return assetDto(asset);
   }
 
+  async createImportBatch(projectId: string, idempotencyKey: string, requestedItemCount: number) {
+    await this.requireProject(projectId, true);
+    return this.client.assetImportBatch.upsert({
+      where: { projectId_idempotencyKey: { projectId, idempotencyKey } },
+      update: {},
+      create: { projectId, idempotencyKey, requestedItemCount },
+    });
+  }
+
+  async completeImportBatch(batchId: string) {
+    const attempts = await this.client.assetImportAttempt.findMany({ where: { batchId } });
+    const hasFailure = attempts.some(
+      (attempt) => attempt.outcome === "FAILED" || attempt.outcome === "REJECTED",
+    );
+    return this.client.assetImportBatch.update({
+      where: { id: batchId },
+      data: {
+        status: hasFailure ? "COMPLETED_WITH_ERRORS" : "COMPLETED",
+        completedAt: new Date(),
+      },
+    });
+  }
+
+  async recordRejectedImport(input: {
+    projectId: string;
+    filename: string;
+    role: AssetRoleValue;
+    code: string;
+    batchId?: string;
+    itemIndex?: number;
+  }) {
+    await this.client.assetImportAttempt.create({
+      data: {
+        projectId: input.projectId,
+        ...(input.batchId ? { batchId: input.batchId } : {}),
+        ...(input.itemIndex === undefined ? {} : { itemIndex: input.itemIndex }),
+        submittedFilename: sanitizeFilename(input.filename),
+        requestedRole: input.role,
+        outcome: "REJECTED",
+        resultCode: input.code,
+        status: "TERMINAL",
+        completedAt: new Date(),
+      },
+    });
+    return {
+      filename: sanitizeFilename(input.filename),
+      outcome: "REJECTED" as const,
+      code: input.code,
+    };
+  }
+
   async importStream(input: {
     projectId: string;
     filename: string;
     role: AssetRoleValue;
     stream: AsyncIterable<Uint8Array>;
+    batchId?: string;
+    itemIndex?: number;
   }) {
     const filename = sanitizeFilename(input.filename);
     await this.requireProject(input.projectId, true);
@@ -79,10 +163,14 @@ export class AssetService {
       await this.client.assetImportAttempt.create({
         data: {
           projectId: input.projectId,
+          ...(input.batchId ? { batchId: input.batchId } : {}),
+          ...(input.itemIndex === undefined ? {} : { itemIndex: input.itemIndex }),
           submittedFilename: filename,
           requestedRole: input.role,
           outcome: known && known.status < 500 ? "REJECTED" : "FAILED",
           resultCode: known?.code ?? "IMPORT_FAILED",
+          status: "TERMINAL",
+          completedAt: new Date(),
         },
       });
       return {
@@ -92,7 +180,7 @@ export class AssetService {
       } as const;
     }
 
-    const facts = await inspectMedia(preserved.absolutePath, preserved.detectedMimeType);
+    const facts = await probeMedia(preserved.absolutePath, preserved.detectedMimeType);
     const displayName = path.parse(filename).name.trim().slice(0, 120) || "Untitled asset";
     return this.client.$transaction(async (tx) => {
       const storedObject = await tx.storedObject.upsert({
@@ -103,6 +191,25 @@ export class AssetService {
           byteSize: BigInt(preserved.byteSize),
           detectedMimeType: preserved.detectedMimeType,
           storageKey: preserved.storageKey,
+          verificationStatus: facts.status === "PASS" ? "VERIFIED" : "INVALID",
+          ...(facts.status === "PASS" ? { verifiedAt: new Date() } : {}),
+        },
+      });
+      const nextOrdinal =
+        (await tx.mediaProbeResult.count({ where: { storedObjectId: storedObject.id } })) + 1;
+      await tx.mediaProbeResult.create({
+        data: {
+          storedObjectId: storedObject.id,
+          ordinal: nextOrdinal,
+          probeVersion: MEDIA_PROBE_VERSION,
+          status: facts.status,
+          mediaType: facts.mediaType,
+          container: facts.container,
+          width: facts.width,
+          height: facts.height,
+          durationMs: facts.durationMs,
+          streamCount: facts.streamCount,
+          safeResultCode: facts.safeResultCode,
         },
       });
       const duplicate = await tx.asset.findUnique({
@@ -115,6 +222,8 @@ export class AssetService {
         await tx.assetImportAttempt.create({
           data: {
             projectId: input.projectId,
+            ...(input.batchId ? { batchId: input.batchId } : {}),
+            ...(input.itemIndex === undefined ? {} : { itemIndex: input.itemIndex }),
             submittedFilename: filename,
             submittedByteSize: BigInt(preserved.byteSize),
             detectedMimeType: preserved.detectedMimeType,
@@ -123,6 +232,8 @@ export class AssetService {
             outcome: "DUPLICATE",
             resultCode: duplicate.status === "REMOVED" ? "DUPLICATE_REMOVED" : "DUPLICATE_ACTIVE",
             assetId: duplicate.id,
+            status: "TERMINAL",
+            completedAt: new Date(),
           },
         });
         return {
@@ -140,24 +251,29 @@ export class AssetService {
           displayName,
           mediaType: facts.mediaType,
           role: input.role,
+          status: facts.status === "PASS" ? "READY" : "INVALID",
           width: facts.width,
           height: facts.height,
           durationMs: facts.durationMs,
-          inspectionWarning: facts.inspectionWarning,
+          inspectionWarning: facts.status === "PASS" ? null : facts.safeResultCode,
         },
         include: { storedObject: true },
       });
       await tx.assetImportAttempt.create({
         data: {
           projectId: input.projectId,
+          ...(input.batchId ? { batchId: input.batchId } : {}),
+          ...(input.itemIndex === undefined ? {} : { itemIndex: input.itemIndex }),
           submittedFilename: filename,
           submittedByteSize: BigInt(preserved.byteSize),
           detectedMimeType: preserved.detectedMimeType,
           sha256: preserved.sha256,
           requestedRole: input.role,
           outcome: "IMPORTED",
-          resultCode: "IMPORTED",
+          resultCode: facts.status === "PASS" ? "IMPORTED_READY" : "IMPORTED_INVALID",
           assetId: asset.id,
+          status: "TERMINAL",
+          completedAt: new Date(),
         },
       });
       await tx.projectActivity.create({
@@ -169,8 +285,96 @@ export class AssetService {
         },
       });
       await tx.project.update({ where: { id: input.projectId }, data: { updatedAt: new Date() } });
-      return { filename, outcome: "IMPORTED" as const, code: "IMPORTED", asset: assetDto(asset) };
+      return {
+        filename,
+        outcome: "IMPORTED" as const,
+        code: facts.status === "PASS" ? "IMPORTED_READY" : "IMPORTED_INVALID",
+        asset: assetDto(asset),
+      };
     });
+  }
+
+  async revalidate(projectId: string, assetIds: string[]) {
+    await this.requireProject(projectId, true);
+    const assets = await this.client.asset.findMany({
+      where: { projectId, id: { in: assetIds }, status: { in: ["PRESERVED", "READY", "INVALID"] } },
+      include: { storedObject: true },
+    });
+    if (assets.length !== assetIds.length) {
+      throw new ProjectAssetError(
+        "ASSET_NOT_FOUND",
+        "One or more assets cannot be revalidated",
+        404,
+      );
+    }
+    const results = [];
+    for (const asset of assets) {
+      try {
+        const absolutePath = await this.storage.resolveVerified(
+          asset.storedObject.storageKey,
+          asset.storedObject.sha256,
+          Number(asset.storedObject.byteSize),
+        );
+        const facts = await probeMedia(absolutePath, asset.storedObject.detectedMimeType);
+        const updated = await this.client.$transaction(async (tx) => {
+          const ordinal =
+            (await tx.mediaProbeResult.count({ where: { storedObjectId: asset.storedObjectId } })) +
+            1;
+          await tx.mediaProbeResult.create({
+            data: {
+              storedObjectId: asset.storedObjectId,
+              ordinal,
+              probeVersion: MEDIA_PROBE_VERSION,
+              status: facts.status,
+              mediaType: facts.mediaType,
+              container: facts.container,
+              width: facts.width,
+              height: facts.height,
+              durationMs: facts.durationMs,
+              streamCount: facts.streamCount,
+              safeResultCode: facts.safeResultCode,
+            },
+          });
+          await tx.storedObject.update({
+            where: { id: asset.storedObjectId },
+            data: {
+              verificationStatus: facts.status === "PASS" ? "VERIFIED" : "INVALID",
+              ...(facts.status === "PASS" ? { verifiedAt: new Date() } : {}),
+            },
+          });
+          const projectAsset = await tx.asset.update({
+            where: { id: asset.id },
+            data: {
+              status: facts.status === "PASS" ? "READY" : "INVALID",
+              width: facts.width,
+              height: facts.height,
+              durationMs: facts.durationMs,
+              inspectionWarning: facts.status === "PASS" ? null : facts.safeResultCode,
+            },
+            include: { storedObject: true },
+          });
+          await tx.projectActivity.create({
+            data: {
+              projectId,
+              assetId: asset.id,
+              type: "ASSET_REVALIDATED",
+              summary: "Asset revalidated",
+            },
+          });
+          return projectAsset;
+        });
+        results.push({ asset: assetDto(updated), code: facts.safeResultCode });
+      } catch (error) {
+        const code = error instanceof ProjectAssetError ? error.code : "REVALIDATION_FAILED";
+        const invalid = await this.client.asset.update({
+          where: { id: asset.id },
+          data: { status: "INVALID", inspectionWarning: code },
+          include: { storedObject: true },
+        });
+        results.push({ asset: assetDto(invalid), code });
+      }
+    }
+    return { results };
   }
 
   async update(id: string, input: AssetPatch) {
@@ -286,4 +490,17 @@ export class AssetService {
     }
     return project;
   }
+}
+
+function encodeCursor(offset: number) {
+  return Buffer.from(String(offset)).toString("base64url");
+}
+
+function decodeCursor(cursor?: string) {
+  if (!cursor) return 0;
+  const value = Number(Buffer.from(cursor, "base64url").toString("utf8"));
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new ProjectAssetError("INVALID_CURSOR", "The page cursor is invalid");
+  }
+  return value;
 }

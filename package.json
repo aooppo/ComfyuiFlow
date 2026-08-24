@@ -25,6 +25,7 @@
     "mcp:comfyui": "tsx apps/comfyui-mcp/src/index.ts",
     "project:dev": "pnpm --filter @comfyuiflow/project-web dev",
     "project:build": "pnpm --filter @comfyuiflow/project-web build",
+    "project:worker": "pnpm --filter @comfyuiflow/project-worker dev",
     "project:db:generate": "pnpm --filter @comfyuiflow/project-core exec prisma generate --schema prisma/schema.prisma",
     "project:db:validate": "DATABASE_URL=postgresql://schema:validation@127.0.0.1:5432/schema pnpm --filter @comfyuiflow/project-core exec prisma validate --schema prisma/schema.prisma",
     "project:db:migrate": "pnpm --filter @comfyuiflow/project-core exec prisma migrate deploy --schema prisma/schema.prisma",

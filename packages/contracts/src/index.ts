@@ -333,3 +333,121 @@ export type WorkflowReadiness = z.infer<typeof WorkflowReadinessSchema>;
 export type AiTaskRequest = z.infer<typeof AiTaskRequestSchema>;
 export type AiProviderResult = z.infer<typeof AiProviderResultSchema>;
 export type RunProvenance = z.infer<typeof RunProvenanceSchema>;
+
+export const AssetUnderstandingTaskTypeSchema = z.literal("ASSET_UNDERSTANDING");
+export const AssetUnderstandingSlotSchema = z.string().regex(/^A[1-9]$/);
+export const AssetUnderstandingSubjectTypeSchema = z.enum([
+  "CHARACTER",
+  "OUTFIT",
+  "PROP",
+  "SCENE",
+  "VOICE",
+  "LORA",
+  "HAIR",
+  "MAKEUP",
+  "ACCESSORY",
+  "OTHER",
+]);
+export const AssetUnderstandingReferenceUsageSchema = z.enum([
+  "IDENTITY",
+  "FACE",
+  "FULL_BODY",
+  "OUTFIT_DETAIL",
+  "PROP_DETAIL",
+  "SCENE_STYLE",
+  "POSE",
+  "CONTROL",
+  "TRAINING_SOURCE",
+]);
+export const AssetUnderstandingViewpointSchema = z.enum([
+  "FRONT",
+  "FRONT_THREE_QUARTER",
+  "SIDE",
+  "REAR_THREE_QUARTER",
+  "REAR",
+  "TOP",
+  "LOW",
+  "DETAIL",
+  "UNSPECIFIED",
+]);
+export const AssetUnderstandingShotScaleSchema = z.enum([
+  "EXTREME_CLOSE_UP",
+  "CLOSE_UP",
+  "MEDIUM_CLOSE_UP",
+  "MEDIUM",
+  "MEDIUM_FULL",
+  "FULL",
+  "WIDE",
+  "EXTREME_WIDE",
+  "UNSPECIFIED",
+]);
+
+const BoundedFactListSchema = z.array(z.string().trim().min(1).max(500)).max(30);
+export const AssetUnderstandingFactsSchema = z
+  .object({
+    summary: z.string().trim().min(1).max(2_000),
+    directObservations: BoundedFactListSchema,
+    uncertainInterpretations: BoundedFactListSchema,
+    visibleText: BoundedFactListSchema.default([]),
+    subjectTypeSuggestions: z.array(AssetUnderstandingSubjectTypeSchema).max(10).default([]),
+    referenceUsageSuggestions: z.array(AssetUnderstandingReferenceUsageSchema).max(10).default([]),
+    viewpointSuggestion: AssetUnderstandingViewpointSchema.default("UNSPECIFIED"),
+    shotScaleSuggestion: AssetUnderstandingShotScaleSchema.default("UNSPECIFIED"),
+    scene: z.string().trim().max(1_000).default(""),
+    composition: z.string().trim().max(1_000).default(""),
+    lighting: z.string().trim().max(1_000).default(""),
+    colorPalette: z.array(z.string().trim().min(1).max(100)).max(12).default([]),
+    identityAnchors: BoundedFactListSchema.default([]),
+    continuityRisks: BoundedFactListSchema.default([]),
+    generationConstraints: BoundedFactListSchema.default([]),
+    qualityFacts: z.record(z.string().max(80), z.number().finite()).default({}),
+    confidence: z.enum(["LOW", "MEDIUM", "HIGH"]),
+  })
+  .strict();
+
+export const AssetUnderstandingProviderRequestSchema = z.object({
+  taskType: AssetUnderstandingTaskTypeSchema,
+  contractVersion: z.literal("asset-understanding-v1"),
+  modelRef: z.object({ providerId: z.string().min(1), modelId: z.string().min(1) }),
+  promptVersion: z.literal("asset-understanding-v1"),
+  schemaVersion: z.literal("asset-understanding-v1"),
+  images: z
+    .array(
+      z.object({
+        slot: AssetUnderstandingSlotSchema,
+        mimeType: z.string().startsWith("image/"),
+        content: z.instanceof(Uint8Array),
+      }),
+    )
+    .min(1)
+    .max(9)
+    .refine((items) => new Set(items.map((item) => item.slot)).size === items.length, {
+      message: "Asset understanding slots must be unique",
+    }),
+  context: z.string().max(4_000).default(""),
+});
+
+export const AssetUnderstandingProviderResultSchema = z.object({
+  providerId: z.string().min(1),
+  requestedModelId: z.string().min(1),
+  resolvedModelId: z.string().min(1),
+  responseId: z.string().min(1),
+  results: z
+    .array(z.object({ slot: AssetUnderstandingSlotSchema, facts: AssetUnderstandingFactsSchema }))
+    .min(1)
+    .max(9)
+    .refine((items) => new Set(items.map((item) => item.slot)).size === items.length, {
+      message: "Asset understanding results must have unique slots",
+    }),
+  usage: z.record(z.string(), z.number().finite()).optional(),
+  finishReason: z.string().max(120).optional(),
+  providerMetadata: z.record(z.string(), z.unknown()).default({}),
+});
+
+export type AssetUnderstandingFacts = z.infer<typeof AssetUnderstandingFactsSchema>;
+export type AssetUnderstandingProviderRequest = z.infer<
+  typeof AssetUnderstandingProviderRequestSchema
+>;
+export type AssetUnderstandingProviderResult = z.infer<
+  typeof AssetUnderstandingProviderResultSchema
+>;

@@ -1,4 +1,9 @@
-import type { AiProviderResult, AiTaskRequest } from "@comfyuiflow/contracts";
+import type {
+  AiProviderResult,
+  AiTaskRequest,
+  AssetUnderstandingProviderRequest,
+  AssetUnderstandingProviderResult,
+} from "@comfyuiflow/contracts";
 
 export interface AiModelCapabilities {
   providerId: string;
@@ -11,4 +16,7 @@ export interface AiModelProvider {
   getCapabilities(modelId: string): AiModelCapabilities;
   validateConfiguration(): Promise<{ configured: boolean; reason?: string }>;
   generateStructured(request: AiTaskRequest): Promise<AiProviderResult>;
+  understandAssets?(
+    request: AssetUnderstandingProviderRequest,
+  ): Promise<AssetUnderstandingProviderResult>;
 }

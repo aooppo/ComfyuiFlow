@@ -24,6 +24,19 @@ CLI commands, workflow graphs, provider task IDs, and dry-run manifests.
 - Project archive/restore and Asset removal are state transitions. Phase 1 exposes no permanent
   deletion or binary garbage collection.
 
+## Phase 2 interaction boundaries
+
+- The file library shows `PRESERVED`, `READY`, `INVALID`, and `REMOVED`, has stable paging/search,
+  and supports local revalidation. It never exposes a storage path or probe output.
+- The semantic catalog creates reusable Character/Outfit/Prop/etc. identities and immutable version
+  history. A Character state may compose Outfit, Hair, Makeup, and Accessory versions; regular Props
+  are intentionally labeled as Shot-level work for Phase 3.
+- Candidate preview is an explainable, read-only preflight for a future storyboard. “Eligible” is
+  not a formal Shot selection.
+- Understanding preview is zero-call. The confirmation checkbox enables one governed attempt only;
+  the default Fake provider remains local. Machine facts, owner decisions, corrections, and explicit
+  draft-target applications are separate evidence records.
+
 ## Verification
 
 Run the standard repository gates plus the real PostgreSQL suite:

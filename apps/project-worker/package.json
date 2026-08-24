@@ -1,0 +1,20 @@
+{
+  "name": "@comfyuiflow/project-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@comfyuiflow/ai-providers": "workspace:*",
+    "@comfyuiflow/project-core": "workspace:*"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}

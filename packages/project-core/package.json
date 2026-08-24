@@ -9,6 +9,8 @@
     "build": "tsup src/index.ts --format esm --dts --clean"
   },
   "dependencies": {
+    "@comfyuiflow/ai-providers": "workspace:*",
+    "@comfyuiflow/contracts": "workspace:*",
     "@prisma/client": "6.19.3",
     "file-type": "^21.0.0",
     "zod": "^4.4.3"

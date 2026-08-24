@@ -424,6 +424,165 @@ textarea {
 .filterRow label {
   min-width: 145px;
 }
+.filterRow label:first-child {
+  min-width: 220px;
+}
+.statusChip {
+  display: inline-flex;
+  margin-top: 8px;
+  border-radius: 999px;
+  padding: 4px 7px;
+  background: #f3f0e6;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.statusChip.ready {
+  background: #e8f2e9;
+  color: #28633a;
+}
+.statusChip.invalid {
+  background: #fff0ed;
+  color: var(--danger);
+}
+.statusChip.removed {
+  background: #e8e7e4;
+}
+.pagination {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
+}
+.pagination button,
+.panelButton {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 12px;
+  background: white;
+  color: var(--ink);
+  cursor: pointer;
+}
+.pagination button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.phase2Section {
+  border-top: 1px solid var(--line);
+  margin-top: 56px;
+  padding-top: 44px;
+}
+.phase2Form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: end;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 253, 248, 0.72);
+}
+.phase2Form textarea {
+  min-height: 48px;
+}
+.phase2Form .primaryButton {
+  min-height: 45px;
+}
+.semanticGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+.semanticCard,
+.candidateResult,
+.understandingHistory article {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  padding: 18px;
+}
+.semanticCard h3 {
+  margin: 6px 0;
+}
+.semanticCard > p:not(.assetRole) {
+  color: var(--muted);
+  font-size: 13px;
+}
+.versionList {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+.versionList > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.candidatePreview .inlineForm {
+  grid-template-columns: 1.3fr 1fr auto;
+}
+.candidateResult {
+  margin-top: 18px;
+  display: grid;
+  gap: 9px;
+  color: var(--muted);
+}
+.candidateResult strong {
+  color: var(--ink);
+}
+.candidateResult code {
+  font-size: 11px;
+}
+.formError {
+  color: var(--danger);
+  font-weight: 650;
+}
+.assetChecklist {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.assetChecklist label,
+.acknowledge {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px;
+  background: #fff;
+  font-weight: 600;
+}
+.assetChecklist input,
+.acknowledge input {
+  width: auto;
+}
+.understandingHistory {
+  border-top: 1px solid var(--line);
+  margin-top: 20px;
+  padding-top: 16px;
+}
+.understandingHistory h3 {
+  margin: 0 0 10px;
+  font-size: 17px;
+}
+.understandingHistory article {
+  margin-top: 9px;
+}
+.understandingHistory pre {
+  max-height: 170px;
+  overflow: auto;
+  background: #f5f3ed;
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 11px;
+}
 .assetGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

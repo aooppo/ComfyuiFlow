@@ -15,7 +15,7 @@ export interface AssetView {
   mediaType: "IMAGE" | "VIDEO" | "AUDIO";
   role: string;
   notes: string | null;
-  status: "READY" | "REMOVED";
+  status: "PRESERVED" | "READY" | "INVALID" | "REMOVED";
   sha256: string;
   byteSize: number;
   detectedMimeType: string;

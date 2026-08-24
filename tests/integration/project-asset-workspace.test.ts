@@ -38,9 +38,27 @@ async function* chunks(value: Buffer) {
 }
 
 async function clearWorkspace(client: ProjectPrisma) {
+  await client.understandingApplication.deleteMany();
+  await client.understandingReview.deleteMany();
+  await client.assetUnderstandingRevision.deleteMany();
+  await client.aiProviderAttempt.deleteMany();
+  await client.assetUnderstandingRun.deleteMany();
+  await client.aiCallGrant.deleteMany();
+  await client.assetUnderstandingManifestItem.deleteMany();
+  await client.assetUnderstandingManifest.deleteMany();
+  await client.characterStateComponent.deleteMany();
+  await client.characterStateVersion.deleteMany();
+  await client.characterVersion.deleteMany();
+  await client.characterProfile.deleteMany();
+  await client.productionAssetRelation.deleteMany();
+  await client.assetVersionFile.deleteMany();
+  await client.productionAssetVersion.deleteMany();
+  await client.productionAsset.deleteMany();
   await client.projectActivity.deleteMany();
   await client.assetImportAttempt.deleteMany();
+  await client.assetImportBatch.deleteMany();
   await client.asset.deleteMany();
+  await client.mediaProbeResult.deleteMany();
   await client.storedObject.deleteMany();
   await client.project.deleteMany();
 }
@@ -155,6 +173,8 @@ describe.runIf(enabled)("Project/Asset PostgreSQL workspace", () => {
       byteSize: 1n,
       detectedMimeType: "image/png",
       storageKey: `sha256/performance/${index}`,
+      verificationStatus: "VERIFIED" as const,
+      verifiedAt: new Date(),
     }));
     await client.storedObject.createMany({ data: objects });
     await client.asset.createMany({
@@ -165,6 +185,7 @@ describe.runIf(enabled)("Project/Asset PostgreSQL workspace", () => {
         displayName: `Asset ${index}`,
         mediaType: "IMAGE",
         role: index % 2 === 0 ? "SCENE" : "PRODUCT",
+        status: "READY" as const,
       })),
     });
 

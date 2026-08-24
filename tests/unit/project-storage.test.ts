@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -64,6 +64,20 @@ describe("LocalContentStorage", () => {
     await expect(
       storage.resolveVerified(preserved.storageKey, preserved.sha256, preserved.byteSize),
     ).rejects.toMatchObject({ code: "STORAGE_VERIFY_FAILED" });
+  });
+
+  it("re-hashes an existing same-size destination and refuses to overwrite a collision", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "comfyuiflow-storage-"));
+    const storage = new LocalContentStorage({ root, maxBytes: 10_000 });
+    const expected = createHash("sha256").update(png).digest("hex");
+    const destination = path.join(root, "sha256", expected.slice(0, 2), expected);
+    await mkdir(path.dirname(destination), { recursive: true });
+    await writeFile(destination, Buffer.alloc(png.length, 9));
+
+    await expect(storage.preserve(chunks(png))).rejects.toMatchObject({
+      code: "STORAGE_COLLISION",
+    });
+    expect(await readFile(destination)).toEqual(Buffer.alloc(png.length, 9));
   });
 
   it("normalizes untrusted display filenames without returning a path", () => {

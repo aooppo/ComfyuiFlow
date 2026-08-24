@@ -4,6 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { AssetImporter } from "./asset-importer";
 import { AssetLibrary } from "./asset-library";
 import { ProjectHeader } from "./project-header";
+import { ProductionAssetLibrary } from "./production-assets/production-asset-library";
+import { AssetCandidatePreview } from "./production-assets/asset-candidate-preview";
+import { AnalysisSelection } from "./asset-understanding/analysis-selection";
+import { CharacterStateEditor } from "./character-states/character-state-editor";
 import type { ProjectView } from "./types";
 
 export function ProjectWorkspace({ projectId }: { projectId: string }) {
@@ -59,6 +63,10 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
         revision={revision}
         readOnly={project.status !== "ACTIVE"}
       />
+      <ProductionAssetLibrary projectId={project.id} readOnly={project.status !== "ACTIVE"} />
+      <CharacterStateEditor projectId={project.id} readOnly={project.status !== "ACTIVE"} />
+      <AssetCandidatePreview projectId={project.id} />
+      {project.status === "ACTIVE" && <AnalysisSelection projectId={project.id} />}
     </div>
   );
 }

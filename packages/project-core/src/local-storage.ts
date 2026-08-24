@@ -110,6 +110,14 @@ export class LocalContentStorage implements StorageProvider {
       } catch (error) {
         const existing = await stat(finalPath).catch(() => null);
         if (!existing?.isFile() || existing.size !== byteSize) throw error;
+        const existingHash = await hashFile(finalPath);
+        if (existingHash !== sha256) {
+          throw new ProjectAssetError(
+            "STORAGE_COLLISION",
+            "Stored content does not match its content address",
+            500,
+          );
+        }
         alreadyExisted = true;
         await unlink(temporaryPath).catch(() => undefined);
       }
@@ -154,9 +162,7 @@ export class LocalContentStorage implements StorageProvider {
         500,
       );
     }
-    const actualHash = createHash("sha256");
-    for await (const chunk of createReadStream(resolved)) actualHash.update(chunk);
-    if (actualHash.digest("hex") !== sha256) {
+    if ((await hashFile(resolved)) !== sha256) {
       throw new ProjectAssetError(
         "STORAGE_VERIFY_FAILED",
         "Stored content is unavailable or changed",
@@ -177,4 +183,10 @@ export class LocalContentStorage implements StorageProvider {
     }
     return resolved;
   }
+}
+
+async function hashFile(filePath: string): Promise<string> {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+  return hash.digest("hex");
 }

@@ -184,3 +184,31 @@ The default content root is ignored `var/project-assets`; change it with
 `PROJECT_ASSET_STORAGE_DIR`. Phase 0/0.5 artifacts and workflow evidence are not imported or
 rewritten. See [`apps/project-web/README.md`](./apps/project-web/README.md) for validation and data
 lifecycle details.
+
+## Phase 2 Asset Understanding
+
+Phase 2 keeps physical source files, reusable creative identities, and AI observations distinct:
+
+- `Asset`/ProjectAsset stores immutable local bytes and an append-only media probe history. A file is
+  `PRESERVED`, `READY`, `INVALID`, or `REMOVED`; only locally revalidated `READY` files can be used
+  as semantic references or submitted for understanding.
+- `ProductionAsset` represents a reusable Character, Outfit, Prop, Scene, Voice, LoRA, Hair,
+  Makeup, Accessory, or Other identity. Its draft/active/retired versions bind ready files by an
+  explicit reference usage. Character states compose Outfit/Hair/Makeup/Accessory versions; ordinary
+  Props deliberately remain available for Phase 3 Shot-level binding.
+- `asset-candidate-v1` is a read-only, deterministic preflight for future storyboard generation.
+  It hard-filters project/identity/state/version/approval/usage/media facts and returns explainable
+  exclusions and gaps. It creates no Shot or formal selection.
+- Asset Understanding first creates a zero-call preview. A checked owner confirmation creates a
+  single-use grant and at most one Worker Attempt. Fake is the default; OpenAI is blocked unless
+  `ASSET_UNDERSTANDING_LIVE_ENABLED=true` at execution time. Machine observations are append-only and
+  need owner approval before an explicit application to a draft target.
+
+Run the local worker once after a Fake-confirmed analysis has been queued:
+
+```bash
+DATABASE_URL=postgresql://comfyuiflow:comfyuiflow@127.0.0.1:5448/comfyuiflow pnpm project:worker
+```
+
+This never starts automatic retries or provider fallback. The normal local validation ledger is
+`Provider 0 / AI ranking 0 / ComfyUI or video generation 0`.

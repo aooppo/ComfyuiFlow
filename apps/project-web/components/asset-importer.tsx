@@ -68,7 +68,8 @@ export function AssetImporter({
         <p className="eyebrow">Source intake</p>
         <h2 id="import-title">Add original assets</h2>
         <p>
-          Files stay local. Their bytes are preserved and verified before they enter your library.
+          Files stay local. Each item is preserved first, then structurally checked before it
+          becomes ready.
         </p>
       </div>
       <div className="importControls">
@@ -132,7 +133,7 @@ export function AssetImporter({
               <strong>{result.filename}</strong>
               <span>
                 {result.outcome === "IMPORTED"
-                  ? "Imported"
+                  ? "Preserved and queued for local verification"
                   : result.outcome === "DUPLICATE"
                     ? "Already in this project"
                     : result.code.replaceAll("_", " ").toLowerCase()}

@@ -2,6 +2,7 @@
 
 import type { AssetView } from "./types";
 import { roleLabel } from "./types";
+import { UnderstandingReview } from "./asset-understanding/understanding-review";
 
 function bytes(value: number) {
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
@@ -87,6 +88,7 @@ export function AssetPreview({ asset, onClose }: { asset: AssetView; onClose: ()
               Some media details were unavailable, but the original file is preserved.
             </p>
           )}
+          <UnderstandingReview assetId={asset.id} />
         </div>
       </section>
     </div>
