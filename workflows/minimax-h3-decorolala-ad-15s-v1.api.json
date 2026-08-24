@@ -1,0 +1,58 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "__SCENE_STAGED_INPUT__"
+    }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "__PRODUCT_STAGED_INPUT__"
+    }
+  },
+  "3": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "__CHARACTER_STAGED_INPUT__"
+    }
+  },
+  "4": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "__CHARACTER_FACE_STAGED_INPUT__"
+    }
+  },
+  "5": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "__CHARACTER_REAR_STAGED_INPUT__"
+    }
+  },
+  "6": {
+    "class_type": "MinimaxHailuo03ReferenceNode",
+    "inputs": {
+      "model": "MiniMax H3",
+      "model.prompt": "__POSITIVE_PROMPT__",
+      "model.resolution": "768P",
+      "model.ratio": "9:16",
+      "model.duration": 15,
+      "model.reference_images.image_1": ["1", 0],
+      "model.reference_images.image_2": ["2", 0],
+      "model.reference_images.image_3": ["3", 0],
+      "model.reference_images.image_4": ["4", 0],
+      "model.reference_images.image_5": ["5", 0],
+      "seed": 20260824,
+      "watermark": false
+    }
+  },
+  "7": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": ["6", 0],
+      "filename_prefix": "comfyuiflow/decorolala_in3725_h3_15s_v1",
+      "format": "mp4",
+      "codec": "auto"
+    }
+  }
+}

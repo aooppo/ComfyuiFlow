@@ -31,6 +31,7 @@ describe("foundation", () => {
     expect(config.openaiLiveEnabled).toBe(false);
     expect(config.codexManagerLiveEnabled).toBe(false);
     expect(config.codexManagerConfigured).toBe(false);
+    expect(config.comfyOrgCredentialConfigured).toBe(false);
     expect(config.codexManagerBaseUrl).toBe("http://127.0.0.1:48760/v1");
     expect(() => loadRuntimeConfig({ COMFYUI_BASE_URL: "https://example.com" })).toThrow(
       "must use http",
@@ -44,6 +45,14 @@ describe("foundation", () => {
         CODEX_MANAGER_LIVE_ENABLED: "1",
       }),
     ).toMatchObject({ codexManagerConfigured: true, codexManagerLiveEnabled: true });
+    expect(loadRuntimeConfig({ COMFYUI_API_KEY: "test-comfy-key-value" })).toMatchObject({
+      comfyOrgCredentialConfigured: true,
+      comfyOrgApiKey: "test-comfy-key-value",
+    });
+    expect(loadRuntimeConfig({ COMFY_API_KEY: "test-comfy-alias-value" })).toMatchObject({
+      comfyOrgCredentialConfigured: true,
+      comfyOrgApiKey: "test-comfy-alias-value",
+    });
   });
 
   it("creates a verifiable append-only evidence chain", async () => {

@@ -76,7 +76,7 @@ export function createComfyUiMcpServer(dependencies: ComfyUiMcpDependencies): Mc
     subfolder: z.string(),
     type: z.literal("input"),
     sourceSha256: z.string().regex(/^[a-f0-9]{64}$/),
-    role: z.enum(["character", "scene"]),
+    role: z.enum(["character", "scene", "product", "characterFace", "characterRear"]),
   });
 
   server.registerTool(
@@ -85,7 +85,7 @@ export function createComfyUiMcpServer(dependencies: ComfyUiMcpDependencies): Mc
       description: "Upload one immutable, hash-verified spike input to the registered workflow",
       inputSchema: {
         workflowId: z.string().min(1),
-        role: z.enum(["character", "scene"]),
+        role: z.enum(["character", "scene", "product", "characterFace", "characterRear"]),
         localPath: z.string().min(1),
         expectedSha256: z.string().regex(/^[a-f0-9]{64}$/),
       },
@@ -106,6 +106,9 @@ export function createComfyUiMcpServer(dependencies: ComfyUiMcpDependencies): Mc
         grantId: z.string().uuid(),
         character: stagedInput,
         scene: stagedInput,
+        product: stagedInput.optional(),
+        characterFace: stagedInput.optional(),
+        characterRear: stagedInput.optional(),
         shot: z.object({
           positivePrompt: z.string().min(1),
           durationSeconds: z.number().positive(),
@@ -118,11 +121,15 @@ export function createComfyUiMcpServer(dependencies: ComfyUiMcpDependencies): Mc
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
     async (input) => {
-      const { authorizationScope, ...submission } = input;
+      const { authorizationScope, product, characterFace, characterRear, ...submission } = input;
       return result(
-        await execution.submit(
-          authorizationScope ? { ...submission, authorizationScope } : submission,
-        ),
+        await execution.submit({
+          ...submission,
+          ...(product ? { product } : {}),
+          ...(characterFace ? { characterFace } : {}),
+          ...(characterRear ? { characterRear } : {}),
+          ...(authorizationScope ? { authorizationScope } : {}),
+        }),
       );
     },
   );

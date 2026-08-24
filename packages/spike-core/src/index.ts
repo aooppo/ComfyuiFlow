@@ -5,5 +5,6 @@ export * from "./evidence-store.js";
 export * from "./integrity.js";
 export * from "./media.js";
 export * from "./preflight.js";
+export * from "./prompt-compiler.js";
 export * from "./review.js";
 export * from "./run-service.js";

@@ -65,7 +65,7 @@ export class McpComfyUiClient {
 
   async stageInput(input: {
     workflowId: string;
-    role: "character" | "scene";
+    role: "character" | "scene" | "product" | "characterFace" | "characterRear";
     localPath: string;
     expectedSha256: string;
   }): Promise<StagedInputEvidence> {

@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { loadEnvFile } from "node:process";
 import { z } from "zod";
 
 const EnvironmentSchema = z.object({
@@ -10,6 +11,9 @@ const EnvironmentSchema = z.object({
   WORKFLOW_REGISTRY_PATH: z.string().default("./workflows/registry.json"),
   OPENAI_API_KEY: z.string().optional(),
   CODEX_MANAGER_API_KEY: z.string().optional(),
+  COMFYUI_API_KEY: z.string().optional(),
+  COMFY_API_KEY: z.string().optional(),
+  COMFYUI_AUTH_TOKEN: z.string().optional(),
 });
 
 export interface RuntimeConfig {
@@ -18,6 +22,9 @@ export interface RuntimeConfig {
   codexManagerBaseUrl: "http://127.0.0.1:48760/v1";
   codexManagerLiveEnabled: boolean;
   codexManagerConfigured: boolean;
+  comfyOrgApiKey?: string;
+  comfyOrgAuthToken?: string;
+  comfyOrgCredentialConfigured: boolean;
   openaiLiveEnabled: boolean;
   spikeDataDir: string;
   workflowRegistryPath: string;
@@ -34,17 +41,31 @@ export function assertLocalHttpEndpoint(value: string): string {
   return url.toString().replace(/\/$/, "");
 }
 
+export function loadProjectEnvFile(cwd = process.cwd()): boolean {
+  try {
+    loadEnvFile(resolve(cwd, ".env"));
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
 export function loadRuntimeConfig(
   environment: NodeJS.ProcessEnv = process.env,
   cwd = process.cwd(),
 ): RuntimeConfig {
   const parsed = EnvironmentSchema.parse(environment);
+  const comfyOrgApiKey = parsed.COMFYUI_API_KEY ?? parsed.COMFY_API_KEY;
   return {
     comfyuiBaseUrl: assertLocalHttpEndpoint(parsed.COMFYUI_BASE_URL),
     comfyuiLiveEnabled: parsed.COMFYUI_LIVE_ENABLED === "1",
     codexManagerBaseUrl: "http://127.0.0.1:48760/v1",
     codexManagerLiveEnabled: parsed.CODEX_MANAGER_LIVE_ENABLED === "1",
     codexManagerConfigured: Boolean(parsed.CODEX_MANAGER_API_KEY),
+    ...(comfyOrgApiKey ? { comfyOrgApiKey } : {}),
+    ...(parsed.COMFYUI_AUTH_TOKEN ? { comfyOrgAuthToken: parsed.COMFYUI_AUTH_TOKEN } : {}),
+    comfyOrgCredentialConfigured: Boolean(comfyOrgApiKey || parsed.COMFYUI_AUTH_TOKEN),
     openaiLiveEnabled: parsed.OPENAI_LIVE_ENABLED === "1",
     spikeDataDir: resolve(cwd, parsed.SPIKE_DATA_DIR),
     workflowRegistryPath: resolve(cwd, parsed.WORKFLOW_REGISTRY_PATH),

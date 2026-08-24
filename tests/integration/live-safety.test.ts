@@ -3,7 +3,15 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { EvidenceStore, SpikeRunService, hashCanonical } from "@comfyuiflow/spike-core";
+import {
+  EvidenceStore,
+  LOCAL_GENERATION_MAX_POLLS,
+  LOCAL_GENERATION_POLL_INTERVAL_MS,
+  ReviewService,
+  SpikeRunService,
+  compileShotPositivePrompt,
+  hashCanonical,
+} from "@comfyuiflow/spike-core";
 import { AmbiguousSubmissionError } from "@comfyuiflow/comfyui-bridge";
 
 describe("one-shot live safety", () => {
@@ -35,6 +43,26 @@ describe("one-shot live safety", () => {
       sha256: "c".repeat(64),
     },
   };
+
+  it("keeps prohibitions out of positive conditioning", () => {
+    const prompt = compileShotPositivePrompt({
+      startState: "The woman stands beside the fireplace.",
+      action: "She turns gently toward camera.",
+      endState: "She holds a natural smile.",
+      camera: "Subtle slow push-in.",
+      composition: "Medium full shot.",
+      continuityRequirements: ["No identity change", "Do not deform hands"],
+    });
+    expect(prompt).toContain("She turns gently toward camera.");
+    expect(prompt).not.toContain("No identity change");
+    expect(prompt).not.toContain("Do not deform hands");
+  });
+
+  it("uses a ten-minute local observation window", () => {
+    expect(LOCAL_GENERATION_MAX_POLLS).toBe(600);
+    expect(LOCAL_GENERATION_POLL_INTERVAL_MS).toBe(1_000);
+    expect(LOCAL_GENERATION_MAX_POLLS * LOCAL_GENERATION_POLL_INTERVAL_MS).toBe(600_000);
+  });
 
   it("consumes Director authorization before one request and submits generation once", async () => {
     const root = await mkdtemp(join(tmpdir(), "comfyuiflow-run-"));
@@ -313,6 +341,21 @@ describe("one-shot live safety", () => {
     expect(events.at(-1)).toMatchObject({
       eventType: "FAILED",
       payload: { stage: "DIRECTOR_AUTHORIZATION" },
+    });
+  });
+
+  it("keeps the product gate closed after an explicit owner FAIL", async () => {
+    const root = await mkdtemp(join(tmpdir(), "comfyuiflow-owner-fail-"));
+    const runId = randomUUID();
+    const reviews = new ReviewService(root);
+    await reviews.record({
+      runId,
+      decision: "FAIL",
+      notes: "中后段出现严重色块、拉伸和结构崩坏。",
+    });
+    await expect(reviews.evaluateGate(runId)).resolves.toMatchObject({
+      open: false,
+      reason: "OWNER_FAIL",
     });
   });
 });

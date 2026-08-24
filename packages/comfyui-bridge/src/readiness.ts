@@ -13,6 +13,10 @@ export async function checkWorkflowReadiness(
   if (!loaded.hashMatches) blockers.push("WORKFLOW_HASH_DRIFT");
   if (loaded.bindingErrors.length > 0) blockers.push("WORKFLOW_BINDINGS_INVALID");
   if (loaded.missingNodeClassesInWorkflow.length > 0) blockers.push("WORKFLOW_MANIFEST_MISMATCH");
+  const comfyOrgCredentialConfigured = client.hasComfyOrgCredential();
+  if (loaded.manifest.requiresComfyOrgAuth && !comfyOrgCredentialConfigured) {
+    blockers.push("COMFY_ORG_CREDENTIAL_MISSING");
+  }
 
   let stats: Record<string, unknown> | undefined;
   let objectInfo: Record<string, unknown> = {};
@@ -32,6 +36,7 @@ export async function checkWorkflowReadiness(
       ),
       bindingErrors: loaded.bindingErrors,
       blockers: [...new Set(blockers)],
+      comfyOrgCredentialConfigured,
       generationCalls: 0,
     });
   }
@@ -68,6 +73,7 @@ export async function checkWorkflowReadiness(
     missingModels,
     bindingErrors: loaded.bindingErrors,
     blockers: [...new Set(blockers)],
+    comfyOrgCredentialConfigured,
     serverFacts: { system: stats.system ?? {} },
     generationCalls: 0,
   });

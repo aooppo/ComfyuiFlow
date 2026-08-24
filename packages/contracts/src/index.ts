@@ -3,7 +3,13 @@ import { z } from "zod";
 export const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
 export const UuidSchema = z.string().uuid();
 
-export const AssetRoleSchema = z.enum(["CHARACTER", "SCENE"]);
+export const AssetRoleSchema = z.enum([
+  "CHARACTER",
+  "SCENE",
+  "PRODUCT",
+  "CHARACTER_FACE",
+  "CHARACTER_REAR",
+]);
 export const InputAssetSchema = z.object({
   id: UuidSchema,
   role: AssetRoleSchema,
@@ -51,6 +57,7 @@ export const WorkflowManifestSchema = z.object({
         .refine((value) => !value.includes("..")),
     }),
   ),
+  requiresComfyOrgAuth: z.boolean().default(false),
   constraints: z.object({
     durationSeconds: z.object({
       min: z.number().positive(),
@@ -65,6 +72,9 @@ export const WorkflowManifestSchema = z.object({
   bindings: z.object({
     character: WorkflowBindingSchema,
     scene: WorkflowBindingSchema,
+    product: WorkflowBindingSchema.optional(),
+    characterFace: WorkflowBindingSchema.optional(),
+    characterRear: WorkflowBindingSchema.optional(),
     positivePrompt: WorkflowBindingSchema,
     durationSeconds: WorkflowBindingSchema.optional(),
     width: WorkflowBindingSchema.optional(),
@@ -82,10 +92,79 @@ export const WorkflowRegistrySchema = z.object({
   workflows: z.array(WorkflowManifestSchema),
 });
 
+const H3FullReferenceHeaders = [
+  "subject_definitions:",
+  "summary:",
+  "retention_analysis:",
+  "detailed_description:",
+  "overall_soundscape:",
+  "non_diegetic_music:",
+] as const;
+
+export const H3FullReferencePromptSchema = z
+  .string()
+  .min(1)
+  .max(12_000)
+  .superRefine((prompt, context) => {
+    let previous = -1;
+    for (const header of H3FullReferenceHeaders) {
+      const matches = [...prompt.matchAll(new RegExp(`(?:^|\\n)${header}`, "g"))];
+      if (matches.length !== 1) {
+        context.addIssue({
+          code: "custom",
+          message: `H3 full-reference prompt requires exactly one ${header}`,
+        });
+        continue;
+      }
+      const index = matches[0]?.index ?? -1;
+      if (index <= previous) {
+        context.addIssue({
+          code: "custom",
+          message: `H3 full-reference prompt section order is invalid at ${header}`,
+        });
+      }
+      previous = index;
+    }
+    for (let picture = 1; picture <= 5; picture += 1) {
+      if (!prompt.includes(`<Picture ${picture}>`)) {
+        context.addIssue({ code: "custom", message: `H3 prompt is missing Picture ${picture}` });
+      }
+    }
+    const fullAdvertisementShots = [
+      "[Shot 1]",
+      "[Shot 2] At 00:02.500",
+      "[Shot 3] At 00:05.500",
+      "[Shot 4] At 00:08.500",
+      "[Shot 5] At 00:11.500",
+    ];
+    const isFullAdvertisement = fullAdvertisementShots.every((shot) => prompt.includes(shot));
+    const isSingleShotValidation = prompt.includes("[Shot 1]") && !/\[Shot [2-9]\]/.test(prompt);
+    if (!isFullAdvertisement && !isSingleShotValidation) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "H3 full-reference prompt requires either the approved five-shot timeline or one untimed validation shot",
+      });
+    }
+  });
+
 export const SpikeRequestSchema = z.object({
   characterImage: z.string().min(1),
   sceneImage: z.string().min(1),
+  additionalReferenceImages: z
+    .array(
+      z.object({
+        role: z.enum(["PRODUCT", "CHARACTER_FACE", "CHARACTER_REAR"]),
+        image: z.string().min(1),
+      }),
+    )
+    .max(7)
+    .refine((items) => new Set(items.map((item) => item.role)).size === items.length, {
+      message: "Additional reference roles must be unique",
+    })
+    .default([]),
   creativeDescription: z.string().min(1).max(4_000),
+  generationPrompt: H3FullReferencePromptSchema.optional(),
   workflowId: z.string().min(1),
 });
 
@@ -183,6 +262,7 @@ export const WorkflowReadinessSchema = z.object({
   missingModels: z.array(z.string()),
   bindingErrors: z.array(z.string()),
   blockers: z.array(z.string()),
+  comfyOrgCredentialConfigured: z.boolean(),
   serverFacts: z.record(z.string(), z.unknown()).optional(),
   generationCalls: z.literal(0),
 });
@@ -194,7 +274,7 @@ export const AiTaskRequestSchema = z.object({
     modelId: z.string().min(1),
   }),
   creativeDescription: z.string().min(1),
-  imageInputs: z.array(InputAssetSchema).length(2),
+  imageInputs: z.array(InputAssetSchema).min(2).max(9),
   promptTemplateVersion: z.literal("director-one-shot-v1"),
   metadata: z.record(z.string(), z.unknown()).default({}),
 });
@@ -220,7 +300,8 @@ export const RunProvenanceSchema = z.object({
         byteSize: z.number().int().positive(),
       }),
     )
-    .length(2),
+    .min(2)
+    .max(9),
   creativeDescription: z.string().min(1),
   director: z.object({
     providerId: z.string().min(1),

@@ -3,7 +3,7 @@ import { join, relative } from "node:path";
 import process from "node:process";
 
 const root = process.cwd();
-const ignored = new Set([".git", "node_modules", "dist", "coverage", "var"]);
+const ignored = new Set([".git", ".next", "node_modules", "dist", "coverage", "var"]);
 const patterns = [
   { name: "OpenAI-style key", value: new RegExp("s" + "k-(?:proj-)?[A-Za-z0-9_-]{20,}", "g") },
   {

@@ -10,15 +10,21 @@ import {
 import { WorkflowRegistry } from "@comfyuiflow/comfyui-bridge";
 import {
   AuthorizationService,
+  LOCAL_GENERATION_MAX_POLLS,
+  LOCAL_GENERATION_POLL_INTERVAL_MS,
   ReviewService,
   SpikeRunService,
+  compileShotPositivePrompt,
   getSpikeStatus,
+  loadProjectEnvFile,
   loadRuntimeConfig,
   verifyVideoArtifact,
 } from "@comfyuiflow/spike-core";
 import { buildDryRun } from "./dry-run.js";
 import { buildDiscovery } from "./discover.js";
 import { McpComfyUiClient } from "./mcp-client.js";
+
+loadProjectEnvFile();
 
 const program = new Command();
 program.name("comfyuiflow-spike").description("Zero-call by default ComfyUI vertical spike");
@@ -135,22 +141,29 @@ program
     try {
       const generation = {
         submit: async (input: any) => {
-          const characterAsset = preview.assets.find((asset) => asset.role === "CHARACTER")!;
-          const sceneAsset = preview.assets.find((asset) => asset.role === "SCENE")!;
-          const [character, scene] = await Promise.all([
-            mcp.stageInput({
-              workflowId: preview.workflow.workflowId,
-              role: "character",
-              localPath: characterAsset.storedPath,
-              expectedSha256: characterAsset.sha256,
+          const roleMap = {
+            CHARACTER: "character",
+            SCENE: "scene",
+            PRODUCT: "product",
+            CHARACTER_FACE: "characterFace",
+            CHARACTER_REAR: "characterRear",
+          } as const;
+          const stagedEntries = await Promise.all(
+            preview.assets.map(async (asset) => {
+              const role = roleMap[asset.role];
+              const staged = await mcp.stageInput({
+                workflowId: preview.workflow.workflowId,
+                role,
+                localPath: asset.storedPath,
+                expectedSha256: asset.sha256,
+              });
+              return [role, staged] as const;
             }),
-            mcp.stageInput({
-              workflowId: preview.workflow.workflowId,
-              role: "scene",
-              localPath: sceneAsset.storedPath,
-              expectedSha256: sceneAsset.sha256,
-            }),
-          ]);
+          );
+          const staged = Object.fromEntries(stagedEntries) as Record<string, any>;
+          const character = staged.character;
+          const scene = staged.scene;
+          if (!character || !scene) throw new Error("Character and scene references are required");
           const shot = input.shot;
           return mcp.submit({
             workflowId: preview.workflow.workflowId,
@@ -160,16 +173,12 @@ program
             grantId: options.generationGrant,
             character,
             scene,
+            ...(staged.product ? { product: staged.product } : {}),
+            ...(staged.characterFace ? { characterFace: staged.characterFace } : {}),
+            ...(staged.characterRear ? { characterRear: staged.characterRear } : {}),
             authorizationScope: preview.authorizationScope,
             shot: {
-              positivePrompt: [
-                shot.startState,
-                shot.action,
-                shot.endState,
-                shot.camera,
-                shot.composition,
-                ...(shot.continuityRequirements ?? []),
-              ].join("\n"),
+              positivePrompt: preview.generationPrompt ?? compileShotPositivePrompt(shot),
               durationSeconds: shot.durationSeconds,
               width: preview.workflow.constraints.width,
               height: preview.workflow.constraints.height,
@@ -205,6 +214,8 @@ program
         dataRoot: config.spikeDataDir,
         director,
         generation,
+        maxPolls: LOCAL_GENERATION_MAX_POLLS,
+        pollIntervalMs: LOCAL_GENERATION_POLL_INTERVAL_MS,
       });
       const outcome = await service.execute({
         runId,

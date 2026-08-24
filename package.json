@@ -4,26 +4,42 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.30.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "prisma",
+      "sharp"
+    ]
+  },
   "scripts": {
     "build": "pnpm -r --if-present build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p apps/project-web/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "spike": "tsx apps/spike-cli/src/index.ts",
     "mcp:comfyui": "tsx apps/comfyui-mcp/src/index.ts",
+    "project:dev": "pnpm --filter @comfyuiflow/project-web dev",
+    "project:build": "pnpm --filter @comfyuiflow/project-web build",
+    "project:db:generate": "pnpm --filter @comfyuiflow/project-core exec prisma generate --schema prisma/schema.prisma",
+    "project:db:validate": "DATABASE_URL=postgresql://schema:validation@127.0.0.1:5432/schema pnpm --filter @comfyuiflow/project-core exec prisma validate --schema prisma/schema.prisma",
+    "project:db:migrate": "pnpm --filter @comfyuiflow/project-core exec prisma migrate deploy --schema prisma/schema.prisma",
     "secret:scan": "node scripts/secret-scan.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@prisma/client": "6.19.3",
     "@types/node": "^24.3.0",
     "@typescript-eslint/eslint-plugin": "^8.40.0",
     "@typescript-eslint/parser": "^8.40.0",
     "eslint": "^9.34.0",
     "prettier": "^3.6.2",
+    "prisma": "^6.19.0",
     "tsup": "^8.5.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",

@@ -12,6 +12,7 @@ export interface FakeComfyUiOptions {
 export interface FakeComfyUi {
   baseUrl: string;
   counts: Record<string, number>;
+  promptBodies: Array<Record<string, unknown>>;
   close(): Promise<void>;
 }
 
@@ -28,6 +29,7 @@ function json(response: ServerResponse, status: number, value: unknown): void {
 
 export async function createFakeComfyUi(options: FakeComfyUiOptions = {}): Promise<FakeComfyUi> {
   const counts: Record<string, number> = {};
+  const promptBodies: Array<Record<string, unknown>> = [];
   const jobs = new Map<string, Record<string, unknown>>();
   const nodeClasses = options.nodeClasses ?? ["LoadImage", "Text", "SaveVideo"];
   const server = createServer(async (request, response) => {
@@ -63,6 +65,7 @@ export async function createFakeComfyUi(options: FakeComfyUiOptions = {}): Promi
     }
     if (request.method === "POST" && url.pathname === "/prompt") {
       const body = JSON.parse((await bodyOf(request)).toString("utf8")) as Record<string, unknown>;
+      promptBodies.push(body);
       if (options.rejectPrompt) {
         json(response, 400, { error: { type: "invalid_prompt", message: "rejected" } });
         return;
@@ -124,6 +127,7 @@ export async function createFakeComfyUi(options: FakeComfyUiOptions = {}): Promi
   return {
     baseUrl: `http://127.0.0.1:${address.port}`,
     counts,
+    promptBodies,
     close: () =>
       new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),

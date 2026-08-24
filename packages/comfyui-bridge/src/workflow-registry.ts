@@ -19,6 +19,9 @@ export interface LoadedWorkflow {
 export interface WorkflowBindingValues {
   character: string;
   scene: string;
+  product?: string;
+  characterFace?: string;
+  characterRear?: string;
   positivePrompt: string;
   durationSeconds: number;
   width: number;
@@ -134,6 +137,9 @@ export class WorkflowRegistry {
     const entries: Array<[keyof WorkflowBindingValues, { pointer: string } | undefined]> = [
       ["character", loaded.manifest.bindings.character],
       ["scene", loaded.manifest.bindings.scene],
+      ["product", loaded.manifest.bindings.product],
+      ["characterFace", loaded.manifest.bindings.characterFace],
+      ["characterRear", loaded.manifest.bindings.characterRear],
       ["positivePrompt", loaded.manifest.bindings.positivePrompt],
       ["durationSeconds", loaded.manifest.bindings.durationSeconds],
       ["width", loaded.manifest.bindings.width],
@@ -142,6 +148,7 @@ export class WorkflowRegistry {
     ];
     for (const [name, binding] of entries) {
       if (!binding) continue;
+      if (values[name] === undefined) throw new Error(`Workflow binding value is missing: ${name}`);
       const [parent, key] = resolvePointerParent(result, binding.pointer);
       parent[key] = values[name];
     }

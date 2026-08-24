@@ -2,53 +2,24 @@
   "schemaVersion": "1.0.0",
   "workflows": [
     {
-      "workflowId": "wan22-ti2v-5b-dual-reference",
+      "workflowId": "minimax-h3-reference-to-video",
       "version": "1.0.0",
-      "displayName": "Wan2.2 TI2V 5B Dual Reference Pilot",
-      "enabled": true,
-      "apiWorkflowPath": "wan22-ti2v-5b-dual-reference.api.json",
-      "sha256": "755d1bb9babb6c218eafa02c8bc7005c44232135e81d47b85f8de78e76c815a0",
-      "requiredNodeClasses": [
-        "LoadImage",
-        "ImageScale",
-        "MaskToImage",
-        "ImageToMask",
-        "InvertMask",
-        "ImageCompositeMasked",
-        "UNETLoader",
-        "ModelSamplingSD3",
-        "CLIPLoader",
-        "VAELoader",
-        "CLIPTextEncode",
-        "Wan22ImageToVideoLatent",
-        "KSampler",
-        "VAEDecode",
-        "CreateVideo",
-        "SaveVideo"
-      ],
-      "requiredModels": [
-        {
-          "folder": "diffusion_models",
-          "filename": "wan2.2_ti2v_5B_fp16.safetensors"
-        },
-        {
-          "folder": "text_encoders",
-          "filename": "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
-        },
-        {
-          "folder": "vae",
-          "filename": "wan2.2_vae.safetensors"
-        }
-      ],
+      "displayName": "MiniMax H3 Reference to Video",
+      "enabled": false,
+      "apiWorkflowPath": "minimax-h3-reference-to-video.api.json",
+      "sha256": "3588cc5b374846c52adbd2b0d511e3a00ae4f81cae76d77d9fa83a3e7e99bfe1",
+      "requiredNodeClasses": ["LoadImage", "MinimaxHailuo03ReferenceNode", "SaveVideo"],
+      "requiredModels": [],
+      "requiresComfyOrgAuth": true,
       "constraints": {
         "durationSeconds": {
-          "min": 2,
-          "max": 2.1,
-          "default": 2.0625
+          "min": 4,
+          "max": 15,
+          "default": 5
         },
-        "width": 512,
-        "height": 288,
-        "fps": 16,
+        "width": 768,
+        "height": 1344,
+        "fps": 24,
         "outputMediaType": "video"
       },
       "bindings": {
@@ -59,11 +30,112 @@
           "pointer": "/2/inputs/image"
         },
         "positivePrompt": {
-          "pointer": "/14/inputs/text"
+          "pointer": "/3/inputs/model.prompt"
+        },
+        "durationSeconds": {
+          "pointer": "/3/inputs/model.duration"
         }
       },
       "output": {
-        "nodeId": "20",
+        "nodeId": "4",
+        "mediaKey": "images"
+      }
+    },
+    {
+      "workflowId": "minimax-h3-decorolala-ad-15s-v1",
+      "version": "1.0.0",
+      "displayName": "MiniMax H3 DECOROLALA IN3725 Ad 15s v1",
+      "enabled": false,
+      "apiWorkflowPath": "minimax-h3-decorolala-ad-15s-v1.api.json",
+      "sha256": "e5aeb79cf71b7e7f9e3aa9935756a406460b63db1d448f43239d9d3a3ca7fe37",
+      "requiredNodeClasses": ["LoadImage", "MinimaxHailuo03ReferenceNode", "SaveVideo"],
+      "requiredModels": [],
+      "requiresComfyOrgAuth": true,
+      "constraints": {
+        "durationSeconds": {
+          "min": 15,
+          "max": 15,
+          "default": 15
+        },
+        "width": 768,
+        "height": 1344,
+        "fps": 24,
+        "outputMediaType": "video"
+      },
+      "bindings": {
+        "character": {
+          "pointer": "/3/inputs/image"
+        },
+        "scene": {
+          "pointer": "/1/inputs/image"
+        },
+        "product": {
+          "pointer": "/2/inputs/image"
+        },
+        "characterFace": {
+          "pointer": "/4/inputs/image"
+        },
+        "characterRear": {
+          "pointer": "/5/inputs/image"
+        },
+        "positivePrompt": {
+          "pointer": "/6/inputs/model.prompt"
+        },
+        "durationSeconds": {
+          "pointer": "/6/inputs/model.duration"
+        }
+      },
+      "output": {
+        "nodeId": "7",
+        "mediaKey": "images"
+      }
+    },
+    {
+      "workflowId": "minimax-h3-decorolala-validation-4s-v1",
+      "version": "1.0.0",
+      "displayName": "MiniMax H3 DECOROLALA IN3725 Validation 4s v1",
+      "enabled": true,
+      "apiWorkflowPath": "minimax-h3-decorolala-validation-4s-v1.api.json",
+      "sha256": "6eb380b17fd775ee15e45cc7a65b5fb80478954bc51c027faff67dcd5b0d1d7a",
+      "requiredNodeClasses": ["LoadImage", "MinimaxHailuo03ReferenceNode", "SaveVideo"],
+      "requiredModels": [],
+      "requiresComfyOrgAuth": true,
+      "constraints": {
+        "durationSeconds": {
+          "min": 4,
+          "max": 4,
+          "default": 4
+        },
+        "width": 768,
+        "height": 1344,
+        "fps": 24,
+        "outputMediaType": "video"
+      },
+      "bindings": {
+        "character": {
+          "pointer": "/3/inputs/image"
+        },
+        "scene": {
+          "pointer": "/1/inputs/image"
+        },
+        "product": {
+          "pointer": "/2/inputs/image"
+        },
+        "characterFace": {
+          "pointer": "/4/inputs/image"
+        },
+        "characterRear": {
+          "pointer": "/5/inputs/image"
+        },
+        "positivePrompt": {
+          "pointer": "/6/inputs/model.prompt"
+        },
+        "durationSeconds": {
+          "pointer": "/6/inputs/model.duration"
+        }
+      },
+      "output": {
+        "nodeId": "7",
         "mediaKey": "images"
       }
     }

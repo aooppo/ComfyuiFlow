@@ -1,0 +1,24 @@
+{
+  "name": "@comfyuiflow/project-web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3210",
+    "build": "next build",
+    "start": "next start -p 3210"
+  },
+  "dependencies": {
+    "@comfyuiflow/project-core": "workspace:*",
+    "@prisma/client": "^6.19.0",
+    "busboy": "^1.6.0",
+    "next": "^15.5.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/busboy": "^1.5.4",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9"
+  }
+}

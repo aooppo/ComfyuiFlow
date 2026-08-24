@@ -20,6 +20,8 @@ export class ComfyUiHttpError extends Error {
 export interface ComfyUiClientOptions {
   timeoutMs?: number;
   fetch?: typeof fetch;
+  comfyOrgApiKey?: string;
+  comfyOrgAuthToken?: string;
 }
 
 export interface StagedInput {
@@ -37,6 +39,8 @@ export interface SubmitResult {
 export class ComfyUiClient {
   private readonly timeoutMs: number;
   private readonly fetchImplementation: typeof fetch;
+  private readonly comfyOrgApiKey: string | undefined;
+  private readonly comfyOrgAuthToken: string | undefined;
 
   constructor(
     readonly baseUrl: string,
@@ -44,6 +48,12 @@ export class ComfyUiClient {
   ) {
     this.timeoutMs = options.timeoutMs ?? 3_000;
     this.fetchImplementation = options.fetch ?? fetch;
+    this.comfyOrgApiKey = options.comfyOrgApiKey;
+    this.comfyOrgAuthToken = options.comfyOrgAuthToken;
+  }
+
+  hasComfyOrgCredential(): boolean {
+    return Boolean(this.comfyOrgAuthToken || this.comfyOrgApiKey);
   }
 
   private async request(path: string, init: RequestInit = {}): Promise<Response> {
@@ -118,7 +128,18 @@ export class ComfyUiClient {
     const value = (await this.json("/prompt", {
       method: "POST",
       headers: { "content-type": "application/json", "Comfy-Usage-Source": "comfyuiflow-spike" },
-      body: JSON.stringify({ prompt_id: promptId, prompt }),
+      body: JSON.stringify({
+        prompt_id: promptId,
+        prompt,
+        extra_data: {
+          ...(this.comfyOrgAuthToken
+            ? { auth_token_comfy_org: this.comfyOrgAuthToken }
+            : this.comfyOrgApiKey
+              ? { api_key_comfy_org: this.comfyOrgApiKey }
+              : {}),
+          comfy_usage_source: "comfyuiflow-spike",
+        },
+      }),
     })) as Record<string, unknown>;
     if (value.prompt_id !== promptId || typeof value.number !== "number") {
       throw new ComfyUiHttpError("ComfyUI submit response is invalid", 200, "PROVIDER_VALIDATION");

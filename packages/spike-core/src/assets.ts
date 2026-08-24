@@ -21,7 +21,7 @@ function detectImageMime(bytes: Buffer): "image/png" | "image/jpeg" | "image/web
 
 export async function ingestAsset(
   originalPath: string,
-  role: "CHARACTER" | "SCENE",
+  role: InputAsset["role"],
   dataRoot: string,
 ): Promise<InputAsset> {
   const absolute = resolve(originalPath);
@@ -55,9 +55,14 @@ export async function ingestSpikeAssets(
   characterImage: string,
   sceneImage: string,
   dataRoot: string,
-): Promise<[InputAsset, InputAsset]> {
+  additionalReferenceImages: Array<{
+    role: "PRODUCT" | "CHARACTER_FACE" | "CHARACTER_REAR";
+    image: string;
+  }> = [],
+): Promise<InputAsset[]> {
   return Promise.all([
     ingestAsset(characterImage, "CHARACTER", dataRoot),
     ingestAsset(sceneImage, "SCENE", dataRoot),
+    ...additionalReferenceImages.map((item) => ingestAsset(item.image, item.role, dataRoot)),
   ]);
 }

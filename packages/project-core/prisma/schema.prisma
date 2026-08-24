@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum TargetAspectRatio {
+  PORTRAIT_9_16
+  LANDSCAPE_16_9
+  SQUARE_1_1
+  PORTRAIT_4_5
+}
+
+enum VerificationStatus {
+  VERIFIED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  AUDIO
+}
+
+enum AssetRole {
+  SCENE
+  PRODUCT
+  CHARACTER_FULL_BODY
+  CHARACTER_FACE
+  CHARACTER_REAR_SIDE
+  PROP
+  AUDIO
+  OTHER
+}
+
+enum AssetStatus {
+  READY
+  REMOVED
+}
+
+enum ImportOutcome {
+  IMPORTED
+  DUPLICATE
+  REJECTED
+  FAILED
+}
+
+enum ActivityType {
+  PROJECT_CREATED
+  PROJECT_UPDATED
+  PROJECT_ARCHIVED
+  PROJECT_RESTORED
+  ASSET_IMPORTED
+  ASSET_UPDATED
+  ASSET_REMOVED
+}
+
+model Project {
+  id                String               @id @default(uuid()) @db.Uuid
+  name              String               @db.VarChar(120)
+  brief             String?
+  targetAspectRatio TargetAspectRatio
+  status            ProjectStatus        @default(ACTIVE)
+  archivedAt        DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  assets            Asset[]
+  importAttempts    AssetImportAttempt[]
+  activities        ProjectActivity[]
+
+  @@index([status, updatedAt(sort: Desc)])
+}
+
+model StoredObject {
+  id                 String             @id @default(uuid()) @db.Uuid
+  sha256             String             @unique @db.Char(64)
+  byteSize           BigInt
+  detectedMimeType   String             @db.VarChar(120)
+  storageKey         String             @unique @db.VarChar(255)
+  verificationStatus VerificationStatus @default(VERIFIED)
+  createdAt          DateTime           @default(now())
+  verifiedAt         DateTime           @default(now())
+  assets             Asset[]
+}
+
+model Asset {
+  id                String       @id @default(uuid()) @db.Uuid
+  projectId         String       @db.Uuid
+  storedObjectId    String       @db.Uuid
+  originalFilename  String       @db.VarChar(255)
+  displayName       String       @db.VarChar(120)
+  mediaType         MediaType
+  role              AssetRole
+  notes             String?
+  status            AssetStatus  @default(READY)
+  width             Int?
+  height            Int?
+  durationMs        Int?
+  inspectionWarning String?      @db.VarChar(120)
+  removedAt         DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  project           Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  storedObject      StoredObject @relation(fields: [storedObjectId], references: [id], onDelete: Restrict)
+  importAttempts    AssetImportAttempt[]
+  activities        ProjectActivity[]
+
+  @@unique([projectId, storedObjectId])
+  @@index([projectId, status, createdAt(sort: Desc)])
+  @@index([projectId, status, mediaType])
+  @@index([projectId, status, role])
+}
+
+model AssetImportAttempt {
+  id                    String        @id @default(uuid()) @db.Uuid
+  projectId             String        @db.Uuid
+  submittedFilename     String        @db.VarChar(255)
+  submittedByteSize     BigInt?
+  detectedMimeType      String?       @db.VarChar(120)
+  sha256                String?       @db.Char(64)
+  requestedRole         AssetRole
+  outcome               ImportOutcome
+  resultCode            String        @db.VarChar(80)
+  assetId               String?       @db.Uuid
+  createdAt             DateTime      @default(now())
+  project               Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  asset                 Asset?        @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@index([projectId, createdAt(sort: Desc)])
+}
+
+model ProjectActivity {
+  id        String       @id @default(uuid()) @db.Uuid
+  projectId String       @db.Uuid
+  assetId   String?      @db.Uuid
+  type      ActivityType
+  summary   String       @db.VarChar(160)
+  createdAt DateTime     @default(now())
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  asset     Asset?       @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@index([projectId, createdAt(sort: Desc)])
+}

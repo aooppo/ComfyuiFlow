@@ -5,4 +5,6 @@ coverage/
 .agents/
 pnpm-lock.yaml
 var/
+apps/project-web/.next/
+packages/project-core/src/generated/
 *.mp4

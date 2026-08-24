@@ -17,6 +17,9 @@ interface GenerationPort {
   }): Promise<unknown[]>;
 }
 
+export const LOCAL_GENERATION_POLL_INTERVAL_MS = 1_000;
+export const LOCAL_GENERATION_MAX_POLLS = 600;
+
 export class SpikeRunService {
   readonly authorization: AuthorizationService;
   private readonly evidence: EvidenceStore;
@@ -118,8 +121,8 @@ export class SpikeRunService {
     }
     await this.evidence.append(stream, "TASK_BOUND", { promptId: submission.promptId });
 
-    const maxPolls = this.dependencies.maxPolls ?? 120;
-    const pollIntervalMs = this.dependencies.pollIntervalMs ?? 1_000;
+    const maxPolls = this.dependencies.maxPolls ?? LOCAL_GENERATION_MAX_POLLS;
+    const pollIntervalMs = this.dependencies.pollIntervalMs ?? LOCAL_GENERATION_POLL_INTERVAL_MS;
     for (let poll = 0; poll < maxPolls; poll += 1) {
       let status: { status: string; artifacts?: unknown[] };
       try {

@@ -4,5 +4,11 @@
     "noEmit": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["apps/**/*.ts", "packages/**/*.ts", "tests/**/*.ts", "vitest.config.ts"]
+  "include": [
+    "apps/comfyui-mcp/**/*.ts",
+    "apps/spike-cli/**/*.ts",
+    "packages/**/*.ts",
+    "tests/**/*.ts",
+    "vitest.config.ts"
+  ]
 }

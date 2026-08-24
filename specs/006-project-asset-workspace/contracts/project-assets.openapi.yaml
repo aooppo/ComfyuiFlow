@@ -1,0 +1,313 @@
+openapi: 3.1.0
+info:
+  title: ComfyuiFlow Project and Asset API
+  version: 0.1.0
+  description: Local single-owner Phase 1 contract. No endpoint invokes AI, ComfyUI, or an external upload.
+servers:
+  - url: /api
+paths:
+  /projects:
+    get:
+      summary: List projects
+      parameters:
+        - in: query
+          name: status
+          schema: { $ref: "#/components/schemas/ProjectStatus" }
+      responses:
+        "200":
+          description: Newest-updated projects
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [projects]
+                properties:
+                  projects:
+                    type: array
+                    items: { $ref: "#/components/schemas/Project" }
+    post:
+      summary: Create a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProjectInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "400": { $ref: "#/components/responses/Error" }
+  /projects/{projectId}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      summary: Read one project
+      responses:
+        "200":
+          description: Project
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      summary: Edit owner-facing project fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProjectInput" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /projects/{projectId}/archive:
+    post:
+      summary: Idempotently archive an active project
+      parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+      responses:
+        "200":
+          description: Archived project
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+  /projects/{projectId}/restore:
+    post:
+      summary: Idempotently restore an archived project
+      parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+      responses:
+        "200":
+          description: Active project
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+  /projects/{projectId}/assets:
+    get:
+      summary: List active assets with optional filters
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - in: query
+          name: mediaType
+          schema: { $ref: "#/components/schemas/MediaType" }
+        - in: query
+          name: role
+          schema: { $ref: "#/components/schemas/AssetRole" }
+      responses:
+        "200":
+          description: Filtered assets and count
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assets, count]
+                properties:
+                  assets:
+                    type: array
+                    items: { $ref: "#/components/schemas/Asset" }
+                  count: { type: integer, minimum: 0 }
+  /projects/{projectId}/assets/import:
+    post:
+      summary: Stream and independently import up to 20 files
+      parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [role, files]
+              properties:
+                role: { $ref: "#/components/schemas/AssetRole" }
+                files:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  items: { type: string, format: binary }
+      responses:
+        "200":
+          description: Per-item terminal outcomes; mixed success is expected
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items: { $ref: "#/components/schemas/ImportResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+  /assets/{assetId}:
+    parameters:
+      - in: path
+        name: assetId
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: Read asset details
+      responses:
+        "200":
+          description: Asset
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Asset" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      summary: Edit asset display metadata only
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                displayName: { type: string, minLength: 1, maxLength: 120 }
+                role: { $ref: "#/components/schemas/AssetRole" }
+                notes: { type: [string, "null"], maxLength: 2000 }
+      responses:
+        "200":
+          description: Updated asset
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Asset" }
+  /assets/{assetId}/remove:
+    post:
+      summary: Idempotently remove an unreferenced asset from the active library
+      parameters:
+        - in: path
+          name: assetId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Removed asset with immutable evidence retained
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Asset" }
+        "409": { $ref: "#/components/responses/Error" }
+  /assets/{assetId}/content:
+    get:
+      summary: Stream verified original bytes inline for preview
+      parameters:
+        - in: path
+          name: assetId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Original media with Content-Type, Content-Length, nosniff, and safe inline disposition
+        "404": { $ref: "#/components/responses/Error" }
+components:
+  parameters:
+    ProjectId:
+      in: path
+      name: projectId
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Error:
+      description: Stable actionable error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    ProjectStatus:
+      type: string
+      enum: [ACTIVE, ARCHIVED]
+    TargetAspectRatio:
+      type: string
+      enum: [PORTRAIT_9_16, LANDSCAPE_16_9, SQUARE_1_1, PORTRAIT_4_5]
+    MediaType:
+      type: string
+      enum: [IMAGE, VIDEO, AUDIO]
+    AssetRole:
+      type: string
+      enum:
+        [
+          SCENE,
+          PRODUCT,
+          CHARACTER_FULL_BODY,
+          CHARACTER_FACE,
+          CHARACTER_REAR_SIDE,
+          PROP,
+          AUDIO,
+          OTHER,
+        ]
+    ProjectInput:
+      type: object
+      additionalProperties: false
+      required: [name, targetAspectRatio]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        brief: { type: [string, "null"], maxLength: 4000 }
+        targetAspectRatio: { $ref: "#/components/schemas/TargetAspectRatio" }
+    Project:
+      allOf:
+        - $ref: "#/components/schemas/ProjectInput"
+        - type: object
+          required: [id, status, createdAt, updatedAt]
+          properties:
+            id: { type: string, format: uuid }
+            status: { $ref: "#/components/schemas/ProjectStatus" }
+            archivedAt: { type: [string, "null"], format: date-time }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+    Asset:
+      type: object
+      required:
+        [
+          id,
+          projectId,
+          displayName,
+          originalFilename,
+          mediaType,
+          role,
+          status,
+          sha256,
+          byteSize,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        displayName: { type: string }
+        originalFilename: { type: string }
+        mediaType: { $ref: "#/components/schemas/MediaType" }
+        role: { $ref: "#/components/schemas/AssetRole" }
+        status: { type: string, enum: [READY, REMOVED] }
+        notes: { type: [string, "null"] }
+        sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        byteSize: { type: integer, minimum: 1 }
+        detectedMimeType: { type: string }
+        width: { type: [integer, "null"], minimum: 1 }
+        height: { type: [integer, "null"], minimum: 1 }
+        durationMs: { type: [integer, "null"], minimum: 0 }
+        inspectionWarning: { type: [string, "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ImportResult:
+      type: object
+      required: [filename, outcome, code]
+      properties:
+        filename: { type: string }
+        outcome: { type: string, enum: [IMPORTED, DUPLICATE, REJECTED, FAILED] }
+        code: { type: string }
+        asset: { $ref: "#/components/schemas/Asset" }
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }

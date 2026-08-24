@@ -30,6 +30,10 @@ export async function buildDiscovery(port: DiscoveryPort) {
         typeof workflow === "object" && workflow !== null && "workflowId" in workflow
           ? String(workflow.workflowId)
           : "";
+      const enabled =
+        typeof workflow === "object" && workflow !== null && "enabled" in workflow
+          ? workflow.enabled === true
+          : false;
       if (!workflowId) {
         blockers.push("WORKFLOW_REGISTRY_INVALID");
         continue;
@@ -37,9 +41,11 @@ export async function buildDiscovery(port: DiscoveryPort) {
       try {
         const readiness = await port.checkReadiness(workflowId);
         workflowReadiness.push(readiness);
-        blockers.push(...readiness.blockers.map((blocker) => `${workflowId}:${blocker}`));
+        if (enabled) {
+          blockers.push(...readiness.blockers.map((blocker) => `${workflowId}:${blocker}`));
+        }
       } catch {
-        blockers.push(`${workflowId}:READINESS_CHECK_FAILED`);
+        if (enabled) blockers.push(`${workflowId}:READINESS_CHECK_FAILED`);
       }
     }
   }

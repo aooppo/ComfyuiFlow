@@ -19,7 +19,7 @@ export class AmbiguousSubmissionError extends Error {
 
 export interface StagedInputEvidence extends StagedInput {
   sourceSha256: string;
-  role: "character" | "scene";
+  role: "character" | "scene" | "product" | "characterFace" | "characterRear";
 }
 
 export interface GenerationSubmission {
@@ -29,6 +29,9 @@ export interface GenerationSubmission {
   runId: string;
   character: StagedInputEvidence;
   scene: StagedInputEvidence;
+  product?: StagedInputEvidence;
+  characterFace?: StagedInputEvidence;
+  characterRear?: StagedInputEvidence;
   shot: {
     positivePrompt: string;
     durationSeconds: number;
@@ -69,7 +72,7 @@ export class ComfyUiExecutionService {
 
   async stageInput(input: {
     workflowId: string;
-    role: "character" | "scene";
+    role: "character" | "scene" | "product" | "characterFace" | "characterRear";
     localPath: string;
     expectedSha256: string;
   }): Promise<StagedInputEvidence> {
@@ -93,6 +96,9 @@ export class ComfyUiExecutionService {
   async submit(input: AuthorizedGenerationSubmission): Promise<SubmitResult> {
     if (!this.dependencies.liveEnabled) throw new Error("ComfyUI LIVE is disabled");
     const loaded = await this.dependencies.registry.load(input.workflowId);
+    if (loaded.manifest.requiresComfyOrgAuth && !this.dependencies.client.hasComfyOrgCredential()) {
+      throw new Error("Comfy Partner Node credential is missing");
+    }
     if (input.authorizationScope) {
       const scope = input.authorizationScope;
       if (scope.workflowId !== input.workflowId || scope.workflowSha256 !== input.workflowSha256) {
@@ -106,9 +112,18 @@ export class ComfyUiExecutionService {
           )
           .map((item) => `${item.role}:${item.sha256}`),
       );
+      const stagedReferences = [
+        ["CHARACTER", input.character],
+        ["SCENE", input.scene],
+        ["PRODUCT", input.product],
+        ["CHARACTER_FACE", input.characterFace],
+        ["CHARACTER_REAR", input.characterRear],
+      ] as const;
       if (
-        !expected.has(`CHARACTER:${input.character.sourceSha256}`) ||
-        !expected.has(`SCENE:${input.scene.sourceSha256}`)
+        stagedReferences.some(
+          ([role, reference]) =>
+            reference !== undefined && !expected.has(`${role}:${reference.sourceSha256}`),
+        )
       ) {
         throw new Error("Authorization scope does not match the staged inputs");
       }
@@ -129,6 +144,9 @@ export class ComfyUiExecutionService {
       {
         character: stagedName(input.character),
         scene: stagedName(input.scene),
+        ...(input.product ? { product: stagedName(input.product) } : {}),
+        ...(input.characterFace ? { characterFace: stagedName(input.characterFace) } : {}),
+        ...(input.characterRear ? { characterRear: stagedName(input.characterRear) } : {}),
         positivePrompt: input.shot.positivePrompt,
         durationSeconds: input.shot.durationSeconds,
         width: input.shot.width,

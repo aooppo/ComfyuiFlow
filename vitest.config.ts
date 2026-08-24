@@ -10,6 +10,7 @@ export default defineConfig({
       "@comfyuiflow/spike-core": source("./packages/spike-core/src/index.ts"),
       "@comfyuiflow/comfyui-bridge": source("./packages/comfyui-bridge/src/index.ts"),
       "@comfyuiflow/ai-providers": source("./packages/ai-providers/src/index.ts"),
+      "@comfyuiflow/project-core": source("./packages/project-core/src/index.ts"),
     },
   },
   test: {

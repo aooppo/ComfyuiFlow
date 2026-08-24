@@ -16,6 +16,7 @@ afterEach(async () => Promise.all(openServers.splice(0).map((server) => server.c
 async function readyRegistry(
   root: string,
   requiredModels: Array<{ folder: string; filename: string }> = [],
+  requiresComfyOrgAuth = false,
 ) {
   const source = join(process.cwd(), "tests/fixtures/workflows/ready.api.json");
   const bytes = await readFile(source);
@@ -32,6 +33,7 @@ async function readyRegistry(
         sha256: sha256Bytes(bytes),
         requiredNodeClasses: ["LoadImage", "Text", "SaveVideo"],
         requiredModels,
+        requiresComfyOrgAuth,
         constraints: {
           durationSeconds: { min: 1, max: 5, default: 2 },
           width: 512,
@@ -84,5 +86,24 @@ describe("ComfyUI readiness contract", () => {
     expect(result.endpointReachable).toBe(false);
     expect(result.blockers).toContain("COMFYUI_UNREACHABLE");
     expect(result.generationCalls).toBe(0);
+  });
+
+  it("blocks a Partner Node workflow before generation when no credential is configured", async () => {
+    const fake = await createFakeComfyUi();
+    openServers.push(fake);
+    const root = await mkdtemp(join(tmpdir(), "comfyuiflow-auth-blocked-"));
+    const registry = await readyRegistry(root, [], true);
+    const result = await checkWorkflowReadiness(
+      new ComfyUiClient(fake.baseUrl),
+      registry,
+      "ready-video",
+    );
+    expect(result).toMatchObject({
+      ready: false,
+      comfyOrgCredentialConfigured: false,
+      generationCalls: 0,
+    });
+    expect(result.blockers).toContain("COMFY_ORG_CREDENTIAL_MISSING");
+    expect(fake.counts["POST /prompt"] ?? 0).toBe(0);
   });
 });

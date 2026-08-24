@@ -25,7 +25,7 @@ export class DuplicateInputAssetsError extends Error {
   readonly providerCalls = 0;
 
   constructor() {
-    super("Character and scene inputs must not have the same SHA-256");
+    super("All reference inputs must have distinct SHA-256 values");
     this.name = "DuplicateInputAssetsError";
   }
 }
@@ -36,9 +36,23 @@ export async function createDryRun(requestValue: unknown, dependencies: DryRunDe
     request.characterImage,
     request.sceneImage,
     dependencies.dataRoot,
+    request.additionalReferenceImages,
   );
-  if (assets[0].sha256 === assets[1].sha256) throw new DuplicateInputAssetsError();
+  if (new Set(assets.map((asset) => asset.sha256)).size !== assets.length) {
+    throw new DuplicateInputAssetsError();
+  }
   const loaded = await dependencies.registry.load(request.workflowId);
+  const assetRoles = new Set(assets.map((asset) => asset.role));
+  const requiredAdditionalRoles = [
+    ["product", "PRODUCT"],
+    ["characterFace", "CHARACTER_FACE"],
+    ["characterRear", "CHARACTER_REAR"],
+  ] as const;
+  for (const [binding, role] of requiredAdditionalRoles) {
+    if (loaded.manifest.bindings[binding] && !assetRoles.has(role)) {
+      throw new Error(`Workflow requires ${role} reference input`);
+    }
+  }
   const readiness = await dependencies.readiness(request.workflowId);
   const directorReadiness = dependencies.directorReadiness
     ? await dependencies.directorReadiness()
@@ -63,6 +77,7 @@ export async function createDryRun(requestValue: unknown, dependencies: DryRunDe
   const scope = {
     assetHashes: assets.map((asset) => ({ role: asset.role, sha256: asset.sha256 })),
     creativeDescription: request.creativeDescription,
+    ...(request.generationPrompt ? { generationPrompt: request.generationPrompt } : {}),
     directorProvider: "codexmanager-local",
     directorModel: "gpt-5.4",
     promptTemplateVersion: "director-one-shot-v1",
@@ -82,6 +97,7 @@ export async function createDryRun(requestValue: unknown, dependencies: DryRunDe
       readiness: directorReadiness,
     },
     shotPreview,
+    generationPrompt: request.generationPrompt,
     workflow: {
       workflowId: loaded.manifest.workflowId,
       version: loaded.manifest.version,
