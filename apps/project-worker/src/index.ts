@@ -7,7 +7,10 @@ import {
   type AiModelProvider,
 } from "@comfyuiflow/ai-providers";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import {
+  getDefaultEnvironment,
+  StdioClientTransport,
+} from "@modelcontextprotocol/sdk/client/stdio.js";
 import {
   AnalysisWorker,
   ComfyUiMcpGenerationProvider,
@@ -21,6 +24,27 @@ import { runWorkerLoop, workerPollInterval } from "./worker-loop.js";
 
 const workspaceRoot = fileURLToPath(new URL("../../..", import.meta.url));
 loadProjectEnvFile(workspaceRoot);
+
+const mcpEnvironmentKeys = [
+  "COMFYUI_BASE_URL",
+  "COMFYUI_LIVE_ENABLED",
+  "COMFYUI_API_KEY",
+  "COMFY_API_KEY",
+  "COMFYUI_AUTH_TOKEN",
+  "SPIKE_DATA_DIR",
+  "WORKFLOW_REGISTRY_PATH",
+  "PROJECT_ASSET_STORAGE_DIR",
+  "DATABASE_URL",
+] as const;
+
+function mcpChildEnvironment(): Record<string, string> {
+  const environment = getDefaultEnvironment();
+  for (const key of mcpEnvironmentKeys) {
+    const value = process.env[key];
+    if (value) environment[key] = value;
+  }
+  return environment;
+}
 
 function providerFromEnvironment(): AiModelProvider {
   const provider = process.env.ASSET_UNDERSTANDING_PROVIDER ?? "fake";
@@ -47,6 +71,7 @@ async function main() {
             command: "pnpm",
             args: ["--silent", "mcp:comfyui"],
             cwd: workspaceRoot,
+            env: mcpChildEnvironment(),
             stderr: "pipe",
           });
           await client.connect(transport);
