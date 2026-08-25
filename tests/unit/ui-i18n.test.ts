@@ -12,6 +12,7 @@ describe("project web UI internationalization", () => {
       analysisPreview,
       analysisRun,
       analysisSelection,
+      projectHeader,
     ] = await Promise.all([
       readFile("apps/project-web/components/i18n/language-provider.tsx", "utf8"),
       readFile("apps/project-web/components/i18n/app-shell.tsx", "utf8"),
@@ -24,6 +25,7 @@ describe("project web UI internationalization", () => {
       readFile("apps/project-web/components/asset-understanding/analysis-preview.tsx", "utf8"),
       readFile("apps/project-web/components/asset-understanding/analysis-run.tsx", "utf8"),
       readFile("apps/project-web/components/asset-understanding/analysis-selection.tsx", "utf8"),
+      readFile("apps/project-web/components/project-header.tsx", "utf8"),
     ]);
     expect(provider).toContain('"Create project": "创建项目"');
     expect(provider).toContain("comfyuiflow.ui.locale");
@@ -52,5 +54,9 @@ describe("project web UI internationalization", () => {
     expect(analysisRun).toContain("任务已进入队列，但尚未被 Worker 领取");
     expect(analysisSelection).toContain("`预览 ${selected.length} 张图片`");
     expect(analysisSelection).toContain('"预览图片"');
+    expect(projectHeader).not.toContain("window.prompt");
+    expect(projectHeader).not.toContain("window.confirm");
+    expect(projectHeader).toContain('className="projectInlineForm"');
+    expect(provider).toContain('"Edit project details": "编辑项目详情"');
   });
 });

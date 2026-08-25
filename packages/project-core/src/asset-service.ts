@@ -316,53 +316,63 @@ export class AssetService {
           Number(asset.storedObject.byteSize),
         );
         const facts = await probeMedia(absolutePath, asset.storedObject.detectedMimeType);
-        const updated = await this.client.$transaction(async (tx) => {
-          const ordinal =
-            (await tx.mediaProbeResult.count({ where: { storedObjectId: asset.storedObjectId } })) +
-            1;
-          await tx.mediaProbeResult.create({
-            data: {
-              storedObjectId: asset.storedObjectId,
-              ordinal,
-              probeVersion: MEDIA_PROBE_VERSION,
-              status: facts.status,
-              mediaType: facts.mediaType,
-              container: facts.container,
-              width: facts.width,
-              height: facts.height,
-              durationMs: facts.durationMs,
-              streamCount: facts.streamCount,
-              safeResultCode: facts.safeResultCode,
-            },
-          });
-          await tx.storedObject.update({
-            where: { id: asset.storedObjectId },
-            data: {
-              verificationStatus: facts.status === "PASS" ? "VERIFIED" : "INVALID",
-              ...(facts.status === "PASS" ? { verifiedAt: new Date() } : {}),
-            },
-          });
-          const projectAsset = await tx.asset.update({
-            where: { id: asset.id },
-            data: {
-              status: facts.status === "PASS" ? "READY" : "INVALID",
-              width: facts.width,
-              height: facts.height,
-              durationMs: facts.durationMs,
-              inspectionWarning: facts.status === "PASS" ? null : facts.safeResultCode,
-            },
-            include: { storedObject: true },
-          });
-          await tx.projectActivity.create({
-            data: {
-              projectId,
-              assetId: asset.id,
-              type: "ASSET_REVALIDATED",
-              summary: "Asset revalidated",
-            },
-          });
-          return projectAsset;
-        });
+        let updated: AssetWithObject | undefined;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            updated = await this.client.$transaction(async (tx) => {
+              const ordinal =
+                (await tx.mediaProbeResult.count({
+                  where: { storedObjectId: asset.storedObjectId },
+                })) + 1;
+              await tx.mediaProbeResult.create({
+                data: {
+                  storedObjectId: asset.storedObjectId,
+                  ordinal,
+                  probeVersion: MEDIA_PROBE_VERSION,
+                  status: facts.status,
+                  mediaType: facts.mediaType,
+                  container: facts.container,
+                  width: facts.width,
+                  height: facts.height,
+                  durationMs: facts.durationMs,
+                  streamCount: facts.streamCount,
+                  safeResultCode: facts.safeResultCode,
+                },
+              });
+              await tx.storedObject.update({
+                where: { id: asset.storedObjectId },
+                data: {
+                  verificationStatus: facts.status === "PASS" ? "VERIFIED" : "INVALID",
+                  ...(facts.status === "PASS" ? { verifiedAt: new Date() } : {}),
+                },
+              });
+              const projectAsset = await tx.asset.update({
+                where: { id: asset.id },
+                data: {
+                  status: facts.status === "PASS" ? "READY" : "INVALID",
+                  width: facts.width,
+                  height: facts.height,
+                  durationMs: facts.durationMs,
+                  inspectionWarning: facts.status === "PASS" ? null : facts.safeResultCode,
+                },
+                include: { storedObject: true },
+              });
+              await tx.projectActivity.create({
+                data: {
+                  projectId,
+                  assetId: asset.id,
+                  type: "ASSET_REVALIDATED",
+                  summary: "Asset revalidated",
+                },
+              });
+              return projectAsset;
+            });
+            break;
+          } catch (error) {
+            if (!this.isUniqueConflict(error) || attempt === 2) throw error;
+          }
+        }
+        if (!updated) throw new Error("REVALIDATION_CONFLICT");
         results.push({ asset: assetDto(updated), code: facts.safeResultCode });
       } catch (error) {
         const code = error instanceof ProjectAssetError ? error.code : "REVALIDATION_FAILED";
@@ -489,6 +499,10 @@ export class AssetService {
       );
     }
     return project;
+  }
+
+  private isUniqueConflict(error: unknown) {
+    return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
   }
 }
 

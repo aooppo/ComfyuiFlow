@@ -270,6 +270,33 @@ export class GenerationPlanService {
     return { ...plan, externalCalls: 0 as const, generationAuthorized: false as const };
   }
 
+  async listForStoryboard(storyboardId: string) {
+    const plans = await this.client.generationPlan.findMany({
+      where: { storyboardId },
+      select: {
+        id: true,
+        storyboardVersionId: true,
+        createdAt: true,
+        updatedAt: true,
+        headVersion: { select: { versionNumber: true } },
+        approvedVersion: { select: { versionNumber: true } },
+        versions: {
+          select: {
+            _count: { select: { generationBatches: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    return plans.map(({ versions, ...plan }) => ({
+      ...plan,
+      generationBatchCount: versions.reduce(
+        (total, version) => total + version._count.generationBatches,
+        0,
+      ),
+    }));
+  }
+
   async listVersions(planId: string) {
     await this.get(planId);
     return this.client.generationPlanVersion.findMany({

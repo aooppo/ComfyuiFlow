@@ -9,6 +9,14 @@ export interface ComfyUiMcpDependencies {
   registry: WorkflowRegistry;
   liveEnabled: boolean;
   dataRoot: string;
+  allowedInputRoots?: string[];
+  verifyProjectAuthorization?: (input: {
+    authorizationConsumptionId: string;
+    generationJobId: string;
+    promptId: string;
+    workflowId: string;
+    workflowSha256: string;
+  }) => Promise<boolean>;
 }
 
 function result(value: unknown) {
@@ -131,6 +139,46 @@ export function createComfyUiMcpServer(dependencies: ComfyUiMcpDependencies): Mc
           ...(authorizationScope ? { authorizationScope } : {}),
         }),
       );
+    },
+  );
+
+  server.registerTool(
+    "comfyui_submit_project_workflow",
+    {
+      description:
+        "Submit one registered project workflow after verifying its already-consumed database authorization",
+      inputSchema: {
+        workflowId: z.string().min(1),
+        workflowSha256: z.string().regex(/^[a-f0-9]{64}$/),
+        promptId: z.string().uuid(),
+        runId: z.string().uuid(),
+        authorizationConsumptionId: z.string().uuid(),
+        character: stagedInput,
+        scene: stagedInput,
+        product: stagedInput,
+        characterFace: stagedInput,
+        characterRear: stagedInput,
+        shot: z.object({
+          positivePrompt: z.string().min(1),
+          durationSeconds: z.literal(4),
+          width: z.literal(768),
+          height: z.literal(1344),
+          fps: z.literal(24),
+        }),
+        authorizationScope: z.record(z.string(), z.unknown()),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true },
+    },
+    async ({ authorizationConsumptionId, ...submission }) => {
+      const verified = await dependencies.verifyProjectAuthorization?.({
+        authorizationConsumptionId,
+        generationJobId: submission.runId,
+        promptId: submission.promptId,
+        workflowId: submission.workflowId,
+        workflowSha256: submission.workflowSha256,
+      });
+      if (!verified) throw new Error("Project generation authorization could not be verified");
+      return result(await execution.submitPreauthorized(submission));
     },
   );
 

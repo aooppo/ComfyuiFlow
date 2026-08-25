@@ -94,7 +94,7 @@
       "workflowId": "minimax-h3-decorolala-validation-4s-v1",
       "version": "1.0.0",
       "displayName": "MiniMax H3 DECOROLALA IN3725 Validation 4s v1",
-      "enabled": true,
+      "enabled": false,
       "apiWorkflowPath": "minimax-h3-decorolala-validation-4s-v1.api.json",
       "sha256": "6eb380b17fd775ee15e45cc7a65b5fb80478954bc51c027faff67dcd5b0d1d7a",
       "requiredNodeClasses": ["LoadImage", "MinimaxHailuo03ReferenceNode", "SaveVideo"],
@@ -138,6 +138,34 @@
         "nodeId": "7",
         "mediaKey": "images"
       }
+    },
+    {
+      "workflowId": "minimax-h3-project-shot-4s-v1",
+      "version": "1.0.0",
+      "displayName": "MiniMax H3 Project Shot 4s v1",
+      "enabled": true,
+      "apiWorkflowPath": "minimax-h3-project-shot-4s-v1.api.json",
+      "sha256": "6eb380b17fd775ee15e45cc7a65b5fb80478954bc51c027faff67dcd5b0d1d7a",
+      "requiredNodeClasses": ["LoadImage", "MinimaxHailuo03ReferenceNode", "SaveVideo"],
+      "requiredModels": [],
+      "requiresComfyOrgAuth": true,
+      "constraints": {
+        "durationSeconds": { "min": 4, "max": 4, "default": 4 },
+        "width": 768,
+        "height": 1344,
+        "fps": 24,
+        "outputMediaType": "video"
+      },
+      "bindings": {
+        "character": { "pointer": "/3/inputs/image" },
+        "scene": { "pointer": "/1/inputs/image" },
+        "product": { "pointer": "/2/inputs/image" },
+        "characterFace": { "pointer": "/4/inputs/image" },
+        "characterRear": { "pointer": "/5/inputs/image" },
+        "positivePrompt": { "pointer": "/6/inputs/model.prompt" },
+        "durationSeconds": { "pointer": "/6/inputs/model.duration" }
+      },
+      "output": { "nodeId": "7", "mediaKey": "images" }
     }
   ]
 }

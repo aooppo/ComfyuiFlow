@@ -10,6 +10,7 @@ describe("Generation Plan HTTP contract", () => {
     );
     for (const route of [
       "/api/storyboard-versions/{versionId}/generation-plans",
+      "/api/storyboards/{storyboardId}/generation-plans",
       "/api/generation-plans/{planId}",
       "/api/generation-plans/{planId}/versions",
       "/api/generation-plan-versions/{versionId}/preflight",
@@ -32,11 +33,23 @@ describe("Generation Plan HTTP contract", () => {
       expect(generationPlanErrorCodes).toContain(code);
     for (const path of [
       "apps/project-web/app/api/storyboard-versions/[versionId]/generation-plans/route.ts",
+      "apps/project-web/app/api/storyboards/[storyboardId]/generation-plans/route.ts",
       "apps/project-web/app/api/generation-plans/[planId]/route.ts",
       "apps/project-web/app/api/generation-plans/[planId]/versions/route.ts",
       "apps/project-web/app/api/generation-plan-versions/[versionId]/preflight/route.ts",
       "apps/project-web/app/api/generation-plan-versions/[versionId]/decisions/route.ts",
     ])
       await expect(access(path)).resolves.toBeUndefined();
+  });
+
+  it("keeps existing Shot Plans reachable without creating another plan", async () => {
+    const editor = await readFile(
+      "apps/project-web/components/storyboards/storyboard-editor.tsx",
+      "utf8",
+    );
+    expect(editor).toContain("/api/storyboards/${storyboardId}/generation-plans");
+    expect(editor).toContain("打开最新 Shot Plan");
+    expect(editor).toContain("历史 Shot Plan");
+    expect(editor).toContain("新建 Shot Plan");
   });
 });

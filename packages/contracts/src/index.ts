@@ -631,3 +631,222 @@ export const GenerationPlanVersionInputV1Schema = z
 export type GenerationSpecReferenceV1 = z.infer<typeof GenerationSpecReferenceV1Schema>;
 export type GenerationSpecV1 = z.infer<typeof GenerationSpecV1Schema>;
 export type GenerationPlanVersionInputV1 = z.infer<typeof GenerationPlanVersionInputV1Schema>;
+
+export const GenerationProviderProfileIdSchema = z.enum(["fake-video-v1", "minimax-h3-4s-v1"]);
+export const GenerationQaStatusSchema = z.enum(["PASS", "WARN", "FAIL", "NOT_ASSESSABLE"]);
+export const GenerationQaConfidenceSchema = z.enum(["LOW", "MEDIUM", "HIGH"]);
+export const ReviewFrameRoleSchema = z.enum(["FIRST", "MIDDLE", "FINAL"]);
+
+export const GenerationProviderCapabilitiesV1Schema = z
+  .object({
+    schemaVersion: z.literal("generation-provider-capabilities-v1"),
+    profileId: GenerationProviderProfileIdSchema,
+    providerId: z.string().min(1),
+    modelId: z.string().min(1),
+    mode: z.literal("REFERENCE_TO_VIDEO"),
+    aspectRatio: z.literal("PORTRAIT_9_16"),
+    durationSeconds: z.literal(4),
+    width: z.literal(768),
+    height: z.literal(1344),
+    fps: z.literal(24),
+    referenceSlots: z.tuple([
+      z.literal("SCENE"),
+      z.literal("PRODUCT"),
+      z.literal("CHARACTER_FULL_BODY"),
+      z.literal("CHARACTER_FACE"),
+      z.literal("CHARACTER_REAR"),
+    ]),
+    outputMediaType: z.literal("video/mp4"),
+    cancellationSupported: z.boolean(),
+    workflowId: z.string().min(1),
+    workflowVersion: z.string().min(1),
+    workflowSha256: Sha256Schema,
+    costEstimateUsd: z.number().nonnegative().nullable(),
+    costEstimateAsOf: z.string().datetime().nullable(),
+  })
+  .strict();
+
+export const GenerationExecutionSlotV1Schema = z
+  .object({
+    role: z.enum(["SCENE", "PRODUCT", "CHARACTER_FULL_BODY", "CHARACTER_FACE", "CHARACTER_REAR"]),
+    projectAssetId: UuidSchema,
+    assetVersionFileId: UuidSchema,
+    productionAssetVersionId: UuidSchema,
+    characterStateVersionId: UuidSchema.nullable(),
+    sha256: Sha256Schema,
+    displayName: z.string().min(1).max(120),
+  })
+  .strict();
+
+export const GenerationExecutionPreviewShotV1Schema = z
+  .object({
+    generationSpecId: UuidSchema,
+    ordinal: z.number().int().min(1).max(20),
+    compatible: z.boolean(),
+    blockers: z.array(z.string().min(1).max(80)),
+    promptSummary: z.string().max(2_000),
+    compiledPromptHash: Sha256Schema.nullable(),
+    targetHash: Sha256Schema.nullable(),
+    slots: z.array(GenerationExecutionSlotV1Schema).max(5),
+  })
+  .strict();
+
+export const GenerationExecutionPreviewV1Schema = z
+  .object({
+    schemaVersion: z.literal("generation-execution-preview-v1"),
+    projectId: UuidSchema,
+    generationPlanVersionId: UuidSchema,
+    provider: GenerationProviderCapabilitiesV1Schema,
+    previewHash: Sha256Schema,
+    shots: z.array(GenerationExecutionPreviewShotV1Schema).min(1).max(20),
+    ready: z.boolean(),
+    maximumGenerationCalls: z.number().int().min(0).max(20),
+    maximumAiQaCalls: z.number().int().min(0).max(20),
+    aiQaProviderId: z.enum(["fake", "codexmanager-local"]),
+    aiQaModelId: z.enum(["fake-video-qa-v1", "gpt-5.4"]),
+    aiQaPriceAvailable: z.literal(false),
+    externalCalls: z.literal(0),
+    retryOfJobId: UuidSchema.nullable(),
+    retryRequirements: z.string().trim().min(1).max(4_000).nullable(),
+  })
+  .strict();
+
+export const CreateGenerationExecutionPreviewV1Schema = z
+  .object({
+    providerProfileId: GenerationProviderProfileIdSchema.default("fake-video-v1"),
+    generationSpecIds: z.array(UuidSchema).min(1).max(20),
+    retryOfJobId: UuidSchema.optional(),
+    retryRequirements: z.string().trim().min(1).max(4_000).optional(),
+  })
+  .strict()
+  .refine((value) => new Set(value.generationSpecIds).size === value.generationSpecIds.length, {
+    message: "Generation targets must be unique",
+  })
+  .refine((value) => Boolean(value.retryOfJobId) === Boolean(value.retryRequirements), {
+    message: "Retry source and requirements must be supplied together",
+  });
+
+export const CreateGenerationBatchV1Schema = z
+  .object({
+    generationPlanVersionId: UuidSchema,
+    providerProfileId: GenerationProviderProfileIdSchema,
+    generationSpecIds: z.array(UuidSchema).min(1).max(20),
+    previewHash: Sha256Schema,
+    confirmed: z.literal(true),
+    expiresInSeconds: z.number().int().min(30).max(900).default(300),
+    retryOfJobId: UuidSchema.optional(),
+    retryRequirements: z.string().trim().min(1).max(4_000).optional(),
+  })
+  .strict()
+  .refine((value) => Boolean(value.retryOfJobId) === Boolean(value.retryRequirements), {
+    message: "Retry source and requirements must be supplied together",
+  });
+
+export const GenerationJobStatusV1Schema = z.enum([
+  "QUEUED",
+  "RUNNING",
+  "SUBMITTED",
+  "AMBIGUOUS",
+  "TECHNICAL_FAILED",
+  "AWAITING_HUMAN_QA",
+  "QA_PASS",
+  "QA_FAIL",
+  "CANCELLED",
+]);
+
+export const HumanQaDecisionV1Schema = z
+  .object({
+    decision: z.enum(["PASS", "FAIL"]),
+    notes: z.string().trim().max(8_000).optional(),
+  })
+  .strict()
+  .refine((value) => value.decision !== "FAIL" || Boolean(value.notes?.trim()), {
+    path: ["notes"],
+    message: "Owner FAIL requires a reason and retry requirements",
+  });
+
+export const AiQaCriterionV1Schema = z
+  .object({
+    criterion: z.enum([
+      "IDENTITY",
+      "WARDROBE_STATE",
+      "PRODUCT_STRUCTURE",
+      "BODY_PROPORTION_SCALE",
+      "SCENE",
+      "COMPOSITION",
+      "CROSS_FRAME_CONTINUITY",
+      "VISUAL_DAMAGE",
+      "UNEXPECTED_OBJECTS",
+    ]),
+    status: GenerationQaStatusSchema,
+    confidence: GenerationQaConfidenceSchema,
+    evidence: z.string().min(1).max(2_000),
+    frameRoles: z.array(ReviewFrameRoleSchema).max(3),
+  })
+  .strict();
+
+export const AiQaResultV1Schema = z
+  .object({
+    schemaVersion: z.literal("ai-qa-result-v1"),
+    providerId: z.string().min(1),
+    requestedModelId: z.string().min(1),
+    resolvedModelId: z.string().min(1),
+    responseId: z.string().min(1),
+    overallStatus: GenerationQaStatusSchema,
+    summary: z.string().min(1).max(4_000),
+    limitations: z.array(z.string().min(1).max(1_000)).min(2).max(10),
+    criteria: z.array(AiQaCriterionV1Schema).length(9),
+    usage: z.record(z.string(), z.number()).optional(),
+  })
+  .strict();
+
+export const AiQaRequestV1Schema = z
+  .object({
+    schemaVersion: z.literal("ai-qa-request-v1"),
+    artifactId: UuidSchema,
+    generationSpecId: UuidSchema,
+    generationSpecHash: Sha256Schema,
+    referenceSlots: z.array(GenerationExecutionSlotV1Schema).length(5),
+    reviewFrames: z
+      .array(
+        z.object({
+          role: ReviewFrameRoleSchema,
+          sha256: Sha256Schema,
+          mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
+          content: z.instanceof(Uint8Array),
+        }),
+      )
+      .length(3),
+    referenceImages: z
+      .array(
+        z.object({
+          role: GenerationExecutionSlotV1Schema.shape.role,
+          sha256: Sha256Schema,
+          mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
+          content: z.instanceof(Uint8Array),
+        }),
+      )
+      .length(5),
+    technicalFacts: z.record(z.string(), z.unknown()),
+    expectedFacts: z.record(z.string(), z.unknown()),
+    modelRef: z.object({
+      providerId: z.enum(["fake", "codexmanager-local"]),
+      modelId: z.enum(["fake-video-qa-v1", "gpt-5.4"]),
+    }),
+  })
+  .strict();
+
+export type GenerationProviderProfileId = z.infer<typeof GenerationProviderProfileIdSchema>;
+export type GenerationProviderCapabilitiesV1 = z.infer<
+  typeof GenerationProviderCapabilitiesV1Schema
+>;
+export type GenerationExecutionSlotV1 = z.infer<typeof GenerationExecutionSlotV1Schema>;
+export type GenerationExecutionPreviewV1 = z.infer<typeof GenerationExecutionPreviewV1Schema>;
+export type CreateGenerationExecutionPreviewV1 = z.infer<
+  typeof CreateGenerationExecutionPreviewV1Schema
+>;
+export type CreateGenerationBatchV1 = z.infer<typeof CreateGenerationBatchV1Schema>;
+export type GenerationJobStatusV1 = z.infer<typeof GenerationJobStatusV1Schema>;
+export type AiQaRequestV1 = z.infer<typeof AiQaRequestV1Schema>;
+export type AiQaResultV1 = z.infer<typeof AiQaResultV1Schema>;
+export type HumanQaDecisionV1 = z.infer<typeof HumanQaDecisionV1Schema>;

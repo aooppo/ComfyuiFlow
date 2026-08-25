@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { createReadStream, constants as fsConstants } from "node:fs";
+import { createReadStream, constants as fsConstants, existsSync } from "node:fs";
 import { link, lstat, mkdir, open, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { fileTypeFromFile } from "file-type";
@@ -48,13 +48,31 @@ export function sanitizeFilename(value: string): string {
   return (!safe || safe === "." || safe === ".." ? "unnamed-asset" : safe).slice(0, 255);
 }
 
+export function resolveStorageRoot(
+  configuredPath: string,
+  startDirectory: string = process.cwd(),
+): string {
+  if (path.isAbsolute(configuredPath)) return path.normalize(configuredPath);
+
+  let workspaceRoot = path.resolve(startDirectory);
+  while (!existsSync(path.join(workspaceRoot, "pnpm-workspace.yaml"))) {
+    const parent = path.dirname(workspaceRoot);
+    if (parent === workspaceRoot) {
+      workspaceRoot = path.resolve(startDirectory);
+      break;
+    }
+    workspaceRoot = parent;
+  }
+  return path.resolve(workspaceRoot, configuredPath);
+}
+
 export class LocalContentStorage implements StorageProvider {
   readonly root: string;
   readonly maxBytes: number;
 
   constructor(options?: { root?: string; maxBytes?: number }) {
-    this.root = path.resolve(
-      options?.root ?? process.env.PROJECT_ASSET_STORAGE_DIR ?? "./var/project-assets",
+    this.root = resolveStorageRoot(
+      options?.root ?? process.env.PROJECT_ASSET_STORAGE_DIR ?? "var/project-assets",
     );
     this.maxBytes =
       options?.maxBytes ?? Number(process.env.PROJECT_ASSET_MAX_BYTES || defaultMaxBytes);

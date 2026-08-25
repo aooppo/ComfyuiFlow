@@ -10,7 +10,7 @@
 
 - Immutable identity, plan, version number, parent, source (`DETERMINISTIC_PLANNER` or `OWNER`).
 - Planner/contract versions and input/reference/output hashes.
-- Exactly three child specs are required for approval.
+- One through twenty child specs are required for approval, with exactly one spec per source shot.
 
 ## GenerationSpec
 

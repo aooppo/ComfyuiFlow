@@ -5,6 +5,7 @@ Errors use `{ "error": { "code": "STABLE_CODE", "message": "safe text", "details
 ## Routes
 
 - `POST /api/storyboard-versions/{versionId}/generation-plans`: requires `Idempotency-Key`; returns 201, ETag, `externalCalls: 0`, and `generationAuthorized: false`.
+- `GET /api/storyboards/{storyboardId}/generation-plans`: returns the storyboard's immutable Shot Plan history, including version and generation-batch counts, ordered newest first. Opening one never creates a plan.
 - `GET /api/generation-plans/{planId}`: returns identity, head, approval projection, decisions, and ETag `"generation-plan-{rowVersion}"`.
 - `GET /api/generation-plans/{planId}/versions`: immutable version summaries.
 - `POST /api/generation-plans/{planId}/versions`: requires `If-Match` and parent; appends 1–20 owner-edited specs with exact source-shot alignment.

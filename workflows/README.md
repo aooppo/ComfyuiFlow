@@ -4,9 +4,15 @@ The registry contains only owner-reviewed API-format ComfyUI workflows and their
 manifests. A reachable ComfyUI server alone is not generation readiness. Model weights, Comfy
 credentials, credits, and generated media must never be committed here.
 
-## Active: DECOROLALA IN3725 four-second validation
+## Active: project Shot Plan four-second generation
 
-`minimax-h3-decorolala-validation-4s-v1.api.json` is the sole enabled workflow. It loads five
+`minimax-h3-project-shot-4s-v1.api.json` is the immutable registered graph for Phase 5–6. It is an
+additive copy of the owner-validated four-second graph, with the same verified bytes and SHA-256.
+Only the five hash-verified semantic slots and compiled prompt may be materialized through MCP.
+
+## Preserved: DECOROLALA IN3725 four-second validation
+
+`minimax-h3-decorolala-validation-4s-v1.api.json` remains byte-for-byte preserved but disabled. It loads five
 immutable input files, then supplies them to `MinimaxHailuo03ReferenceNode` in fixed order:
 
 - `Image 1`: rustic living-room scene

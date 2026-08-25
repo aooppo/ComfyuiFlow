@@ -27,6 +27,16 @@ interface CandidatePreview {
   }>;
 }
 
+interface GenerationPlanSummary {
+  id: string;
+  storyboardVersionId: string;
+  createdAt: string;
+  updatedAt: string;
+  headVersion: { versionNumber: number } | null;
+  approvedVersion: { versionNumber: number } | null;
+  generationBatchCount: number;
+}
+
 export function StoryboardEditor({
   projectId,
   storyboardId,
@@ -40,6 +50,7 @@ export function StoryboardEditor({
   const [versions, setVersions] = useState<
     Array<StoryboardVersionView & { _count?: { shots: number } }>
   >([]);
+  const [generationPlans, setGenerationPlans] = useState<GenerationPlanSummary[]>([]);
   const [compare, setCompare] = useState<
     [StoryboardVersionView | null, StoryboardVersionView | null]
   >([null, null]);
@@ -50,9 +61,10 @@ export function StoryboardEditor({
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const [storyboardResponse, versionsResponse] = await Promise.all([
+    const [storyboardResponse, versionsResponse, plansResponse] = await Promise.all([
       fetch(`/api/storyboards/${storyboardId}`),
       fetch(`/api/storyboards/${storyboardId}/versions`),
+      fetch(`/api/storyboards/${storyboardId}/generation-plans`),
     ]);
     const body = (await storyboardResponse.json()) as StoryboardView & {
       error?: { message: string };
@@ -62,9 +74,16 @@ export function StoryboardEditor({
     const versionBody = (await versionsResponse.json()) as {
       versions?: Array<StoryboardVersionView & { _count?: { shots: number } }>;
     };
+    const plansBody = (await plansResponse.json()) as {
+      plans?: GenerationPlanSummary[];
+      error?: { message: string };
+    };
+    if (!plansResponse.ok)
+      throw new Error(plansBody.error?.message ?? "Shot plans could not be loaded");
     setStoryboard(body);
     setShots(body.headVersion?.shots ?? []);
     setVersions(versionBody.versions ?? []);
+    setGenerationPlans(plansBody.plans ?? []);
     setEtag(storyboardResponse.headers.get("etag") ?? `"storyboard-${body.rowVersion}"`);
   }, [storyboardId]);
 
@@ -583,9 +602,43 @@ export function StoryboardEditor({
             Storyboard approval never authorizes external AI or video generation.
           </p>
           {storyboard.approvedVersionId && (
-            <button className="primaryButton" disabled={busy} onClick={() => void createShotPlan()}>
-              Open Shot Plan
-            </button>
+            <section className="shotPlanNavigation" aria-label="Shot Plan navigation">
+              <div>
+                <h3>Shot Plan</h3>
+                <p>已有计划和它们的生成批次会永久保留；重新生成不会覆盖先前的结果。</p>
+              </div>
+              {generationPlans.length > 0 ? (
+                <>
+                  <a
+                    className="primaryButton"
+                    href={`/projects/${projectId}/storyboards/${storyboardId}/plans/${generationPlans[0]!.id}`}
+                  >
+                    打开最新 Shot Plan
+                  </a>
+                  <details className="shotPlanHistory">
+                    <summary>历史 Shot Plan（{generationPlans.length}）</summary>
+                    <ul>
+                      {generationPlans.map((plan) => (
+                        <li key={plan.id}>
+                          <a
+                            href={`/projects/${projectId}/storyboards/${storyboardId}/plans/${plan.id}`}
+                          >
+                            {new Date(plan.createdAt).toLocaleString()} · 计划 v
+                            {plan.headVersion?.versionNumber ?? 0} · {plan.generationBatchCount}{" "}
+                            个批次
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                </>
+              ) : (
+                <p className="noticePanel">尚未创建 Shot Plan。</p>
+              )}
+              <button className="panelButton" disabled={busy} onClick={() => void createShotPlan()}>
+                新建 Shot Plan
+              </button>
+            </section>
           )}
         </section>
       )}

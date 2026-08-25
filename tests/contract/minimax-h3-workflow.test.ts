@@ -5,18 +5,24 @@ import { WorkflowRegistry } from "@comfyuiflow/comfyui-bridge";
 const historicalWorkflowId = "minimax-h3-reference-to-video";
 const longWorkflowId = "minimax-h3-decorolala-ad-15s-v1";
 const workflowId = "minimax-h3-decorolala-validation-4s-v1";
+const projectWorkflowId = "minimax-h3-project-shot-4s-v1";
 const workflowHash = "6eb380b17fd775ee15e45cc7a65b5fb80478954bc51c027faff67dcd5b0d1d7a";
 const registry = new WorkflowRegistry(join(process.cwd(), "workflows", "registry.json"));
 
 describe("MiniMax H3 reference-to-video workflow", () => {
   it("preserves longer history while enabling only the four-second validation workflow", async () => {
     const manifests = await registry.manifests();
-    expect(manifests).toHaveLength(3);
+    expect(manifests).toHaveLength(4);
     expect(manifests).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ workflowId: historicalWorkflowId, enabled: false }),
         expect.objectContaining({ workflowId: longWorkflowId, enabled: false }),
-        expect.objectContaining({ workflowId, enabled: true, requiredModels: [] }),
+        expect.objectContaining({ workflowId, enabled: false, requiredModels: [] }),
+        expect.objectContaining({
+          workflowId: projectWorkflowId,
+          enabled: true,
+          requiredModels: [],
+        }),
       ]),
     );
 
@@ -32,8 +38,17 @@ describe("MiniMax H3 reference-to-video workflow", () => {
     ]);
   });
 
+  it("registers the additive project workflow without changing validated graph bytes", async () => {
+    const historical = await registry.load(workflowId);
+    const project = await registry.load(projectWorkflowId);
+    expect(project.actualHash).toBe(workflowHash);
+    expect(project.actualHash).toBe(historical.actualHash);
+    expect(project.hashMatches).toBe(true);
+    expect(project.bindingErrors).toEqual([]);
+  });
+
   it("binds scene, product, and three character views as ordered H3 references", async () => {
-    const prompt = await registry.materialize(workflowId, workflowHash, {
+    const prompt = await registry.materialize(projectWorkflowId, workflowHash, {
       character: "comfyuiflow/character.png",
       scene: "comfyuiflow/scene.png",
       product: "comfyuiflow/product.png",

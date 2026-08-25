@@ -7,6 +7,7 @@ import {
   LocalContentStorage,
   ProjectAssetError,
   operationLog,
+  resolveStorageRoot,
   sanitizeFilename,
 } from "@comfyuiflow/project-core";
 
@@ -22,6 +23,17 @@ async function* chunks(value: Buffer) {
 }
 
 describe("LocalContentStorage", () => {
+  it("resolves relative storage paths from the workspace root when an app changes cwd", async () => {
+    const workspace = await mkdtemp(path.join(tmpdir(), "comfyuiflow-workspace-"));
+    const appDirectory = path.join(workspace, "apps", "project-web");
+    await mkdir(appDirectory, { recursive: true });
+    await writeFile(path.join(workspace, "pnpm-workspace.yaml"), "packages:\n  - apps/*\n");
+
+    expect(resolveStorageRoot("./var/project-assets", appDirectory)).toBe(
+      path.join(workspace, "var", "project-assets"),
+    );
+  });
+
   it("preserves verified immutable content by SHA-256 without overwriting duplicates", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "comfyuiflow-storage-"));
     const storage = new LocalContentStorage({ root, maxBytes: 10_000 });

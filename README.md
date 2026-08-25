@@ -240,3 +240,26 @@ append-only decisions and always expose `generationAuthorized: false`.
 Phase 4 contains no Provider/model selection, workflow or ComfyUI parameters, `GenerationJob`,
 submission, retry, Artifact, audio, QA, assembly, or publishing path. Its external-call ledger is
 `AI 0 / Provider 0 / ComfyUI 0 / video generation 0`.
+
+## Phase 5–6 Generation & QA
+
+An approved Shot Plan now includes a separate **Generate & QA** workspace. A zero-call Preview
+revalidates the exact 1–20 selected specs, five semantic image slots, file hashes, registered
+Provider profile, immutable workflow SHA, prompt hash, call ceilings, and visible cost information.
+Incompatible shots remain visible but cannot be selected.
+
+A confirmed batch creates one Job per shot plus a combined authorization with separate generation
+and AI-QA ceilings. The single-concurrency worker consumes each target permission before its one
+attempt, never retries or falls back, pauses after ambiguous submission or technical failure, and
+reconciles only the recorded original Provider task. Fake generation and Fake QA are the defaults
+and perform no external calls.
+
+Generated MP4 bytes live under `PROJECT_GENERATED_STORAGE_DIR`, separate from source assets.
+PostgreSQL retains hashes, provider lineage, FFprobe facts, first/middle/final review-frame hashes,
+structured advisory AI QA, and append-only Owner PASS/FAIL decisions. Only Owner PASS can qualify an
+artifact for a future assembly phase; no output is automatically approved or promoted.
+
+LIVE H3 remains closed unless `PROJECT_GENERATION_LIVE_ENABLED=true`, the registered MCP workflow,
+Partner credential, credits, and CodexManager gateway are all ready, and the Owner confirms the
+exact action at execution time. That later acceptance is capped at one H3 submission and, only after
+a technically valid artifact, one `gpt-5.4` frame-QA call.

@@ -4,7 +4,7 @@
 
 **Created**: 2026-08-25
 
-**Status**: Approved for implementation
+**Status**: Complete
 
 **Input**: User requests that Storyboards support adding and removing shots, that any supported shot count can enter a Generation Plan, and that Storyboard cards expose safe archive/delete actions.
 

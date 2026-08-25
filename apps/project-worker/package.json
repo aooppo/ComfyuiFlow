@@ -10,7 +10,9 @@
   },
   "dependencies": {
     "@comfyuiflow/ai-providers": "workspace:*",
-    "@comfyuiflow/project-core": "workspace:*"
+    "@comfyuiflow/project-core": "workspace:*",
+    "@comfyuiflow/spike-core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.30.0"
   },
   "devDependencies": {
     "tsup": "^8.5.0",

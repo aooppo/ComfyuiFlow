@@ -12,6 +12,7 @@
   "dependencies": {
     "@comfyuiflow/comfyui-bridge": "workspace:*",
     "@comfyuiflow/contracts": "workspace:*",
+    "@comfyuiflow/project-core": "workspace:*",
     "@comfyuiflow/spike-core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "zod": "^4.1.0"

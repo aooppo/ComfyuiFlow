@@ -5,6 +5,8 @@ import type {
   AssetUnderstandingProviderResult,
   StoryboardGenerationRequestV1,
   StoryboardProposalV1,
+  AiQaRequestV1,
+  AiQaResultV1,
 } from "@comfyuiflow/contracts";
 
 export interface AiModelCapabilities {
@@ -27,4 +29,5 @@ export interface AiModelProvider {
     request: AssetUnderstandingProviderRequest,
   ): Promise<AssetUnderstandingProviderResult>;
   generateStoryboard?(request: StoryboardGenerationRequestV1): Promise<StoryboardProposalV1>;
+  reviewVideoFrames?(request: AiQaRequestV1): Promise<AiQaResultV1>;
 }

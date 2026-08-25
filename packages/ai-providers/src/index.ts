@@ -5,3 +5,4 @@ export * from "./fake-storyboard-provider.js";
 export * from "./openai-asset-understanding-provider.js";
 export * from "./openai-provider.js";
 export * from "./provider.js";
+export * from "./video-qa-provider.js";

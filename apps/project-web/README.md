@@ -84,3 +84,29 @@ preflight blockers. Prompt edits append a new owner version and stale tabs reloa
 Storyboard approval, Shot Plan approval, and generation authorization are distinct states. Phase 4
 always displays generation as unauthorized and has no Provider, workflow, ComfyUI, or video submit
 path.
+
+## Generate & QA workspace
+
+After approving the exact Shot Plan head, select 1–20 compatible shots in **Generate & QA**. Preview
+is read-only and shows stable blockers, compiled prompt summaries, all five references, the fixed
+workflow version/SHA, maximum call counts, and cost visibility. Confirmation creates a bounded
+background batch; it does not permit retry, fallback, reference substitution, or prompt editing.
+
+The development command starts the Web app and resident Worker together. To run only the resident
+Worker in another terminal:
+
+```bash
+DATABASE_URL=postgresql://comfyuiflow:comfyuiflow@127.0.0.1:5448/comfyuiflow \
+GENERATION_PROVIDER_PROFILE=fake-video-v1 pnpm project:worker
+```
+
+The Worker polls both local queues until stopped. Set `PROJECT_WORKER_ONCE=true` only for tests or
+an intentional single turn. The Shot Plan page restores the latest batch after reload, polls active
+progress every two seconds, and blocks duplicate confirmation while an active or consumed paused
+batch exists.
+
+Generated videos are served from the separate ignored `PROJECT_GENERATED_STORAGE_DIR`. The UI keeps
+task IDs and raw technical evidence collapsed, while showing progress, playback, three review
+frames, technical facts, advisory AI QA, and explicit Owner PASS/FAIL. Cancellation never promises
+a refund or guaranteed remote termination. LIVE is disabled by default and requires a separate
+action-time confirmation; automated validation must remain on Fake.

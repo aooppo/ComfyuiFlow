@@ -67,6 +67,7 @@ export class ComfyUiExecutionService {
       authorization: AuthorizationService;
       dataRoot: string;
       liveEnabled: boolean;
+      allowedInputRoots?: string[];
     },
   ) {}
 
@@ -78,10 +79,19 @@ export class ComfyUiExecutionService {
   }): Promise<StagedInputEvidence> {
     const loaded = await this.dependencies.registry.load(input.workflowId);
     if (!loaded.manifest.enabled) throw new Error("Workflow is disabled");
-    const inputRoot = await realpath(join(this.dependencies.dataRoot, "inputs"));
     const localPath = await realpath(input.localPath);
-    const traversal = relative(inputRoot, localPath);
-    if (traversal.startsWith("..") || traversal.includes("../")) {
+    const configuredRoots = [
+      join(this.dependencies.dataRoot, "inputs"),
+      ...(this.dependencies.allowedInputRoots ?? []),
+    ];
+    const roots = (await Promise.allSettled(configuredRoots.map((root) => realpath(root)))).flatMap(
+      (result) => (result.status === "fulfilled" ? [result.value] : []),
+    );
+    const allowed = roots.some((root) => {
+      const traversal = relative(root, localPath);
+      return traversal === "" || (!traversal.startsWith("..") && !traversal.includes("../"));
+    });
+    if (!allowed) {
       throw new Error("Input path is outside the immutable input root");
     }
     const actualHash = await sha256File(localPath);
@@ -94,6 +104,17 @@ export class ComfyUiExecutionService {
   }
 
   async submit(input: AuthorizedGenerationSubmission): Promise<SubmitResult> {
+    return this.submitInternal(input, true);
+  }
+
+  async submitPreauthorized(input: GenerationSubmission): Promise<SubmitResult> {
+    return this.submitInternal({ ...input, grantId: "project-preauthorized" }, false);
+  }
+
+  private async submitInternal(
+    input: AuthorizedGenerationSubmission,
+    consumeFileGrant: boolean,
+  ): Promise<SubmitResult> {
     if (!this.dependencies.liveEnabled) throw new Error("ComfyUI LIVE is disabled");
     const loaded = await this.dependencies.registry.load(input.workflowId);
     if (loaded.manifest.requiresComfyOrgAuth && !this.dependencies.client.hasComfyOrgCredential()) {
@@ -156,13 +177,14 @@ export class ComfyUiExecutionService {
     );
     const scopeHash = generationScopeHash(input);
     const requestHash = hashCanonical({ promptId: input.promptId, workflow });
-    await this.dependencies.authorization.consumeGrant({
-      grantId: input.grantId,
-      runId: input.runId,
-      operation: "COMFYUI_SUBMIT",
-      scopeHash,
-      requestHash,
-    });
+    if (consumeFileGrant)
+      await this.dependencies.authorization.consumeGrant({
+        grantId: input.grantId,
+        runId: input.runId,
+        operation: "COMFYUI_SUBMIT",
+        scopeHash,
+        requestHash,
+      });
     try {
       return await this.dependencies.client.submitWorkflow(input.promptId, workflow);
     } catch (error) {

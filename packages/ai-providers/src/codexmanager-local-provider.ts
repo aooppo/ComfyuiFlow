@@ -18,7 +18,7 @@ interface CodexManagerLocalProviderOptions {
   readinessTimeoutMs?: number;
 }
 
-interface GatewayResponseEnvelope {
+export interface GatewayResponseEnvelope {
   id?: unknown;
   model?: unknown;
   status?: unknown;
@@ -27,7 +27,7 @@ interface GatewayResponseEnvelope {
   output?: unknown;
 }
 
-function numericUsage(value: unknown): Record<string, number> | undefined {
+export function numericUsage(value: unknown): Record<string, number> | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const result: Record<string, number> = {};
   for (const [key, item] of Object.entries(value)) {
@@ -45,7 +45,7 @@ function requiredDurationSeconds(request: AiTaskRequest): number | undefined {
   return value;
 }
 
-function outputTextFromEnvelope(response: GatewayResponseEnvelope): string | undefined {
+export function outputTextFromEnvelope(response: GatewayResponseEnvelope): string | undefined {
   if (typeof response.output_text === "string") return response.output_text;
   if (!Array.isArray(response.output)) return undefined;
   for (const item of response.output) {
@@ -66,7 +66,7 @@ function outputTextFromEnvelope(response: GatewayResponseEnvelope): string | und
   return undefined;
 }
 
-function parseSseResponse(body: string): {
+export function parseSseResponse(body: string): {
   response: GatewayResponseEnvelope;
   outputText: string;
 } {
