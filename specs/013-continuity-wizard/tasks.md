@@ -131,3 +131,11 @@ clearly labeled draft; formal assembly stays ineligible and all source/history r
 - Fake provider is the only keyframe executor used by automated/browser acceptance.
 - Real three-shot image/video acceptance requires a new action-time confirmation showing exact current
   scope, call ceilings, price facts, expiry, and no-retry policy.
+
+## Phase 9: Convergence after LIVE contact-sheet rejection
+
+- [x] T061 [US1] Preserve approved product geometry, including silhouette, proportions, top shape, leg count, leg structure, and material, in structured continuity facts and keyframe prompts per FR-003 and FR-010 (partial)
+- [x] T062 [US2] Treat unmentioned architecture, furniture, books, lamps, tabletop items, and decor as persistent scene inventory unless an explicit boundary change removes or moves them per FR-007 and FR-008 (partial)
+- [x] T063 [US2] Separate physical presence from visibility/emphasis so out-of-frame or not-emphasized props are never compiled as removed per FR-007 and FR-008 (contradicts)
+- [x] T064 [US3] Compile each keyframe from only the shared boundary instant and exclude next-shot final composition or action, with deterministic zero-call regression coverage per FR-006 and FR-010 (contradicts)
+- [x] T065 [US3] Order multi-reference edits as scene base, fixed product/prop identity, character, then dynamic prop, and describe that order in the prompt per FR-010 (partial)

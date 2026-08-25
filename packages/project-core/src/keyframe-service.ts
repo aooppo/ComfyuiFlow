@@ -26,6 +26,7 @@ import {
 import { LocalContentStorage, type StorageProvider } from "./local-storage.js";
 import { normalizeKeyframeImage } from "./keyframe-image-normalizer.js";
 import { prisma, type ProjectPrisma } from "./prisma.js";
+import { CONTINUITY_REGISTRY_VERSION } from "./continuity-registry.js";
 
 type PreviewInput = z.infer<typeof PreviewKeyframePlanV1Schema>;
 type CreateInput = z.infer<typeof CreateKeyframePlanV1Schema>;
@@ -40,6 +41,86 @@ interface KeyframeReferenceRecord {
   displayName: string;
   storageKey: string;
   byteSize: number;
+  continuityPriority: number;
+}
+
+interface PromptSubject {
+  kind: string;
+  label: string;
+  assetVersionFileId?: string | null | undefined;
+  rules?: Array<{ policy?: string | undefined }> | undefined;
+  facts?: unknown;
+  factsJson?: unknown;
+}
+
+export function keyframeReferencePriority(subject: { kind: string; policy?: string | undefined }) {
+  if (subject.kind === "ENVIRONMENT") return 0;
+  if (subject.kind === "PRODUCT") return 1;
+  if (subject.kind === "PROP" && subject.policy !== "SHOT_CHANGE") return 1;
+  if (subject.kind === "CHARACTER") return 2;
+  if (subject.kind === "PROP") return 3;
+  return 4;
+}
+
+interface PromptBoundary {
+  label: string;
+  state?: Record<string, unknown>;
+  stateJson?: Record<string, unknown>;
+}
+
+function renderableBoundaryState(boundary: PromptBoundary) {
+  const source = boundary.stateJson ?? boundary.state ?? {};
+  return Object.fromEntries(
+    Object.entries(source).map(([key, raw]) => {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [key, raw];
+      const value = raw as Record<string, unknown>;
+      const renderable = { ...value };
+      delete renderable.continuityEvidence;
+      return [key, renderable];
+    }),
+  );
+}
+
+export function compileContinuityKeyframePrompt(
+  subjects: PromptSubject[],
+  boundary: PromptBoundary,
+) {
+  const labels = subjects.map((subject) => subject.label).join("、");
+  const productFacts = subjects
+    .filter((subject) => subject.kind === "PRODUCT" || subject.kind === "PROP")
+    .map((subject) => ({ label: subject.label, facts: subject.factsJson ?? subject.facts ?? {} }));
+  const referenceOrder = subjects
+    .filter((subject) => Boolean(subject.assetVersionFileId))
+    .map((subject) => ({
+      label: subject.label,
+      assetVersionFileId: subject.assetVersionFileId ?? "",
+      priority: keyframeReferencePriority({
+        kind: subject.kind,
+        policy: subject.rules?.[0]?.policy,
+      }),
+    }))
+    .sort(
+      (left, right) =>
+        left.priority - right.priority ||
+        left.assetVersionFileId.localeCompare(right.assetVersionFileId),
+    )
+    .map((subject, index) => `Picture ${index + 1}=${subject.label}`)
+    .join(", ");
+  return [
+    "Create one portrait continuity boundary frame for an approved video storyboard.",
+    `Boundary: ${boundary.label}. Render only this shared boundary instant, before any next-shot action or final pose occurs.`,
+    `Keep approved identities and layouts for: ${labels}.`,
+    referenceOrder
+      ? `REFERENCE ORDER IS AUTHORITATIVE: ${referenceOrder}. Picture 1 is the scene base canvas; edit it without redesigning its layout.`
+      : "Use the approved scene reference as the base canvas and the remaining references only for identity preservation.",
+    "PRODUCT AND PROP IDENTITY IS A HARD LOCK: reproduce every approved product or prop with the same silhouette and proportions. Keep the same tabletop shape, leg count, leg structure, joinery, material, and scale. Do not redesign or simplify it.",
+    `Approved product and prop facts: ${JSON.stringify(productFacts)}.`,
+    "SCENE INVENTORY IS PERSISTENT: preserve all architecture, furniture, books, lamps, lanterns, tabletop objects, and decor visible in the approved scene reference, with the same count and positions, unless the boundary explicitly declares that exact object moved or was removed.",
+    'Physical presence and visibility are separate. "Not emphasized", "not a focus", or "out of frame" never means removed; keep the object physically in the scene.',
+    `Exact renderable boundary state: ${JSON.stringify(renderableBoundaryState(boundary))}.`,
+    "Do not depict future movement, a next-shot destination, or a later final composition.",
+    "Do not add people, products, props, text, logos, or layout changes not present in references.",
+  ].join("\n");
 }
 
 export class KeyframeService {
@@ -448,6 +529,12 @@ export class KeyframeService {
       },
     });
     if (!version) throw this.error("CONTINUITY_NOT_FOUND", "Continuity version was not found", 404);
+    if (version.registryVersion !== CONTINUITY_REGISTRY_VERSION)
+      throw this.error(
+        "PROFILE_STALE",
+        "Continuity rules changed after visual review; create and approve a new continuity version",
+        409,
+      );
     if (
       version.continuityProfile.approvedVersionId !== version.id ||
       version.continuityProfile.storyboard.approvedVersionId !== version.storyboardVersionId
@@ -472,6 +559,11 @@ export class KeyframeService {
       where: { id: { in: ids } },
       include: { projectAsset: { include: { storedObject: true } } },
     });
+    const subjectByFileId = new Map(
+      subjects
+        .filter((subject) => Boolean(subject.assetVersionFileId))
+        .map((subject) => [subject.assetVersionFileId, subject]),
+    );
     return files
       .filter(
         (file) =>
@@ -492,12 +584,22 @@ export class KeyframeService {
         displayName: file.projectAsset.displayName,
         storageKey: file.projectAsset.storedObject.storageKey,
         byteSize: Number(file.projectAsset.storedObject.byteSize),
+        continuityPriority: keyframeReferencePriority({
+          kind: subjectByFileId.get(file.id)?.kind ?? "OTHER",
+          policy: subjectByFileId.get(file.id)?.rules?.[0]?.policy,
+        }),
       }))
-      .sort((a, b) => a.assetVersionFileId.localeCompare(b.assetVersionFileId));
+      .sort(
+        (a, b) =>
+          a.continuityPriority - b.continuityPriority ||
+          a.assetVersionFileId.localeCompare(b.assetVersionFileId),
+      );
   }
 
   private async readReferences(raw: unknown[]): Promise<KeyframeReferenceImage[]> {
-    const references = raw as Array<Omit<KeyframeReferenceRecord, "storageKey" | "byteSize">>;
+    const references = raw as Array<
+      Omit<KeyframeReferenceRecord, "storageKey" | "byteSize" | "continuityPriority">
+    >;
     const files = await this.client.assetVersionFile.findMany({
       where: { id: { in: references.map((reference) => reference.assetVersionFileId) } },
       include: { projectAsset: { include: { storedObject: true } } },
@@ -524,14 +626,7 @@ export class KeyframeService {
   }
 
   private compilePrompt(subjects: Array<any>, boundary: any) {
-    const labels = subjects.map((subject) => subject.label).join("、");
-    return [
-      "Create one portrait continuity boundary frame for an approved video storyboard.",
-      `Boundary: ${boundary.label}.`,
-      `Keep approved identities and layouts for: ${labels}.`,
-      `Exact structured state: ${JSON.stringify(boundary.stateJson)}.`,
-      "Do not add people, products, props, text, logos, or layout changes not present in references.",
-    ].join("\n");
+    return compileContinuityKeyframePrompt(subjects, boundary);
   }
 
   private async refreshReviewStatus(planId: string) {

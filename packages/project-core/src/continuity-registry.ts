@@ -6,7 +6,7 @@ import type {
 import { ContinuityPreflightV1Schema } from "@comfyuiflow/contracts";
 import { canonicalSha256 } from "./canonical-json.js";
 
-export const CONTINUITY_REGISTRY_VERSION = "continuity-subject-registry-v1";
+export const CONTINUITY_REGISTRY_VERSION = "continuity-subject-registry-v3";
 
 export const continuitySubjectRegistry = {
   ENVIRONMENT: { label: "场景环境", defaultPolicy: "WHOLE_FILM_HOLD", defaultImportance: "HARD" },
@@ -36,6 +36,53 @@ export interface ContinuitySeedShot {
   endState: string;
   camera: string;
   composition: string;
+}
+
+const PRODUCT_GEOMETRY_ATTRIBUTES = [
+  "silhouette",
+  "proportions",
+  "top_shape",
+  "leg_count",
+  "leg_structure",
+  "material",
+] as const;
+
+function stableAssetState(subject: ContinuitySeedAsset) {
+  const base = {
+    identitySha256: subject.sourceSha256 ?? null,
+    facts: subject.facts,
+  };
+  if (subject.kind === "ENVIRONMENT")
+    return {
+      ...base,
+      persistence: "PRESERVE_ALL_REFERENCE_OBJECTS",
+      preserveUnmentionedObjects: true,
+    };
+  if (subject.kind === "PRODUCT" || subject.kind === "PROP")
+    return {
+      ...base,
+      identityLock: {
+        preserveGeometry: true,
+        attributes: PRODUCT_GEOMETRY_ATTRIBUTES,
+      },
+    };
+  return base;
+}
+
+function physicalState(description: string | null) {
+  const text = description ?? "";
+  const explicitlyRemoved =
+    /从场景中移除|被拿走|已经拿走|丢弃|销毁|消耗完|removed from (?:the )?scene|taken away|discarded|destroyed|consumed/i.test(
+      text,
+    );
+  const outOfFrame = /画外|画面外|移出画面|out of frame|off[ -]?screen/i.test(text);
+  const notEmphasized =
+    /不强调|不作为(?:画面|镜头|内容)?重点|不单独呈现|not emphasized|not (?:a )?focus/i.test(text);
+  return {
+    physicalPresence: explicitlyRemoved ? "REMOVED" : "PRESENT",
+    visibility: outOfFrame ? "OUT_OF_FRAME" : notEmphasized ? "NOT_EMPHASIZED" : "UNSPECIFIED",
+    instantaneousState: text,
+  };
 }
 
 function subjectRule(subject: ContinuitySeedAsset): ContinuitySubjectInputV1["rules"][number] {
@@ -81,11 +128,14 @@ export function buildContinuitySuggestion(input: {
   const stableAssets = assets.filter((subject) => subject.defaultPolicy !== "SHOT_CHANGE");
   const dynamicAssets = assets.filter((subject) => subject.defaultPolicy === "SHOT_CHANGE");
   const stableState = Object.fromEntries(
-    stableAssets.map((subject) => [subject.subjectKey, subject.sourceSha256 ?? subject.facts]),
+    stableAssets.map((subject) => [subject.subjectKey, stableAssetState(subject)]),
   );
   const boundaries = Array.from({ length: input.shots.length + 1 }, (_, boundaryIndex) => {
     const prior = input.shots[Math.max(0, boundaryIndex - 1)];
     const next = input.shots[Math.min(boundaryIndex, input.shots.length - 1)];
+    const previousEndState = boundaryIndex === 0 ? null : (prior?.endState ?? null);
+    const nextStartState = boundaryIndex === input.shots.length ? null : (next?.startState ?? null);
+    const instantaneousState = previousEndState ?? nextStartState ?? "";
     return {
       boundaryIndex,
       label:
@@ -96,21 +146,32 @@ export function buildContinuitySuggestion(input: {
             : `Shot ${boundaryIndex} → ${boundaryIndex + 1}`,
       state: {
         ...stableState,
+        "boundary:instant": {
+          instantaneousState,
+          boundaryOnly: true,
+          continuityEvidence: { previousEndState, nextStartState },
+        },
         ...Object.fromEntries(
-          dynamicAssets.map((subject) => [
-            subject.subjectKey,
-            {
-              identitySha256: subject.sourceSha256 ?? null,
-              previousEndState: boundaryIndex === 0 ? null : (prior?.endState ?? null),
-              nextStartState:
-                boundaryIndex === input.shots.length ? null : (next?.startState ?? null),
-            },
-          ]),
+          dynamicAssets.map((subject) => {
+            return [
+              subject.subjectKey,
+              {
+                identitySha256: subject.sourceSha256 ?? null,
+                facts: subject.facts,
+                identityLock: {
+                  preserveGeometry: true,
+                  attributes: PRODUCT_GEOMETRY_ATTRIBUTES,
+                },
+                ...physicalState(instantaneousState),
+                continuityEvidence: { previousEndState, nextStartState },
+              },
+            ];
+          }),
         ),
         "camera:whole-film": {
-          previous: prior?.camera ?? "",
-          next: next?.camera ?? "",
-          composition: next?.composition ?? prior?.composition ?? "",
+          boundaryStill: true,
+          preserveApprovedScenePerspective: true,
+          deferCameraMovementToVideoShot: true,
         },
         "style:whole-film": { aspectRatio: "PORTRAIT_9_16", continuity: "consistent" },
       },

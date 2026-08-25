@@ -53,6 +53,7 @@ interface ContinuityView {
   storyboardRowVersion: number;
   title: string;
   eligible: boolean;
+  continuityRulesCurrent: boolean;
   blockers: string[];
   profile: null | {
     id: string;
@@ -151,6 +152,10 @@ export function ContinuityWizard({
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const currentApproved = Boolean(
+    view?.continuityRulesCurrent &&
+    view.profile?.approvedVersionId === view.profile?.headVersion.id,
+  );
 
   const load = useCallback(async () => {
     const response = await fetch(`/api/storyboards/${storyboardId}/continuity`, {
@@ -168,7 +173,7 @@ export function ContinuityWizard({
         cache: "no-store",
       });
       if (planResponse.ok) setKeyframes((await planResponse.json()) as KeyframeState);
-    }
+    } else setKeyframes(null);
   }, [storyboardId]);
 
   useEffect(() => {
@@ -334,12 +339,12 @@ export function ContinuityWizard({
   }
 
   async function previewKeyframes() {
-    if (!view?.profile?.approvedVersionId) return;
+    if (!view?.profile || !currentApproved) return;
     setBusy(true);
     setError("");
     try {
       const response = await fetch(
-        `/api/continuity-profile-versions/${view.profile.approvedVersionId}/keyframe-plans/preview`,
+        `/api/continuity-profile-versions/${view.profile.headVersion.id}/keyframe-plans/preview`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -358,13 +363,13 @@ export function ContinuityWizard({
   }
 
   async function createAuthorizeAndRun() {
-    if (!view?.profile?.approvedVersionId || !preview?.ready) return;
+    if (!view?.profile || !currentApproved || !preview?.ready) return;
     const isFake = providerProfileId === "fake-keyframe-v1";
     setBusy(true);
     setError("");
     try {
       const createResponse = await fetch(
-        `/api/continuity-profile-versions/${view.profile.approvedVersionId}/keyframe-plans`,
+        `/api/continuity-profile-versions/${view.profile.headVersion.id}/keyframe-plans`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -423,12 +428,12 @@ export function ContinuityWizard({
   }
 
   const step = useMemo(() => {
-    if (keyframes?.status === "APPROVED") return 4;
-    if (keyframes) return 3;
-    if (view?.profile?.approvedVersionId) return 2;
+    if (currentApproved && keyframes?.status === "APPROVED") return 4;
+    if (currentApproved && keyframes) return 3;
+    if (currentApproved) return 2;
     if (view?.profile) return 1;
     return 0;
-  }, [keyframes, view]);
+  }, [currentApproved, keyframes, view]);
 
   if (!view)
     return (
@@ -454,6 +459,11 @@ export function ContinuityWizard({
       {message && <p className="successPanel">{message}</p>}
       {error && <p className="errorPanel">{error}</p>}
       {!view.eligible && <p className="errorPanel">{view.blockers.join("；")}</p>}
+      {view.profile && !view.continuityRulesCurrent && (
+        <p className="errorPanel">
+          本次关键帧验收发现桌子形状、桌腿、书、灯和酒杯状态可能漂移。请点击“重新扫描批准素材”，确认并冻结新版规则后再预览；旧批次和旧授权不会复用。
+        </p>
+      )}
 
       {!view.profile ? (
         <section className="editorPanel continuityEmpty">
@@ -571,19 +581,19 @@ export function ContinuityWizard({
                 <p>{issue.message}</p>
               </div>
             ))}
-            {view.preflight?.ready && !view.profile.approvedVersionId && (
+            {view.preflight?.ready && !currentApproved && (
               <button className="primaryButton" disabled={busy} onClick={approveProfile}>
                 确认并冻结这版一致性设置
               </button>
             )}
-            {view.profile.approvedVersionId && (
+            {currentApproved && (
               <p className="successPanel">
                 一致性设置已冻结。后续修改会生成新版本，并让旧预览失效。
               </p>
             )}
           </section>
 
-          {view.profile.approvedVersionId && (
+          {currentApproved && (
             <section className="editorPanel">
               <h2>3. 低成本关键帧联系表</h2>
               <p>

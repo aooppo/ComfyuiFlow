@@ -41,8 +41,33 @@ No LIVE image, video, or AI QA request was made during implementation or verific
   explanation, and correct approved-Storyboard blocker without console errors. Existing user archive
   state was preserved.
 
-## Paid acceptance boundary
+## Further paid acceptance boundary
 
-Real GPT Image 2/Codex Manager and H3 acceptance is pending a new owner confirmation that displays
-the exact current model snapshot, image and video call ceilings, current price facts and expiry, and
-the no-retry policy. A previous authorization or this verification does not authorize those calls.
+Any further GPT Image 2/Codex Manager or H3 acceptance requires a new owner confirmation that
+displays the exact current model snapshot, image and video call ceilings, current price facts and
+expiry, and the no-retry policy. The rejected batch authorization and this verification do not
+authorize another call.
+
+## LIVE contact-sheet rejection and corrective convergence
+
+The owner-authorized four-image GPT Image 2 contact sheet was retained and explicitly rejected after
+visual review. The observed failures were: missing books/lamp, a wine glass incorrectly disappearing,
+next-shot final action leaking into a shared boundary, and coffee-table/table-leg geometry changing
+between frames. No automatic retry or replacement was made.
+
+Corrective registry v3 now persists approved scene inventory by default, locks product/prop
+silhouette and geometry attributes, separates physical presence from visibility/emphasis, compiles
+only the shared boundary instant, and orders multi-reference editing as scene base, fixed product or
+prop, character, then dynamic prop. Registry-v1 profiles fail closed and require a new owner-reviewed
+version; old keyframe plans and authorizations cannot be reused.
+
+The active three-shot project now has zero-call, unapproved continuity version 6 on registry v3;
+intermediate corrective suggestions remain immutable history. Readback confirmed four boundaries, a
+hard coffee-table geometry lock, the wine glass as physically `PRESENT` at the Shot 2 to Shot 3
+boundary, scene-first reference order, and no shot camera movement in the still-frame prompt. Browser
+QA confirmed the UI returns to step 2 and hides GPT Image 2 generation until the owner approves the
+new version.
+
+Corrective verification passed 151 default tests, 25 expected environment skips, a fresh PostgreSQL
+migration plus the two continuity integration tests, TypeScript, ESLint, Prettier, secret scan,
+`git diff --check`, and the production build. All corrective verification made zero external calls.

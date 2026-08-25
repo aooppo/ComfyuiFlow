@@ -75,6 +75,8 @@ export class ContinuityService {
       eligible,
       blockers: eligible ? [] : ["需要先批准含完整素材绑定的 1–20 镜 Storyboard"],
       profile: storyboard.continuityProfile,
+      continuityRulesCurrent:
+        storyboard.continuityProfile?.headVersion?.registryVersion === CONTINUITY_REGISTRY_VERSION,
       preflight,
       externalCalls: 0 as const,
     };
@@ -136,6 +138,7 @@ export class ContinuityService {
         sourceSha256: binding.projectAsset.storedObject.sha256,
         facts: {
           description: binding.productionAssetVersion.description ?? "",
+          approvedFacts: binding.productionAssetVersion.factsJson ?? {},
           referenceUsage: binding.assetVersionFile.referenceUsage,
         },
       });
@@ -179,6 +182,7 @@ export class ContinuityService {
         defaultPolicy: "SHOT_CHANGE",
         facts: {
           description: version.description ?? "",
+          approvedFacts: version.factsJson ?? {},
           referenceUsage: file.referenceUsage,
           source: "approved-project-prop",
           dynamicCandidate: true,
@@ -259,22 +263,27 @@ export class ContinuityService {
     if (
       !profile ||
       profile.storyboard.approvedVersionId !== version.storyboardVersionId ||
-      profile.storyboard.status !== "ACTIVE"
+      profile.storyboard.status !== "ACTIVE" ||
+      version.registryVersion !== CONTINUITY_REGISTRY_VERSION
     ) {
+      const rulesChanged = version.registryVersion !== CONTINUITY_REGISTRY_VERSION;
       const stale = {
         severity: "BLOCKER" as const,
         code: "PROFILE_STALE",
         subjectKey: null,
         shotOrdinal: null,
         boundaryIndex: null,
-        message: "Storyboard 批准版本已经变化，请创建新的一致性版本",
+        message: rulesChanged
+          ? "一致性规则已根据关键帧验收更新，请重新扫描批准素材并确认新版本"
+          : "Storyboard 批准版本已经变化，请创建新的一致性版本",
         actions: ["SELECT_APPROVED_REFERENCE" as const],
       };
+      const resultWithoutHash = { ...result } as Partial<typeof result>;
+      delete resultWithoutHash.preflightHash;
       const core = {
-        ...result,
+        ...resultWithoutHash,
         ready: false,
         blockers: [...result.blockers, stale],
-        preflightHash: undefined,
       };
       return { ...core, preflightHash: canonicalSha256(core) };
     }
