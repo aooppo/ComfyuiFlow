@@ -16,6 +16,7 @@ import {
   ComfyUiMcpGenerationProvider,
   FakeGenerationProvider,
   GenerationWorker,
+  StoryboardDirectorWorker,
   prisma,
   type ComfyUiMcpToolClient,
 } from "@comfyuiflow/project-core";
@@ -89,6 +90,7 @@ async function main() {
       ? new FakeVideoQaProvider()
       : new CodexManagerLocalVideoQaProvider();
   const generationWorker = new GenerationWorker(generationProvider, qaProvider);
+  const directorWorker = new StoryboardDirectorWorker();
   let stopping = false;
   const stop = () => {
     stopping = true;
@@ -102,8 +104,11 @@ async function main() {
       shouldStop: () => stopping,
       runAnalysis: () => analysisWorker.runOnce(`project-worker:${process.pid}`),
       runGeneration: () => generationWorker.runOnce(`generation-worker:${process.pid}`),
+      runDirector: () => directorWorker.processNext(`storyboard-director-worker:${process.pid}`),
       onResult: (operation, result) =>
-        process.stdout.write(`${JSON.stringify({ operation, result: result.status })}\n`),
+        process.stdout.write(
+          `${JSON.stringify({ operation, result: result.status ?? "completed" })}\n`,
+        ),
       onError: (error) =>
         process.stderr.write(
           `Project worker turn failed: ${error instanceof Error ? error.message : "unknown"}\n`,

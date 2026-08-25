@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   StoryboardGenerationRequestV1Schema,
   StoryboardProposalV1Schema,
+  StoryboardGenerationRequestV2Schema,
+  StoryboardProposalV2Schema,
   type AiProviderResult,
   type AiTaskRequest,
   type StoryboardGenerationRequestV1,
@@ -9,18 +11,21 @@ import {
 import type { AiModelProvider } from "./provider.js";
 
 export const FAKE_STORYBOARD_MODEL_ID = "storyboard-fake-v1";
+export const FAKE_STORYBOARD_V2_MODEL_ID = "fake-storyboard-v2";
 
 export class FakeStoryboardProvider implements AiModelProvider {
   getCapabilities(modelId: string) {
+    const v2 = modelId === FAKE_STORYBOARD_V2_MODEL_ID;
     return {
       providerId: "fake",
       modelId,
       inputModalities: ["text"] as Array<"text" | "image" | "video">,
       structuredOutput: true,
       storyboardGeneration: {
-        contractVersions: ["storyboard-generation-v1"],
-        promptTemplateVersions: ["storyboard-three-shot-v1"],
-        supportedShotCounts: [3],
+        contractVersions: v2 ? ["storyboard-generation-v2"] : ["storyboard-generation-v1"],
+        promptTemplateVersions: v2 ? ["storyboard-director-v2"] : ["storyboard-three-shot-v1"],
+        supportedShotCounts: v2 ? [] : [3],
+        ...(v2 ? { maxShotCount: 20 } : {}),
       },
     };
   }
@@ -96,6 +101,48 @@ export class FakeStoryboardProvider implements AiModelProvider {
         assetRequirements: request.assetRequirements.filter(
           (requirement) => requirement.shotOrdinal === index + 1,
         ),
+      })),
+      providerMetadata: { fake: true, providerCalls: 0 },
+    });
+  }
+
+  async generateStoryboardV2(rawRequest: unknown) {
+    const request = StoryboardGenerationRequestV2Schema.parse(rawRequest);
+    if (
+      request.modelRef.providerId !== "fake" ||
+      request.modelRef.modelId !== FAKE_STORYBOARD_V2_MODEL_ID
+    ) {
+      throw new Error("Fake Storyboard V2 model is not registered");
+    }
+    const count = Math.min(3, request.maxShotCount);
+    const references = request.references.map((reference) => reference.alias);
+    return StoryboardProposalV2Schema.parse({
+      providerId: "fake",
+      requestedModelId: request.modelRef.modelId,
+      resolvedModelId: FAKE_STORYBOARD_V2_MODEL_ID,
+      responseId: `fake-storyboard-v2:${createHash("sha256").update(JSON.stringify(request)).digest("hex").slice(0, 24)}`,
+      contractVersion: "storyboard-proposal-v2",
+      promptTemplateVersion: "storyboard-director-v2",
+      narrativeSummary: `围绕“${request.creativeBrief}”建立、发展并收束一条连续视觉叙事。`,
+      shots: Array.from({ length: count }, (_, index) => ({
+        ordinal: index + 1,
+        title: ["建立", "展开", "收束"][index] ?? `镜头 ${index + 1}`,
+        creativeDescription: `${request.creativeBrief}（第 ${index + 1} 镜）`,
+        startState:
+          index === 0 ? "主体与环境清晰建立。" : "承接上一镜的主体、服装、道具与环境状态。",
+        action:
+          index === 0
+            ? "主体进入构图并建立叙事目标。"
+            : index === count - 1
+              ? "主体完成动作并形成最终画面。"
+              : "主体推进核心动作并突出主要视觉信息。",
+        endState:
+          index === count - 1 ? "形成稳定且完整的英雄画面。" : "动作停在可自然承接下一镜的状态。",
+        camera: "稳定的竖屏中景，使用克制且连续的镜头运动。",
+        composition: "主体与主要产品或道具保持清晰可辨。",
+        continuityRequirements: ["保持主体身份、服装、主要道具、场景布局和光线连续。"],
+        durationSeconds: 2,
+        referenceAliases: references,
       })),
       providerMetadata: { fake: true, providerCalls: 0 },
     });

@@ -11,6 +11,7 @@ export const CODEXMANAGER_LOCAL_PROVIDER_ID = "codexmanager-local";
 export const CODEXMANAGER_LOCAL_BASE_URL = "http://127.0.0.1:48760/v1";
 export const CODEXMANAGER_LOCAL_HEALTH_URL = "http://127.0.0.1:48760/health";
 export const CODEXMANAGER_LOCAL_DIRECTOR_MODEL = "gpt-5.4";
+export const CODEXMANAGER_LOCAL_STORYBOARD_V2_MODEL = "gpt-5.6-terra";
 
 interface CodexManagerLocalProviderOptions {
   environment?: NodeJS.ProcessEnv;

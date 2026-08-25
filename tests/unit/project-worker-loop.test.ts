@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { runWorkerLoop, workerPollInterval } from "../../apps/project-worker/src/worker-loop.js";
 
 describe("project worker loop", () => {
-  it("keeps polling until stopped and runs both queues each turn", async () => {
+  it("keeps polling until stopped and runs all queues each turn", async () => {
     let turns = 0;
     const analysis = vi.fn(async () => null);
     const generation = vi.fn(async () => ({ status: "COMPLETED" }));
+    const director = vi.fn(async () => null);
     const wait = vi.fn(async () => {
       turns += 1;
     });
@@ -16,6 +17,7 @@ describe("project worker loop", () => {
       shouldStop: () => turns === 2,
       runAnalysis: analysis,
       runGeneration: generation,
+      runDirector: director,
       onResult: vi.fn(),
       onError: vi.fn(),
       wait,
@@ -23,6 +25,7 @@ describe("project worker loop", () => {
 
     expect(analysis).toHaveBeenCalledTimes(2);
     expect(generation).toHaveBeenCalledTimes(2);
+    expect(director).toHaveBeenCalledTimes(2);
     expect(wait).toHaveBeenNthCalledWith(1, 750);
   });
 
@@ -34,6 +37,7 @@ describe("project worker loop", () => {
       shouldStop: () => false,
       runAnalysis: async () => null,
       runGeneration: async () => null,
+      runDirector: async () => null,
       onResult: vi.fn(),
       onError: vi.fn(),
       wait,

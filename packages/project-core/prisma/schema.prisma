@@ -233,11 +233,27 @@ enum UnderstandingApplicationTarget {
 enum StoryboardVersionSource {
   OWNER
   FAKE_DIRECTOR
+  AI_DIRECTOR
 }
 
 enum StoryboardDirectorRunStatus {
+  QUEUED
+  RUNNING
   COMPLETED
   FAILED
+  AMBIGUOUS
+}
+
+enum StoryboardDirectorAttemptStatus {
+  STARTED
+  SUCCEEDED
+  FAILED
+  AMBIGUOUS
+}
+
+enum StoryboardDirectorProposalDecisionType {
+  REJECTED
+  ADOPTED
 }
 
 enum StoryboardDecisionType {
@@ -371,54 +387,59 @@ enum VideoControlTier {
 }
 
 model Project {
-  id                        String                         @id @default(uuid()) @db.Uuid
-  name                      String                         @db.VarChar(120)
-  brief                     String?
-  targetAspectRatio         TargetAspectRatio
-  status                    ProjectStatus                  @default(ACTIVE)
-  archivedAt                DateTime?
-  createdAt                 DateTime                       @default(now())
-  updatedAt                 DateTime                       @updatedAt
-  assets                    Asset[]
-  importAttempts            AssetImportAttempt[]
-  importBatches             AssetImportBatch[]
-  activities                ProjectActivity[]
-  productionAssets          ProductionAsset[]
-  characterProfiles         CharacterProfile[]
-  analysisManifests         AssetUnderstandingManifest[]
-  analysisRuns              AssetUnderstandingRun[]
-  storyboards               Storyboard[]
-  storyboardVersions        StoryboardVersion[]
-  storyboardRuns            StoryboardDirectorRun[]
-  shotAssetBindings         ShotAssetBinding[]
-  resolutionManifests       AssetResolutionManifest[]
-  storyboardDecisions       StoryboardDecision[]
-  generationPlans           GenerationPlan[]
-  generationPlanVersions    GenerationPlanVersion[]
-  generationSpecs           GenerationSpec[]
-  generationSpecReferences  GenerationSpecReference[]
-  generationPlanDecisions   GenerationPlanDecision[]
-  generationBatches         GenerationBatch[]
-  generationBatchTargets    GenerationBatchTarget[]
-  executionAuthorizations   ExecutionAuthorization[]
-  authorizationConsumptions AuthorizationConsumption[]
-  generationJobs            GenerationJob[]
-  generatedArtifacts        GeneratedArtifact[]
-  aiQaRuns                  AiQaRun[]
-  humanQaDecisions          HumanQaDecision[]
-  generationPlanAssemblies  GenerationPlanAssembly[]
-  generationAssemblySources GenerationPlanAssemblySource[]
-  continuityProfiles        ContinuityProfile[]
-  continuityProfileVersions ContinuityProfileVersion[]
-  continuitySubjects        ContinuitySubject[]
-  continuityDecisions       ContinuityDecision[]
-  keyframePlans             KeyframePlanVersion[]
-  keyframeAuthorizations    KeyframeAuthorization[]
-  keyframeAttempts          KeyframeAttempt[]
-  keyframeArtifacts         KeyframeArtifact[]
-  keyframeDecisions         KeyframeDecision[]
-  generationPlanDrafts      GenerationPlanDraft[]
-  generationDraftSources    GenerationPlanDraftSource[]
+  id                                  String                               @id @default(uuid()) @db.Uuid
+  name                                String                               @db.VarChar(120)
+  brief                               String?
+  targetAspectRatio                   TargetAspectRatio
+  status                              ProjectStatus                        @default(ACTIVE)
+  archivedAt                          DateTime?
+  createdAt                           DateTime                             @default(now())
+  updatedAt                           DateTime                             @updatedAt
+  assets                              Asset[]
+  importAttempts                      AssetImportAttempt[]
+  importBatches                       AssetImportBatch[]
+  activities                          ProjectActivity[]
+  productionAssets                    ProductionAsset[]
+  characterProfiles                   CharacterProfile[]
+  analysisManifests                   AssetUnderstandingManifest[]
+  analysisRuns                        AssetUnderstandingRun[]
+  storyboards                         Storyboard[]
+  storyboardVersions                  StoryboardVersion[]
+  storyboardRuns                      StoryboardDirectorRun[]
+  storyboardDirectorReferences        StoryboardDirectorInputReference[]
+  storyboardDirectorAuthorizations    StoryboardDirectorAuthorization[]
+  storyboardDirectorAttempts          StoryboardDirectorAttempt[]
+  storyboardDirectorProposals         StoryboardDirectorProposal[]
+  storyboardDirectorProposalDecisions StoryboardDirectorProposalDecision[]
+  shotAssetBindings                   ShotAssetBinding[]
+  resolutionManifests                 AssetResolutionManifest[]
+  storyboardDecisions                 StoryboardDecision[]
+  generationPlans                     GenerationPlan[]
+  generationPlanVersions              GenerationPlanVersion[]
+  generationSpecs                     GenerationSpec[]
+  generationSpecReferences            GenerationSpecReference[]
+  generationPlanDecisions             GenerationPlanDecision[]
+  generationBatches                   GenerationBatch[]
+  generationBatchTargets              GenerationBatchTarget[]
+  executionAuthorizations             ExecutionAuthorization[]
+  authorizationConsumptions           AuthorizationConsumption[]
+  generationJobs                      GenerationJob[]
+  generatedArtifacts                  GeneratedArtifact[]
+  aiQaRuns                            AiQaRun[]
+  humanQaDecisions                    HumanQaDecision[]
+  generationPlanAssemblies            GenerationPlanAssembly[]
+  generationAssemblySources           GenerationPlanAssemblySource[]
+  continuityProfiles                  ContinuityProfile[]
+  continuityProfileVersions           ContinuityProfileVersion[]
+  continuitySubjects                  ContinuitySubject[]
+  continuityDecisions                 ContinuityDecision[]
+  keyframePlans                       KeyframePlanVersion[]
+  keyframeAuthorizations              KeyframeAuthorization[]
+  keyframeAttempts                    KeyframeAttempt[]
+  keyframeArtifacts                   KeyframeArtifact[]
+  keyframeDecisions                   KeyframeDecision[]
+  generationPlanDrafts                GenerationPlanDraft[]
+  generationDraftSources              GenerationPlanDraftSource[]
 
   @@index([status, updatedAt(sort: Desc)])
 }
@@ -879,22 +900,23 @@ model UnderstandingApplication {
 }
 
 model Storyboard {
-  id                String                  @id @default(uuid()) @db.Uuid
-  projectId         String                  @db.Uuid
-  title             String                  @db.VarChar(120)
+  id                String                       @id @default(uuid()) @db.Uuid
+  projectId         String                       @db.Uuid
+  title             String                       @db.VarChar(120)
   creativeBrief     String
-  headVersionId     String?                 @unique @db.Uuid
-  approvedVersionId String?                 @unique @db.Uuid
-  status            StoryboardStatus        @default(ACTIVE)
+  headVersionId     String?                      @unique @db.Uuid
+  approvedVersionId String?                      @unique @db.Uuid
+  status            StoryboardStatus             @default(ACTIVE)
   archivedAt        DateTime?
-  rowVersion        Int                     @default(0)
-  createdAt         DateTime                @default(now())
-  updatedAt         DateTime                @updatedAt
-  project           Project                 @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  headVersion       StoryboardVersion?      @relation("StoryboardHead", fields: [headVersionId], references: [id], onDelete: Restrict)
-  approvedVersion   StoryboardVersion?      @relation("StoryboardApproved", fields: [approvedVersionId], references: [id], onDelete: Restrict)
-  versions          StoryboardVersion[]     @relation("StoryboardVersions")
+  rowVersion        Int                          @default(0)
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  project           Project                      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  headVersion       StoryboardVersion?           @relation("StoryboardHead", fields: [headVersionId], references: [id], onDelete: Restrict)
+  approvedVersion   StoryboardVersion?           @relation("StoryboardApproved", fields: [approvedVersionId], references: [id], onDelete: Restrict)
+  versions          StoryboardVersion[]          @relation("StoryboardVersions")
   runs              StoryboardDirectorRun[]
+  directorProposals StoryboardDirectorProposal[]
   decisions         StoryboardDecision[]
   generationPlans   GenerationPlan[]
   continuityProfile ContinuityProfile?
@@ -905,48 +927,67 @@ model Storyboard {
 }
 
 model StoryboardDirectorRun {
-  id                    String                      @id @default(uuid()) @db.Uuid
-  projectId             String                      @db.Uuid
-  storyboardId          String                      @db.Uuid
-  providerId            String                      @db.VarChar(80)
-  requestedModelId      String                      @db.VarChar(160)
-  resolvedModelId       String?                     @db.VarChar(160)
-  contractVersion       String                      @db.VarChar(80)
-  promptTemplateVersion String                      @db.VarChar(80)
-  requestHash           String                      @db.Char(64)
-  responseId            String?                     @db.VarChar(255)
+  id                    String                             @id @default(uuid()) @db.Uuid
+  projectId             String                             @db.Uuid
+  storyboardId          String                             @db.Uuid
+  providerId            String                             @db.VarChar(80)
+  requestedModelId      String                             @db.VarChar(160)
+  resolvedModelId       String?                            @db.VarChar(160)
+  contractVersion       String                             @db.VarChar(80)
+  promptTemplateVersion String                             @db.VarChar(80)
+  requestHash           String                             @db.Char(64)
+  responseId            String?                            @db.VarChar(255)
   status                StoryboardDirectorRunStatus
-  safeResultCode        String                      @db.VarChar(80)
-  providerCallCount     Int                         @default(0)
-  generatedVersionId    String?                     @unique @db.Uuid
-  createdAt             DateTime                    @default(now())
+  safeResultCode        String                             @db.VarChar(80)
+  providerCallCount     Int                                @default(0)
+  generatedVersionId    String?                            @unique @db.Uuid
+  maxShotCount          Int?
+  headVersionId         String?                            @db.Uuid
+  headContentHash       String?                            @db.Char(64)
+  scopeHash             String?                            @db.Char(64)
+  priceSnapshotHash     String?                            @db.Char(64)
+  billingChannel        String?                            @db.VarChar(120)
+  maxCostUsd            Decimal?                           @db.Decimal(12, 6)
+  priceEffectiveAt      DateTime?
+  priceExpiresAt        DateTime?
+  idempotencyKey        String?                            @db.VarChar(160)
+  leaseOwner            String?                            @db.VarChar(120)
+  leaseExpiresAt        DateTime?
+  createdAt             DateTime                           @default(now())
   finishedAt            DateTime?
-  project               Project                     @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  storyboard            Storyboard                  @relation(fields: [storyboardId], references: [id], onDelete: Restrict)
-  generatedVersion      StoryboardVersion?          @relation("StoryboardRunVersion", fields: [generatedVersionId], references: [id], onDelete: Restrict)
+  project               Project                            @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  storyboard            Storyboard                         @relation(fields: [storyboardId], references: [id], onDelete: Restrict)
+  generatedVersion      StoryboardVersion?                 @relation("StoryboardRunVersion", fields: [generatedVersionId], references: [id], onDelete: Restrict)
+  inputReferences       StoryboardDirectorInputReference[]
+  authorization         StoryboardDirectorAuthorization?
+  attempts              StoryboardDirectorAttempt[]
+  proposal              StoryboardDirectorProposal?
 
   @@unique([projectId, id])
+  @@unique([storyboardId, idempotencyKey])
   @@index([storyboardId, createdAt(sort: Desc)])
 }
 
 model StoryboardVersion {
-  id                        String                     @id @default(uuid()) @db.Uuid
-  projectId                 String                     @db.Uuid
-  storyboardId              String                     @db.Uuid
+  id                        String                      @id @default(uuid()) @db.Uuid
+  projectId                 String                      @db.Uuid
+  storyboardId              String                      @db.Uuid
   versionNumber             Int
-  parentVersionId           String?                    @db.Uuid
+  parentVersionId           String?                     @db.Uuid
   source                    StoryboardVersionSource
   creativeBrief             String
-  contractVersion           String                     @db.VarChar(80)
-  contentHash               String                     @db.Char(64)
-  createdAt                 DateTime                   @default(now())
-  project                   Project                    @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  storyboard                Storyboard                 @relation("StoryboardVersions", fields: [storyboardId], references: [id], onDelete: Restrict)
-  parentVersion             StoryboardVersion?         @relation("StoryboardVersionLineage", fields: [parentVersionId], references: [id], onDelete: Restrict)
-  childVersions             StoryboardVersion[]        @relation("StoryboardVersionLineage")
-  headFor                   Storyboard?                @relation("StoryboardHead")
-  approvedFor               Storyboard?                @relation("StoryboardApproved")
-  sourceRun                 StoryboardDirectorRun?     @relation("StoryboardRunVersion")
+  contractVersion           String                      @db.VarChar(80)
+  contentHash               String                      @db.Char(64)
+  createdAt                 DateTime                    @default(now())
+  project                   Project                     @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  storyboard                Storyboard                  @relation("StoryboardVersions", fields: [storyboardId], references: [id], onDelete: Restrict)
+  parentVersion             StoryboardVersion?          @relation("StoryboardVersionLineage", fields: [parentVersionId], references: [id], onDelete: Restrict)
+  childVersions             StoryboardVersion[]         @relation("StoryboardVersionLineage")
+  headFor                   Storyboard?                 @relation("StoryboardHead")
+  approvedFor               Storyboard?                 @relation("StoryboardApproved")
+  sourceRun                 StoryboardDirectorRun?      @relation("StoryboardRunVersion")
+  sourceProposalId          String?                     @unique @db.Uuid
+  sourceProposal            StoryboardDirectorProposal? @relation("StoryboardProposalVersion", fields: [sourceProposalId], references: [id], onDelete: Restrict)
   shots                     StoryboardShot[]
   manifest                  AssetResolutionManifest?
   decisions                 StoryboardDecision[]
@@ -957,6 +998,94 @@ model StoryboardVersion {
   @@unique([storyboardId, id])
   @@unique([projectId, id])
   @@index([storyboardId, createdAt(sort: Desc)])
+}
+
+model StoryboardDirectorInputReference {
+  id                       String                @id @default(uuid()) @db.Uuid
+  projectId                String                @db.Uuid
+  runId                    String                @db.Uuid
+  ordinal                  Int
+  alias                    String                @db.VarChar(64)
+  kind                     String                @db.VarChar(40)
+  displayName              String                @db.VarChar(120)
+  productionAssetId        String                @db.Uuid
+  productionAssetVersionId String                @db.Uuid
+  assetVersionFileId       String                @db.Uuid
+  projectAssetId           String                @db.Uuid
+  semanticFactsJson        Json
+  sha256                   String                @db.Char(64)
+  byteSize                 BigInt
+  createdAt                DateTime              @default(now())
+  project                  Project               @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  run                      StoryboardDirectorRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+
+  @@unique([runId, ordinal])
+  @@unique([runId, alias])
+  @@index([projectId, productionAssetVersionId])
+}
+
+model StoryboardDirectorAuthorization {
+  id         String                @id @default(uuid()) @db.Uuid
+  projectId  String                @db.Uuid
+  runId      String                @unique @db.Uuid
+  maxCalls   Int                   @default(1)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime              @default(now())
+  project    Project               @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  run        StoryboardDirectorRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+}
+
+model StoryboardDirectorAttempt {
+  id             String                          @id @default(uuid()) @db.Uuid
+  projectId      String                          @db.Uuid
+  runId          String                          @db.Uuid
+  ordinal        Int
+  status         StoryboardDirectorAttemptStatus
+  actualModelId  String?                         @db.VarChar(160)
+  responseId     String?                         @db.VarChar(255)
+  safeResultCode String                          @db.VarChar(80)
+  startedAt      DateTime                        @default(now())
+  finishedAt     DateTime?
+  project        Project                         @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  run            StoryboardDirectorRun           @relation(fields: [runId], references: [id], onDelete: Restrict)
+
+  @@unique([runId, ordinal])
+  @@index([projectId, startedAt(sort: Desc)])
+}
+
+model StoryboardDirectorProposal {
+  id                     String                               @id @default(uuid()) @db.Uuid
+  projectId              String                               @db.Uuid
+  storyboardId           String                               @db.Uuid
+  runId                  String                               @unique @db.Uuid
+  narrativeSummary       String
+  normalizedProposalJson Json
+  outputHash             String                               @db.Char(64)
+  createdAt              DateTime                             @default(now())
+  project                Project                              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  storyboard             Storyboard                           @relation(fields: [storyboardId], references: [id], onDelete: Restrict)
+  run                    StoryboardDirectorRun                @relation(fields: [runId], references: [id], onDelete: Restrict)
+  adoptedVersion         StoryboardVersion?                   @relation("StoryboardProposalVersion")
+  decisions              StoryboardDirectorProposalDecision[]
+
+  @@unique([projectId, id])
+  @@index([storyboardId, createdAt(sort: Desc)])
+}
+
+model StoryboardDirectorProposalDecision {
+  id               String                                 @id @default(uuid()) @db.Uuid
+  projectId        String                                 @db.Uuid
+  proposalId       String                                 @db.Uuid
+  type             StoryboardDirectorProposalDecisionType
+  note             String?
+  adoptedVersionId String?                                @db.Uuid
+  idempotencyKey   String                                 @unique @db.VarChar(160)
+  createdAt        DateTime                               @default(now())
+  project          Project                                @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  proposal         StoryboardDirectorProposal             @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+
+  @@index([proposalId, createdAt(sort: Desc)])
 }
 
 model StoryboardShot {

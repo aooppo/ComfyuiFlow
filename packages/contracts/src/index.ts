@@ -563,6 +563,106 @@ export type ShotDraftV1 = z.infer<typeof ShotDraftV1Schema>;
 export type StoryboardGenerationRequestV1 = z.infer<typeof StoryboardGenerationRequestV1Schema>;
 export type StoryboardProposalV1 = z.infer<typeof StoryboardProposalV1Schema>;
 
+export const StoryboardReferenceV2Schema = z
+  .object({
+    alias: z.string().regex(/^ref_[a-z0-9_]{1,48}$/),
+    kind: z.enum(["SCENE", "CHARACTER", "PRODUCT", "PROP", "APPEARANCE"]),
+    displayName: z.string().trim().min(1).max(120),
+    semanticFacts: z.record(z.string(), z.json()),
+    imageDataUrl: z.string().startsWith("data:image/").optional(),
+  })
+  .strict();
+
+export const StoryboardHeadSnapshotV2Schema = z
+  .object({
+    versionNumber: z.number().int().positive(),
+    contentHash: Sha256Schema,
+  })
+  .strict();
+
+export const StoryboardGenerationRequestV2Schema = z
+  .object({
+    taskType: z.literal("STORYBOARD_GENERATION_V2"),
+    contractVersion: z.literal("storyboard-generation-v2"),
+    promptTemplateVersion: z.literal("storyboard-director-v2"),
+    modelRef: z.object({
+      providerId: z.string().trim().min(1).max(80),
+      modelId: z.string().trim().min(1).max(160),
+    }),
+    creativeBrief: z.string().trim().min(1).max(4_000),
+    maxShotCount: z.number().int().min(1).max(20).default(3),
+    currentHead: StoryboardHeadSnapshotV2Schema,
+    references: z.array(StoryboardReferenceV2Schema).min(1).max(9),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const aliases = value.references.map((reference) => reference.alias);
+    if (new Set(aliases).size !== aliases.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["references"],
+        message: "Reference aliases must be unique",
+      });
+    }
+  });
+
+export const StoryboardProposalShotV2Schema = z
+  .object({
+    ordinal: z.number().int().min(1).max(20),
+    title: z.string().trim().min(1).max(120),
+    creativeDescription: z.string().trim().min(1).max(4_000),
+    startState: z.string().trim().min(1).max(2_000),
+    action: z.string().trim().min(1).max(2_000),
+    endState: z.string().trim().min(1).max(2_000),
+    camera: z.string().trim().min(1).max(1_000),
+    composition: z.string().trim().min(1).max(1_000),
+    continuityRequirements: z.array(z.string().trim().min(1).max(1_000)).max(20),
+    durationSeconds: z.number().positive().max(30),
+    referenceAliases: z
+      .array(z.string().regex(/^ref_[a-z0-9_]{1,48}$/))
+      .min(1)
+      .max(9),
+  })
+  .strict();
+
+export const StoryboardProposalV2Schema = z
+  .object({
+    providerId: z.string().trim().min(1).max(80),
+    requestedModelId: z.string().trim().min(1).max(160),
+    resolvedModelId: z.string().trim().min(1).max(160),
+    responseId: z.string().trim().min(1).max(255),
+    contractVersion: z.literal("storyboard-proposal-v2"),
+    promptTemplateVersion: z.literal("storyboard-director-v2"),
+    narrativeSummary: z.string().trim().min(1).max(4_000),
+    shots: z.array(StoryboardProposalShotV2Schema).min(1).max(20),
+    providerMetadata: z.object({ providerCalls: z.number().int().min(0).max(1) }).loose(),
+  })
+  .strict();
+
+export function validateStoryboardProposalV2(
+  proposal: unknown,
+  request: StoryboardGenerationRequestV2,
+): StoryboardProposalV2 {
+  const value = StoryboardProposalV2Schema.parse(proposal);
+  if (value.shots.length > request.maxShotCount) throw new Error("Proposal exceeds maxShotCount");
+  const knownAliases = new Set(request.references.map((reference) => reference.alias));
+  for (const [index, shot] of value.shots.entries()) {
+    if (shot.ordinal !== index + 1) throw new Error("Proposal shot ordinals must be contiguous");
+    if (new Set(shot.referenceAliases).size !== shot.referenceAliases.length) {
+      throw new Error("Proposal shot reference aliases must be unique");
+    }
+    if (shot.referenceAliases.some((alias) => !knownAliases.has(alias))) {
+      throw new Error("Proposal uses an unknown reference alias");
+    }
+  }
+  return value;
+}
+
+export type StoryboardReferenceV2 = z.infer<typeof StoryboardReferenceV2Schema>;
+export type StoryboardGenerationRequestV2 = z.infer<typeof StoryboardGenerationRequestV2Schema>;
+export type StoryboardProposalShotV2 = z.infer<typeof StoryboardProposalShotV2Schema>;
+export type StoryboardProposalV2 = z.infer<typeof StoryboardProposalV2Schema>;
+
 export const GenerationSpecReferenceV1Schema = z
   .object({
     requirementId: UuidSchema,

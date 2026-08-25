@@ -5,6 +5,8 @@ import type {
   AssetUnderstandingProviderResult,
   StoryboardGenerationRequestV1,
   StoryboardProposalV1,
+  StoryboardGenerationRequestV2,
+  StoryboardProposalV2,
   AiQaRequestV1,
   AiQaResultV1,
 } from "@comfyuiflow/contracts";
@@ -18,6 +20,7 @@ export interface AiModelCapabilities {
     contractVersions: string[];
     promptTemplateVersions: string[];
     supportedShotCounts: number[];
+    maxShotCount?: number;
   };
 }
 
@@ -29,5 +32,6 @@ export interface AiModelProvider {
     request: AssetUnderstandingProviderRequest,
   ): Promise<AssetUnderstandingProviderResult>;
   generateStoryboard?(request: StoryboardGenerationRequestV1): Promise<StoryboardProposalV1>;
+  generateStoryboardV2?(request: StoryboardGenerationRequestV2): Promise<StoryboardProposalV2>;
   reviewVideoFrames?(request: AiQaRequestV1): Promise<AiQaResultV1>;
 }

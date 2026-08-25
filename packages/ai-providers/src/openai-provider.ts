@@ -9,6 +9,7 @@ import {
 import type { AiModelProvider } from "./provider.js";
 
 export const OPENAI_DIRECTOR_MODEL = "gpt-5.4-2026-03-05";
+export const OPENAI_STORYBOARD_V2_MODEL = "gpt-5.6-terra";
 
 function numericUsage(value: unknown): Record<string, number> | undefined {
   if (typeof value !== "object" || value === null) return undefined;

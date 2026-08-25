@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { StoryboardShotView, StoryboardVersionView, StoryboardView } from "./types";
+import { StoryboardDirectorPanel } from "./storyboard-director-panel";
 
 interface CandidatePreview {
   resultHash: string;
@@ -368,6 +369,12 @@ export function StoryboardEditor({
           This storyboard is archived and remains read-only until restored.
         </p>
       )}
+      <StoryboardDirectorPanel
+        storyboardId={storyboardId}
+        etag={etag}
+        disabled={busy || storyboard.status === "ARCHIVED"}
+        onAdopted={load}
+      />
       <div className="storyboardActions shotStructureActions">
         <button
           className="panelButton"
