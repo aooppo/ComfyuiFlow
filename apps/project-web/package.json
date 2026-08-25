@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3210",
-    "build": "next build",
-    "start": "next start -p 3210"
+    "build": "NEXT_DIST_DIR=.next-build next build",
+    "start": "NEXT_DIST_DIR=.next-build next start -p 3210"
   },
   "dependencies": {
     "@comfyuiflow/project-core": "workspace:*",

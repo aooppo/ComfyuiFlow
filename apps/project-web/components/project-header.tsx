@@ -1,5 +1,7 @@
 "use client";
 
+import { useLanguage } from "./i18n/language-provider";
+
 interface Project {
   id: string;
   name: string;
@@ -16,10 +18,12 @@ export function ProjectHeader({
   project: Project;
   onChange: (project: Project) => void;
 }) {
+  const { t } = useLanguage();
+
   async function edit() {
-    const name = window.prompt("Project name", project.name)?.trim();
+    const name = window.prompt(t("Project name"), project.name)?.trim();
     if (!name) return;
-    const brief = window.prompt("Creative brief", project.brief ?? "");
+    const brief = window.prompt(t("Creative brief"), project.brief ?? "");
     const response = await fetch(`/api/projects/${project.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -32,7 +36,7 @@ export function ProjectHeader({
     const action = project.status === "ACTIVE" ? "archive" : "restore";
     if (
       action === "archive" &&
-      !window.confirm("Archive this project? All source files and project details will be kept.")
+      !window.confirm(t("Archive this project? All source files and project details will be kept."))
     )
       return;
     const response = await fetch(`/api/projects/${project.id}/${action}`, { method: "POST" });

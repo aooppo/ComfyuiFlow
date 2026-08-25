@@ -48,6 +48,15 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
   return (
     <div className="pageFrame projectPage">
       <ProjectHeader project={project} onChange={setProject} />
+      <a className="storyboardEntry" href={`/projects/${project.id}/storyboards`}>
+        <span>
+          <strong>Plan a three-shot storyboard</strong>
+          <small>
+            Fake Director, immutable versions, and explainable asset gaps · 0 external calls
+          </small>
+        </span>
+        <b>Open storyboards →</b>
+      </a>
       {project.status === "ACTIVE" ? (
         <AssetImporter
           projectId={project.id}

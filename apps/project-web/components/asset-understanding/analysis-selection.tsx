@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLanguage } from "../i18n/language-provider";
 import { AnalysisPreview } from "./analysis-preview";
 import { AnalysisRun } from "./analysis-run";
 
@@ -26,6 +27,7 @@ interface Run {
 }
 
 export function AnalysisSelection({ projectId }: { projectId: string }) {
+  const { locale } = useLanguage();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -41,6 +43,17 @@ export function AnalysisSelection({ projectId }: { projectId: string }) {
       setAssets(body.assets ?? []);
     })();
   }, [projectId]);
+  useEffect(() => {
+    if (!run || !["QUEUED", "RUNNING"].includes(run.status)) return;
+    const timer = window.setInterval(() => {
+      void (async () => {
+        const response = await fetch(`/api/asset-analyses/${run.id}`);
+        if (!response.ok) return;
+        setRun((await response.json()) as Run);
+      })();
+    }, 2_000);
+    return () => window.clearInterval(timer);
+  }, [run?.id, run?.status]);
   function toggle(id: string) {
     setSelected((value) =>
       value.includes(id)
@@ -122,7 +135,13 @@ export function AnalysisSelection({ projectId }: { projectId: string }) {
         disabled={!selected.length}
         onClick={() => void createPreview()}
       >
-        Preview {selected.length || ""} image{selected.length === 1 ? "" : "s"}
+        {locale === "zh-CN"
+          ? selected.length > 0
+            ? `预览 ${selected.length} 张图片`
+            : "预览图片"
+          : selected.length > 0
+            ? `Preview ${selected.length} image${selected.length === 1 ? "" : "s"}`
+            : "Preview images"}
       </button>
       {error && <p className="formError">{error}</p>}
       {preview && (

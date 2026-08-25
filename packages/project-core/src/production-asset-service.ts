@@ -123,6 +123,28 @@ export class ProductionAssetService {
   async getVersion(versionId: string) {
     const version = await this.client.productionAssetVersion.findUnique({
       where: { id: versionId },
+      include: {
+        files: {
+          include: { projectAsset: { select: { displayName: true } } },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        },
+        fromRelations: {
+          include: {
+            toAssetVersion: {
+              include: { productionAsset: { select: { name: true, type: true } } },
+            },
+          },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        },
+        toRelations: {
+          include: {
+            fromAssetVersion: {
+              include: { productionAsset: { select: { name: true, type: true } } },
+            },
+          },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        },
+      },
     });
     if (!version)
       throw new ProjectAssetError(
@@ -130,10 +152,45 @@ export class ProductionAssetService {
         "Asset version was not found",
         404,
       );
-    return versionDto(version);
+    return {
+      ...versionDto(version),
+      files: version.files.map((file) => ({
+        id: file.id,
+        projectAssetId: file.projectAssetId,
+        displayName: file.projectAsset.displayName,
+        referenceUsage: file.referenceUsage,
+        viewpoint: file.viewpoint,
+        shotScale: file.shotScale,
+        approvalStatus: file.approvalStatus,
+        isPreferred: file.isPreferred,
+        status: file.status,
+      })),
+      relations: [
+        ...version.fromRelations.map((relation) => ({
+          id: relation.id,
+          direction: "OUTGOING" as const,
+          relationType: relation.relationType,
+          status: relation.status,
+          relatedVersionId: relation.toAssetVersionId,
+          relatedAssetType: relation.toAssetVersion.productionAsset.type,
+          relatedAssetName: relation.toAssetVersion.productionAsset.name,
+          relatedVersionNumber: relation.toAssetVersion.versionNumber,
+        })),
+        ...version.toRelations.map((relation) => ({
+          id: relation.id,
+          direction: "INCOMING" as const,
+          relationType: relation.relationType,
+          status: relation.status,
+          relatedVersionId: relation.fromAssetVersionId,
+          relatedAssetType: relation.fromAssetVersion.productionAsset.type,
+          relatedAssetName: relation.fromAssetVersion.productionAsset.name,
+          relatedVersionNumber: relation.fromAssetVersion.versionNumber,
+        })),
+      ],
+    };
   }
 
-  async createVersion(assetId: string, basedOnVersionId?: string) {
+  async createVersion(assetId: string, basedOnVersionId?: string, expectedRowVersion?: number) {
     const asset = await this.client.productionAsset.findUnique({ where: { id: assetId } });
     if (!asset)
       throw new ProjectAssetError(
@@ -142,6 +199,13 @@ export class ProductionAssetService {
         404,
       );
     await this.requireProject(asset.projectId, true);
+    if (expectedRowVersion !== undefined && asset.rowVersion !== expectedRowVersion) {
+      throw new ProjectAssetError(
+        "VERSION_CONFLICT",
+        "This production asset changed; refresh before creating a version",
+        412,
+      );
+    }
     const result = await this.client.$transaction(async (tx) => {
       const sourceId = basedOnVersionId ?? asset.currentVersionId;
       const source = sourceId
@@ -161,7 +225,7 @@ export class ProductionAssetService {
         where: { productionAssetId: assetId },
         _max: { versionNumber: true },
       });
-      return tx.productionAssetVersion.create({
+      const created = await tx.productionAssetVersion.create({
         data: {
           projectId: asset.projectId,
           productionAssetId: assetId,
@@ -175,11 +239,23 @@ export class ProductionAssetService {
           sourceType: "OWNER",
         },
       });
+      const advanced = await tx.productionAsset.updateMany({
+        where: { id: asset.id, rowVersion: asset.rowVersion },
+        data: { rowVersion: { increment: 1 } },
+      });
+      if (advanced.count !== 1) {
+        throw new ProjectAssetError(
+          "VERSION_CONFLICT",
+          "This production asset changed; refresh before creating a version",
+          412,
+        );
+      }
+      return created;
     });
     return versionDto(result);
   }
 
-  async publishVersion(versionId: string) {
+  async publishVersion(versionId: string, expectedRowVersion?: number) {
     const version = await this.client.productionAssetVersion.findUnique({
       where: { id: versionId },
       include: { productionAsset: true },
@@ -198,6 +274,16 @@ export class ProductionAssetService {
       );
     }
     await this.requireProject(version.projectId, true);
+    if (
+      expectedRowVersion !== undefined &&
+      version.productionAsset.rowVersion !== expectedRowVersion
+    ) {
+      throw new ProjectAssetError(
+        "VERSION_CONFLICT",
+        "This production asset changed; refresh before publishing",
+        412,
+      );
+    }
     const published = await this.client.$transaction(async (tx) => {
       await tx.productionAssetVersion.updateMany({
         where: { productionAssetId: version.productionAssetId, status: "ACTIVE" },
@@ -207,10 +293,20 @@ export class ProductionAssetService {
         where: { id: version.id },
         data: { status: "ACTIVE", publishedAt: new Date() },
       });
-      await tx.productionAsset.update({
-        where: { id: version.productionAssetId },
+      const advanced = await tx.productionAsset.updateMany({
+        where: {
+          id: version.productionAssetId,
+          rowVersion: version.productionAsset.rowVersion,
+        },
         data: { currentVersionId: version.id, rowVersion: { increment: 1 } },
       });
+      if (advanced.count !== 1) {
+        throw new ProjectAssetError(
+          "VERSION_CONFLICT",
+          "This production asset changed; refresh before publishing",
+          412,
+        );
+      }
       await tx.projectActivity.create({
         data: {
           projectId: version.projectId,

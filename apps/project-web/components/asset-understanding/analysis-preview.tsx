@@ -1,5 +1,7 @@
 "use client";
 
+import { useLanguage } from "../i18n/language-provider";
+
 export function AnalysisPreview({
   preview,
   acknowledged,
@@ -17,15 +19,19 @@ export function AnalysisPreview({
   onAcknowledged: (next: boolean) => void;
   onConfirm: () => void;
 }) {
+  const { locale } = useLanguage();
   return (
     <div className="candidateResult">
       <p>
-        <strong>Preview only:</strong> {preview.externalCalls} calls made; confirmation allows at
-        most {preview.maxCalls} attempt.
+        <strong>{locale === "zh-CN" ? "仅预览：" : "Preview only:"}</strong>{" "}
+        {locale === "zh-CN"
+          ? `已产生 ${preview.externalCalls} 次外部调用；确认后最多执行 ${preview.maxCalls} 次尝试。`
+          : `${preview.externalCalls} calls made; confirmation allows at most ${preview.maxCalls} attempt.`}
       </p>
       <p>
-        Provider: {preview.provider.providerId} / {preview.provider.modelId}; expires{" "}
-        {new Date(preview.expiresAt).toLocaleString()}.
+        {locale === "zh-CN" ? "提供方：" : "Provider:"} {preview.provider.providerId} /{" "}
+        {preview.provider.modelId}；{locale === "zh-CN" ? "授权过期时间：" : "expires "}
+        {new Date(preview.expiresAt).toLocaleString()}。
       </p>
       <ul>
         {preview.assets.map((asset) => (

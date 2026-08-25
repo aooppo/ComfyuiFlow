@@ -9,9 +9,12 @@ export function apiError(error: unknown) {
     );
   }
   if (error instanceof ZodError) {
+    const issue = error.issues[0];
+    const field = issue?.path.join(".");
+    const message = issue ? `${field ? `${field}: ` : ""}${issue.message}` : "Invalid request";
     return Response.json(
       {
-        error: { code: "INVALID_REQUEST", message: error.issues[0]?.message ?? "Invalid request" },
+        error: { code: "INVALID_REQUEST", message },
       },
       { status: 400 },
     );

@@ -3,6 +3,8 @@ import type {
   AiTaskRequest,
   AssetUnderstandingProviderRequest,
   AssetUnderstandingProviderResult,
+  StoryboardGenerationRequestV1,
+  StoryboardProposalV1,
 } from "@comfyuiflow/contracts";
 
 export interface AiModelCapabilities {
@@ -10,6 +12,11 @@ export interface AiModelCapabilities {
   modelId: string;
   inputModalities: Array<"text" | "image" | "video">;
   structuredOutput: boolean;
+  storyboardGeneration?: {
+    contractVersions: string[];
+    promptTemplateVersions: string[];
+    supportedShotCounts: number[];
+  };
 }
 
 export interface AiModelProvider {
@@ -19,4 +26,5 @@ export interface AiModelProvider {
   understandAssets?(
     request: AssetUnderstandingProviderRequest,
   ): Promise<AssetUnderstandingProviderResult>;
+  generateStoryboard?(request: StoryboardGenerationRequestV1): Promise<StoryboardProposalV1>;
 }

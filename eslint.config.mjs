@@ -11,6 +11,7 @@ export default tseslint.config(
       ".agents/**",
       "var/**",
       "**/.next/**",
+      "**/.next-build/**",
       "packages/project-core/src/generated/**",
       "apps/project-web/next-env.d.ts",
     ],

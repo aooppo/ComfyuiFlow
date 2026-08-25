@@ -10,7 +10,7 @@ import type { AiModelProvider } from "./provider.js";
 export class FakeAssetUnderstandingProvider implements AiModelProvider {
   calls = 0;
 
-  constructor(private readonly mode: "SUCCESS" | "INVALID" | "AMBIGUOUS" = "SUCCESS") {}
+  constructor(private readonly mode: "SUCCESS" | "INVALID" | "TIMEOUT" | "AMBIGUOUS" = "SUCCESS") {}
 
   getCapabilities(modelId: string) {
     return {
@@ -32,6 +32,7 @@ export class FakeAssetUnderstandingProvider implements AiModelProvider {
 
   async understandAssets(request: AssetUnderstandingProviderRequest) {
     this.calls += 1;
+    if (this.mode === "TIMEOUT") throw new Error("Fake provider timed out");
     if (this.mode === "AMBIGUOUS") throw new Error("Fake provider lost completion signal");
     const images = this.mode === "INVALID" ? request.images.slice(0, 1) : request.images;
     return AssetUnderstandingProviderResultSchema.parse({

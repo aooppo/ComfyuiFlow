@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import type { AiModelProvider } from "@comfyuiflow/ai-providers";
 import { AssetUnderstandingProviderResultSchema } from "@comfyuiflow/contracts";
+import { Prisma } from "./generated/client/index.js";
+import { readAnalysisContent } from "./analysis-content.js";
 import { analysisConfig, type AnalysisConfig } from "./analysis-config.js";
 import { ProjectAssetError } from "./contracts.js";
 import { LocalContentStorage, type StorageProvider } from "./local-storage.js";
@@ -17,22 +18,30 @@ export class AnalysisWorker {
 
   async runOnce(workerId = "project-worker") {
     await this.recoverExpired();
-    const queued = await this.client.assetUnderstandingRun.findFirst({
-      where: { status: "QUEUED" },
-      orderBy: { createdAt: "asc" },
-    });
-    if (!queued) return null;
-    const claimed = await this.client.assetUnderstandingRun.updateMany({
-      where: { id: queued.id, status: "QUEUED" },
-      data: {
-        status: "RUNNING",
-        claimedBy: workerId,
-        startedAt: new Date(),
-        leaseExpiresAt: new Date(Date.now() + this.config.leaseMs),
-      },
-    });
-    if (claimed.count !== 1) return null;
-    return this.execute(queued.id);
+    const leaseExpiresAt = new Date(Date.now() + this.config.leaseMs);
+    const claimed = await this.client.$transaction((tx) =>
+      tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        WITH candidate AS (
+          SELECT "id"
+          FROM "AssetUnderstandingRun"
+          WHERE "status" = 'QUEUED'
+          ORDER BY "createdAt" ASC
+          FOR UPDATE SKIP LOCKED
+          LIMIT 1
+        )
+        UPDATE "AssetUnderstandingRun" AS run
+        SET "status" = 'RUNNING',
+            "claimedBy" = ${workerId},
+            "startedAt" = CURRENT_TIMESTAMP,
+            "leaseExpiresAt" = ${leaseExpiresAt}
+        FROM candidate
+        WHERE run."id" = candidate."id"
+        RETURNING run."id"
+      `),
+    );
+    const runId = claimed[0]?.id;
+    if (!runId) return null;
+    return this.execute(runId);
   }
 
   async recoverExpired() {
@@ -74,19 +83,7 @@ export class AnalysisWorker {
     try {
       const images = [];
       for (const item of run.manifest.items) {
-        if (item.asset.status !== "READY" || item.asset.mediaType !== "IMAGE") {
-          return this.fail(runId, "ANALYSIS_ASSET_NOT_READY");
-        }
-        const path = await this.storage.resolveVerified(
-          item.asset.storedObject.storageKey,
-          item.asset.storedObject.sha256,
-          Number(item.asset.storedObject.byteSize),
-        );
-        images.push({
-          slot: item.slot,
-          mimeType: item.asset.storedObject.detectedMimeType,
-          content: await readFile(path),
-        });
+        images.push(await readAnalysisContent(item, this.storage));
       }
       const requestHash = createHash("sha256")
         .update(

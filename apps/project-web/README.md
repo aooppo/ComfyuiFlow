@@ -55,3 +55,30 @@ git diff --check
 
 The database suite uses only the dedicated local Compose database and test-created records. No
 AI/provider/ComfyUI service is required; Provider and generation calls remain `0 / 0`.
+
+## Storyboard workspace
+
+Open a project and choose **Open storyboards**. The separate editor supports a deterministic
+three-shot Fake proposal, shot editing and ordering, immutable saves, refresh readback, and
+side-by-side version comparison. Candidate preview shows gaps without persisting a choice.
+
+Formal asset binding and approval are server-gated and default closed. When Phase 2 Human QA is
+complete, the server gate may be enabled to revalidate owner selections, freeze an exact manifest,
+and append an approval decision. Approval never authorizes generation.
+
+## UI language
+
+The top bar provides `中文` and `EN` controls across the Project/Asset, Phase 2, and Storyboard
+workspaces. The preference is stored only in the local browser, survives refresh and navigation,
+updates the document language for accessibility, and never changes persisted project or asset data.
+
+## Shot Plan workspace
+
+After a Storyboard version is approved with a frozen Manifest, choose **Open Shot Plan**. The
+separate page displays the three provider-neutral specifications, continuity facts, exact reference
+identities and SHA-256 values, capability requirements, immutable history, comparison, and
+preflight blockers. Prompt edits append a new owner version and stale tabs reload the winning head.
+
+Storyboard approval, Shot Plan approval, and generation authorization are distinct states. Phase 4
+always displays generation as unauthorized and has no Provider, workflow, ComfyUI, or video submit
+path.

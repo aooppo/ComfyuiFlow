@@ -212,3 +212,29 @@ DATABASE_URL=postgresql://comfyuiflow:comfyuiflow@127.0.0.1:5448/comfyuiflow pnp
 
 This never starts automatic retries or provider fallback. The normal local validation ledger is
 `Provider 0 / AI ranking 0 / ComfyUI or video generation 0`.
+
+## Phase 3 three-shot storyboard workspace
+
+Each active project now links to a separate Storyboards workspace. The local Fake Director creates
+exactly three deterministic draft shots with zero external calls. Owner edits append immutable
+versions guarded by `If-Match`; historical versions remain readable and comparable.
+
+Asset candidate preview remains read-only. Formal `ShotAssetBinding`, frozen
+`AssetResolutionManifest`, and append-only approval decisions are implemented but fail closed while
+`PHASE2_STORYBOARD_BINDINGS_ENABLED=false`. Storyboard approval is a creative decision only: it
+never authorizes AI, ComfyUI, video generation, QA acceptance, or final assembly.
+
+## Phase 4 Shot Planner
+
+An approved three-shot Storyboard now opens a separate **Shot Plan** workspace. The deterministic
+Planner converts the approved Storyboard and frozen asset Manifest into exactly three immutable,
+provider-neutral `GenerationSpec v1` records with canonical input, reference, and output hashes.
+
+Owner prompt edits append new versions under `If-Match`; history remains comparable. Preflight
+rechecks Storyboard approval, Manifest identity, exact file readiness/approval, project isolation,
+and hashes without creating a job or calling a Provider. Shot Plan approval and revocation are
+append-only decisions and always expose `generationAuthorized: false`.
+
+Phase 4 contains no Provider/model selection, workflow or ComfyUI parameters, `GenerationJob`,
+submission, retry, Artifact, audio, QA, assembly, or publishing path. Its external-call ledger is
+`AI 0 / Provider 0 / ComfyUI 0 / video generation 0`.

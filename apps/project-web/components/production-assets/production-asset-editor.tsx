@@ -58,7 +58,9 @@ export function ProductionAssetEditor({
           onChange={(event) => setType(event.target.value as (typeof types)[number])}
         >
           {types.map((value) => (
-            <option key={value}>{value}</option>
+            <option key={value} value={value}>
+              {value}
+            </option>
           ))}
         </select>
       </label>

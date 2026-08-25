@@ -400,49 +400,72 @@ export const AssetUnderstandingFactsSchema = z
     identityAnchors: BoundedFactListSchema.default([]),
     continuityRisks: BoundedFactListSchema.default([]),
     generationConstraints: BoundedFactListSchema.default([]),
-    qualityFacts: z.record(z.string().max(80), z.number().finite()).default({}),
+    qualityFacts: z
+      .object({
+        sharpnessConfidence: z.number().min(0).max(1).nullable().default(null),
+        exposureConfidence: z.number().min(0).max(1).nullable().default(null),
+        subjectVisibility: z.number().min(0).max(1).nullable().default(null),
+        usableFrameCoverage: z.number().min(0).max(1).nullable().default(null),
+      })
+      .strict()
+      .default({
+        sharpnessConfidence: null,
+        exposureConfidence: null,
+        subjectVisibility: null,
+        usableFrameCoverage: null,
+      }),
     confidence: z.enum(["LOW", "MEDIUM", "HIGH"]),
   })
   .strict();
 
-export const AssetUnderstandingProviderRequestSchema = z.object({
-  taskType: AssetUnderstandingTaskTypeSchema,
-  contractVersion: z.literal("asset-understanding-v1"),
-  modelRef: z.object({ providerId: z.string().min(1), modelId: z.string().min(1) }),
-  promptVersion: z.literal("asset-understanding-v1"),
-  schemaVersion: z.literal("asset-understanding-v1"),
-  images: z
-    .array(
-      z.object({
-        slot: AssetUnderstandingSlotSchema,
-        mimeType: z.string().startsWith("image/"),
-        content: z.instanceof(Uint8Array),
+export const AssetUnderstandingProviderRequestSchema = z
+  .object({
+    taskType: AssetUnderstandingTaskTypeSchema,
+    contractVersion: z.literal("asset-understanding-v1"),
+    modelRef: z.object({ providerId: z.string().min(1), modelId: z.string().min(1) }).strict(),
+    promptVersion: z.literal("asset-understanding-v1"),
+    schemaVersion: z.literal("asset-understanding-v1"),
+    images: z
+      .array(
+        z
+          .object({
+            slot: AssetUnderstandingSlotSchema,
+            mimeType: z.string().startsWith("image/"),
+            content: z.instanceof(Uint8Array),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(9)
+      .refine((items) => new Set(items.map((item) => item.slot)).size === items.length, {
+        message: "Asset understanding slots must be unique",
       }),
-    )
-    .min(1)
-    .max(9)
-    .refine((items) => new Set(items.map((item) => item.slot)).size === items.length, {
-      message: "Asset understanding slots must be unique",
-    }),
-  context: z.string().max(4_000).default(""),
-});
+    context: z.string().max(4_000).default(""),
+  })
+  .strict();
 
-export const AssetUnderstandingProviderResultSchema = z.object({
-  providerId: z.string().min(1),
-  requestedModelId: z.string().min(1),
-  resolvedModelId: z.string().min(1),
-  responseId: z.string().min(1),
-  results: z
-    .array(z.object({ slot: AssetUnderstandingSlotSchema, facts: AssetUnderstandingFactsSchema }))
-    .min(1)
-    .max(9)
-    .refine((items) => new Set(items.map((item) => item.slot)).size === items.length, {
-      message: "Asset understanding results must have unique slots",
-    }),
-  usage: z.record(z.string(), z.number().finite()).optional(),
-  finishReason: z.string().max(120).optional(),
-  providerMetadata: z.record(z.string(), z.unknown()).default({}),
-});
+export const AssetUnderstandingProviderResultSchema = z
+  .object({
+    providerId: z.string().min(1),
+    requestedModelId: z.string().min(1),
+    resolvedModelId: z.string().min(1),
+    responseId: z.string().min(1),
+    results: z
+      .array(
+        z
+          .object({ slot: AssetUnderstandingSlotSchema, facts: AssetUnderstandingFactsSchema })
+          .strict(),
+      )
+      .min(1)
+      .max(9)
+      .refine((items) => new Set(items.map((item) => item.slot)).size === items.length, {
+        message: "Asset understanding results must have unique slots",
+      }),
+    usage: z.record(z.string(), z.number().finite()).optional(),
+    finishReason: z.string().max(120).optional(),
+    providerMetadata: z.record(z.string(), z.unknown()).default({}),
+  })
+  .strict();
 
 export type AssetUnderstandingFacts = z.infer<typeof AssetUnderstandingFactsSchema>;
 export type AssetUnderstandingProviderRequest = z.infer<
@@ -451,3 +474,156 @@ export type AssetUnderstandingProviderRequest = z.infer<
 export type AssetUnderstandingProviderResult = z.infer<
   typeof AssetUnderstandingProviderResultSchema
 >;
+
+export const StoryboardAssetRequirementV1Schema = z
+  .object({
+    shotOrdinal: z.number().int().min(1).max(3),
+    requirementKey: z.string().trim().min(1).max(120),
+    contractVersion: z.literal("asset-candidate-v1"),
+    candidateInput: z.record(z.string(), z.json()),
+  })
+  .strict();
+
+export const ShotDraftV1Schema = z
+  .object({
+    schemaVersion: z.literal("shot-draft-v1"),
+    shotKey: UuidSchema,
+    ordinal: z.number().int().min(1).max(3),
+    title: z.string().trim().min(1).max(120),
+    creativeDescription: z.string().trim().min(1).max(4_000),
+    startState: z.string().trim().min(1).max(2_000),
+    action: z.string().trim().min(1).max(2_000),
+    endState: z.string().trim().min(1).max(2_000),
+    camera: z.string().trim().min(1).max(1_000),
+    composition: z.string().trim().min(1).max(1_000),
+    continuityRequirements: z.array(z.string().trim().min(1).max(1_000)).max(20),
+    durationSeconds: z.number().positive().max(30),
+    assetRequirements: z.array(StoryboardAssetRequirementV1Schema).max(30).default([]),
+  })
+  .strict();
+
+export const StoryboardGenerationRequestV1Schema = z
+  .object({
+    taskType: z.literal("STORYBOARD_GENERATION_V1"),
+    contractVersion: z.literal("storyboard-generation-v1"),
+    modelRef: z.object({
+      providerId: z.string().trim().min(1).max(80),
+      modelId: z.string().trim().min(1).max(160),
+    }),
+    projectId: UuidSchema,
+    storyboardId: UuidSchema,
+    creativeBrief: z.string().trim().min(1).max(4_000),
+    shotCount: z.literal(3),
+    promptTemplateVersion: z.literal("storyboard-three-shot-v1"),
+    assetRequirements: z.array(StoryboardAssetRequirementV1Schema).max(90).default([]),
+  })
+  .strict();
+
+export const StoryboardProposalV1Schema = z
+  .object({
+    providerId: z.string().trim().min(1).max(80),
+    requestedModelId: z.string().trim().min(1).max(160),
+    resolvedModelId: z.string().trim().min(1).max(160),
+    responseId: z.string().trim().min(1).max(255),
+    contractVersion: z.literal("storyboard-proposal-v1"),
+    promptTemplateVersion: z.literal("storyboard-three-shot-v1"),
+    shots: z.array(ShotDraftV1Schema).length(3),
+    providerMetadata: z.object({ providerCalls: z.number().int().nonnegative() }).loose(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const ordinals = value.shots.map((shot) => shot.ordinal);
+    if (ordinals.some((ordinal, index) => ordinal !== index + 1)) {
+      context.addIssue({
+        code: "custom",
+        path: ["shots"],
+        message: "Storyboard proposal shots must have ordinals 1, 2, and 3 in order",
+      });
+    }
+    if (new Set(value.shots.map((shot) => shot.shotKey)).size !== value.shots.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["shots"],
+        message: "Storyboard proposal shot keys must be unique",
+      });
+    }
+    for (const [index, shot] of value.shots.entries()) {
+      if (shot.assetRequirements.some((requirement) => requirement.shotOrdinal !== index + 1)) {
+        context.addIssue({
+          code: "custom",
+          path: ["shots", index, "assetRequirements"],
+          message: "Shot asset requirement ordinal must match its shot",
+        });
+      }
+    }
+  });
+
+export type StoryboardAssetRequirementV1 = z.infer<typeof StoryboardAssetRequirementV1Schema>;
+export type ShotDraftV1 = z.infer<typeof ShotDraftV1Schema>;
+export type StoryboardGenerationRequestV1 = z.infer<typeof StoryboardGenerationRequestV1Schema>;
+export type StoryboardProposalV1 = z.infer<typeof StoryboardProposalV1Schema>;
+
+export const GenerationSpecReferenceV1Schema = z
+  .object({
+    requirementId: UuidSchema,
+    productionAssetVersionId: UuidSchema,
+    characterStateVersionId: UuidSchema.nullable(),
+    assetVersionFileId: UuidSchema,
+    projectAssetId: UuidSchema,
+    sha256: Sha256Schema,
+    referenceUsage: AssetUnderstandingReferenceUsageSchema,
+  })
+  .strict();
+
+export const GenerationCapabilityRequirementsV1Schema = z
+  .object({
+    mode: z.literal("REFERENCE_TO_VIDEO"),
+    aspectRatio: z.enum(["PORTRAIT_9_16", "LANDSCAPE_16_9", "SQUARE_1_1", "PORTRAIT_4_5"]),
+    durationSeconds: z.number().positive().max(30),
+    referenceImageCount: z.number().int().nonnegative().max(30),
+    audioRequired: z.literal(false),
+  })
+  .strict();
+
+export const GenerationSpecV1Schema = z
+  .object({
+    schemaVersion: z.literal("generation-spec-v1"),
+    plannerVersion: z.literal("deterministic-shot-planner-v1"),
+    projectId: UuidSchema,
+    storyboardId: UuidSchema,
+    storyboardVersionId: UuidSchema,
+    manifestId: UuidSchema,
+    storyboardShotId: UuidSchema,
+    shotKey: UuidSchema,
+    ordinal: z.number().int().min(1).max(3),
+    startState: z.string().trim().min(1).max(2_000),
+    action: z.string().trim().min(1).max(2_000),
+    endState: z.string().trim().min(1).max(2_000),
+    camera: z.string().trim().min(1).max(1_000),
+    composition: z.string().trim().min(1).max(1_000),
+    continuityRequirements: z.array(z.string().trim().min(1).max(1_000)).max(20),
+    durationSeconds: z.number().positive().max(30),
+    positivePrompt: z.string().trim().min(1).max(12_000),
+    references: z.array(GenerationSpecReferenceV1Schema).max(30),
+    capabilityRequirements: GenerationCapabilityRequirementsV1Schema,
+    inputHash: Sha256Schema,
+    referencesHash: Sha256Schema,
+    outputHash: Sha256Schema,
+  })
+  .strict();
+
+export const GenerationPlanVersionInputV1Schema = z
+  .object({
+    parentVersionId: UuidSchema,
+    specs: z.array(GenerationSpecV1Schema).length(3),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.specs.some((spec, index) => spec.ordinal !== index + 1)) {
+      context.addIssue({ code: "custom", path: ["specs"], message: "Specs must be ordered 1-3" });
+    }
+  });
+
+export type GenerationSpecReferenceV1 = z.infer<typeof GenerationSpecReferenceV1Schema>;
+export type GenerationSpecV1 = z.infer<typeof GenerationSpecV1Schema>;
+export type GenerationPlanVersionInputV1 = z.infer<typeof GenerationPlanVersionInputV1Schema>;

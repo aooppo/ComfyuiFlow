@@ -94,6 +94,18 @@ paths:
       responses:
         "201": { description: Draft version created }
         "409": { $ref: "#/components/responses/OwnerError" }
+  /api/production-asset-versions/{versionId}:
+    get:
+      summary: Read immutable version details, file bindings, and relations
+      parameters:
+        - $ref: "#/components/parameters/VersionId"
+      responses:
+        "200":
+          description: Read-only production asset version detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductionAssetVersionDetail" }
+        "404": { $ref: "#/components/responses/OwnerError" }
   /api/production-asset-versions/{versionId}/files:
     post:
       summary: Bind a ready project file to a draft production asset version
@@ -288,6 +300,17 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AnalysisRun" }
         "404": { $ref: "#/components/responses/OwnerError" }
+  /api/project-assets/{assetId}/understanding:
+    get:
+      summary: Read immutable machine and owner revision history with the approved projection
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Revision history and current approved projection }
+        "404": { $ref: "#/components/responses/OwnerError" }
   /api/understanding-revisions/{revisionId}/reviews:
     post:
       summary: Append an accept or reject review
@@ -464,6 +487,52 @@ components:
         shotScale: { $ref: "#/components/schemas/ShotScale" }
         isPreferred: { type: boolean, default: false }
         notes: { type: string, maxLength: 1000 }
+    ProductionAssetVersionDetail:
+      type: object
+      required: [id, versionNumber, status, displayName, files, relations]
+      properties:
+        id: { type: string, format: uuid }
+        versionNumber: { type: integer, minimum: 1 }
+        status: { type: string, enum: [DRAFT, ACTIVE, RETIRED] }
+        displayName: { type: string, maxLength: 120 }
+        description: { type: [string, "null"] }
+        sourceType: { type: string }
+        publishedAt: { type: [string, "null"], format: date-time }
+        files:
+          type: array
+          items:
+            type: object
+            required: [id, projectAssetId, displayName, referenceUsage, viewpoint, shotScale]
+            properties:
+              id: { type: string, format: uuid }
+              projectAssetId: { type: string, format: uuid }
+              displayName: { type: string }
+              referenceUsage: { $ref: "#/components/schemas/ReferenceUsage" }
+              viewpoint: { $ref: "#/components/schemas/Viewpoint" }
+              shotScale: { $ref: "#/components/schemas/ShotScale" }
+              approvalStatus: { type: string }
+              isPreferred: { type: boolean }
+              status: { type: string }
+        relations:
+          type: array
+          items:
+            type: object
+            required:
+              [
+                id,
+                direction,
+                relationType,
+                relatedVersionId,
+                relatedAssetName,
+                relatedVersionNumber,
+              ]
+            properties:
+              id: { type: string, format: uuid }
+              direction: { type: string, enum: [OUTGOING, INCOMING] }
+              relationType: { type: string }
+              relatedVersionId: { type: string, format: uuid }
+              relatedAssetName: { type: string }
+              relatedVersionNumber: { type: integer, minimum: 1 }
     CreateCharacterState:
       type: object
       required: [stateKey, name]

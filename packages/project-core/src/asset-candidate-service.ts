@@ -1,27 +1,22 @@
-import { createHash } from "node:crypto";
 import { ProjectAssetError } from "./contracts.js";
 import {
+  assetCandidateResultSchema,
   assetCandidateRequirementSchema,
+  canonicalCandidateRequirementHash,
+  type AssetCandidateResult,
   type AssetCandidateRequirement,
 } from "./asset-candidate-contracts.js";
+import {
+  ASSET_CANDIDATE_POLICY_VERSION,
+  compareAssetCandidateRank,
+  evaluateAssetCandidate,
+} from "./asset-candidate-policy.js";
 import { prisma, type ProjectPrisma } from "./prisma.js";
-
-type CandidateReason =
-  | "WRONG_IDENTITY"
-  | "WRONG_VERSION"
-  | "WRONG_CHARACTER_STATE"
-  | "INACTIVE_ASSET"
-  | "FILE_NOT_READY"
-  | "UNAPPROVED_BINDING"
-  | "REFERENCE_USAGE_MISSING"
-  | "VIEWPOINT_MISMATCH"
-  | "SHOT_SCALE_MISMATCH"
-  | "MEDIA_CAPABILITY_MISMATCH";
 
 export class AssetCandidateService {
   constructor(private readonly client: ProjectPrisma = prisma) {}
 
-  async preview(rawInput: AssetCandidateRequirement) {
+  async preview(rawInput: AssetCandidateRequirement): Promise<AssetCandidateResult> {
     const input = assetCandidateRequirementSchema.parse(rawInput);
     const identity = await this.resolveIdentity(input);
     const bindings = await this.client.assetVersionFile.findMany({
@@ -32,63 +27,75 @@ export class AssetCandidateService {
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
-    const eligible: Array<Record<string, unknown>> = [];
-    const rejected: Array<Record<string, unknown>> = [];
+    const rankedEligible: Array<
+      AssetCandidateResult["eligible"][number] & { createdAt: Date; referenceUsage: string }
+    > = [];
+    const rejected: AssetCandidateResult["rejected"] = [];
     for (const binding of bindings) {
-      const reasons = this.reasons(input, identity.versionId, binding);
+      const decision = evaluateAssetCandidate(
+        input,
+        {
+          id: binding.id,
+          projectId: binding.projectId,
+          productionAssetVersionId: binding.productionAssetVersionId,
+          assetType: binding.productionAssetVersion.productionAsset.type,
+          productionAssetStatus: binding.productionAssetVersion.productionAsset.status,
+          productionAssetVersionStatus: binding.productionAssetVersion.status,
+          bindingStatus: binding.status,
+          projectAssetStatus: binding.projectAsset.status,
+          approvalStatus: binding.approvalStatus,
+          referenceUsage: binding.referenceUsage,
+          viewpoint: binding.viewpoint,
+          shotScale: binding.shotScale,
+          mediaType: binding.projectAsset.mediaType,
+          detectedMimeType: binding.projectAsset.storedObject.detectedMimeType,
+          width: binding.projectAsset.width,
+          height: binding.projectAsset.height,
+          isPreferred: binding.isPreferred,
+        },
+        { expectedVersionId: identity.versionId, characterStateMatches: true },
+      );
       const candidate = {
         projectAssetId: binding.projectAssetId,
         productionAssetVersionId: binding.productionAssetVersionId,
         bindingId: binding.id,
       };
-      if (reasons.length > 0) {
-        rejected.push({ ...candidate, reasonCodes: reasons });
+      if (decision.reasonCodes.length > 0) {
+        rejected.push({
+          ...candidate,
+          matchedRules: decision.matchedRules,
+          reasonCodes: decision.reasonCodes,
+        });
         continue;
       }
-      const scoreFacts = {
-        preferred: binding.isPreferred ? 1 : 0,
-        usageExact: input.referenceUsages.includes(binding.referenceUsage) ? 1 : 0,
-        viewpointExact:
-          input.viewpoints.length === 0 || input.viewpoints.includes(binding.viewpoint) ? 1 : 0,
-        shotScaleExact:
-          input.shotScales.length === 0 || input.shotScales.includes(binding.shotScale) ? 1 : 0,
-        effectivePixels: (binding.projectAsset.width ?? 0) * (binding.projectAsset.height ?? 0),
-      };
-      eligible.push({ ...candidate, scoreFacts });
+      rankedEligible.push({
+        ...candidate,
+        matchedRules: decision.matchedRules,
+        scoreFacts: decision.scoreFacts,
+        createdAt: binding.createdAt,
+        referenceUsage: binding.referenceUsage,
+      });
     }
-    eligible.sort((left, right) => {
-      const a = left.scoreFacts as Record<string, number>;
-      const b = right.scoreFacts as Record<string, number>;
-      for (const key of [
-        "preferred",
-        "usageExact",
-        "viewpointExact",
-        "shotScaleExact",
-        "effectivePixels",
-      ]) {
-        if (a[key] !== b[key]) return (b[key] ?? 0) - (a[key] ?? 0);
-      }
-      return String(left.bindingId).localeCompare(String(right.bindingId));
-    });
-    const matchedUsages = new Set(
-      eligible.map(
-        (candidate) =>
-          bindings.find((binding) => binding.id === candidate.bindingId)?.referenceUsage,
-      ),
-    );
+    rankedEligible.sort(compareAssetCandidateRank);
+    const matchedUsages = new Set(rankedEligible.map((candidate) => candidate.referenceUsage));
+    const eligible = rankedEligible.map((candidate) => ({
+      projectAssetId: candidate.projectAssetId,
+      productionAssetVersionId: candidate.productionAssetVersionId,
+      bindingId: candidate.bindingId,
+      matchedRules: candidate.matchedRules,
+      scoreFacts: candidate.scoreFacts,
+    }));
     const gaps = input.referenceUsages.filter((usage) => !matchedUsages.has(usage));
-    if (eligible.length === 0 && !gaps.includes("NO_ELIGIBLE_CANDIDATE" as never)) {
-      gaps.push("NO_ELIGIBLE_CANDIDATE" as never);
-    }
-    return {
-      policyVersion: "deterministic-assets-v1" as const,
-      inputHash: hashInput(input),
+    const result = {
+      policyVersion: ASSET_CANDIDATE_POLICY_VERSION,
+      inputHash: canonicalCandidateRequirementHash(input),
       resolvedIdentity: identity,
       eligible,
       rejected,
-      gaps,
+      gaps: eligible.length === 0 ? [...gaps, "NO_ELIGIBLE_CANDIDATE" as const] : gaps,
       formalSelectionCreated: false as const,
     };
+    return assetCandidateResultSchema.parse(result);
   }
 
   private async resolveIdentity(input: AssetCandidateRequirement) {
@@ -175,64 +182,4 @@ export class AssetCandidateService {
       versionId: version.id,
     };
   }
-
-  private reasons(
-    input: AssetCandidateRequirement,
-    expectedVersionId: string,
-    binding: Awaited<ReturnType<ProjectPrisma["assetVersionFile"]["findMany"]>>[number] & {
-      projectAsset: {
-        storedObject: { detectedMimeType: string };
-        status: string;
-        mediaType: string;
-        width: number | null;
-        height: number | null;
-      };
-      productionAssetVersion: { status: string; productionAsset: { type: string; status: string } };
-    },
-  ): CandidateReason[] {
-    const reasons: CandidateReason[] = [];
-    if (binding.productionAssetVersionId !== expectedVersionId) reasons.push("WRONG_VERSION");
-    if (binding.productionAssetVersion.productionAsset.type !== input.assetType)
-      reasons.push("WRONG_IDENTITY");
-    if (
-      binding.productionAssetVersion.status !== "ACTIVE" ||
-      binding.productionAssetVersion.productionAsset.status !== "ACTIVE" ||
-      binding.status !== "ACTIVE"
-    )
-      reasons.push("INACTIVE_ASSET");
-    if (binding.projectAsset.status !== "READY") reasons.push("FILE_NOT_READY");
-    if (binding.approvalStatus !== "ACCEPTED") reasons.push("UNAPPROVED_BINDING");
-    if (!input.referenceUsages.includes(binding.referenceUsage))
-      reasons.push("REFERENCE_USAGE_MISSING");
-    if (
-      input.viewpoints.length > 0 &&
-      !input.viewpoints.includes(binding.viewpoint) &&
-      !(input.policy.allowUnspecifiedViewpoint && binding.viewpoint === "UNSPECIFIED")
-    )
-      reasons.push("VIEWPOINT_MISMATCH");
-    if (
-      input.shotScales.length > 0 &&
-      !input.shotScales.includes(binding.shotScale) &&
-      !(input.policy.allowUnspecifiedShotScale && binding.shotScale === "UNSPECIFIED")
-    )
-      reasons.push("SHOT_SCALE_MISMATCH");
-    const capability = input.mediaCapability;
-    if (
-      binding.projectAsset.mediaType !== capability.mediaType ||
-      (capability.acceptedMimeTypes.length > 0 &&
-        !capability.acceptedMimeTypes.includes(
-          binding.projectAsset.storedObject.detectedMimeType,
-        )) ||
-      (capability.minimumWidth !== undefined &&
-        (binding.projectAsset.width ?? 0) < capability.minimumWidth) ||
-      (capability.minimumHeight !== undefined &&
-        (binding.projectAsset.height ?? 0) < capability.minimumHeight)
-    )
-      reasons.push("MEDIA_CAPABILITY_MISMATCH");
-    return reasons;
-  }
-}
-
-function hashInput(input: AssetCandidateRequirement) {
-  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }

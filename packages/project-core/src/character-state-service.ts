@@ -12,6 +12,29 @@ const slotAssetTypes = {
 export class CharacterStateService {
   constructor(private readonly client: ProjectPrisma = prisma) {}
 
+  async listCharacterVersions(profileId: string) {
+    const profile = await this.client.characterProfile.findUnique({ where: { id: profileId } });
+    if (!profile)
+      throw new ProjectAssetError("CHARACTER_NOT_FOUND", "Character profile was not found", 404);
+    return this.client.characterVersion.findMany({
+      where: { characterProfileId: profileId },
+      include: {
+        stateVersions: {
+          include: {
+            components: {
+              include: {
+                componentAssetVersion: { include: { productionAsset: true } },
+              },
+              orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+            },
+          },
+          orderBy: [{ stateKey: "asc" }, { versionNumber: "desc" }],
+        },
+      },
+      orderBy: { versionNumber: "desc" },
+    });
+  }
+
   async createCharacterVersion(
     profileId: string,
     productionAssetVersionId: string,

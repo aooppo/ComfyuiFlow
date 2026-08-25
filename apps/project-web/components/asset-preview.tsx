@@ -88,7 +88,7 @@ export function AssetPreview({ asset, onClose }: { asset: AssetView; onClose: ()
               Some media details were unavailable, but the original file is preserved.
             </p>
           )}
-          <UnderstandingReview assetId={asset.id} />
+          <UnderstandingReview assetId={asset.id} projectId={asset.projectId} />
         </div>
       </section>
     </div>

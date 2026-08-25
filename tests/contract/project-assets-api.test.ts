@@ -4,6 +4,7 @@ import {
   assetFilterSchema,
   assetPatchSchema,
   assetRoleSchema,
+  projectAssetFilterSchema,
   projectInputSchema,
   projectPatchSchema,
 } from "@comfyuiflow/project-core";
@@ -45,5 +46,23 @@ describe("Project/Asset HTTP contract", () => {
       expect(contract).toContain(route);
     }
     expect(contract).toContain("No endpoint invokes AI, ComfyUI, or an external upload");
+  });
+
+  it("freezes Phase 2 paging bounds and documents total, cursor, status, and safe errors", async () => {
+    expect(projectAssetFilterSchema.parse({ limit: "100", query: " lala " })).toMatchObject({
+      limit: 100,
+      query: "lala",
+    });
+    expect(() => projectAssetFilterSchema.parse({ limit: 101 })).toThrow();
+    expect(() =>
+      projectAssetFilterSchema.parse({ limit: 10, storageKey: "private/path" }),
+    ).toThrow();
+    const contract = await readFile(
+      "specs/007-asset-understanding/contracts/production-assets.openapi.yaml",
+      "utf8",
+    );
+    expect(contract).toContain("description: Stable cursor page");
+    expect(contract).toContain("required: [items, total, nextCursor]");
+    expect(contract).toContain("description: Actionable owner-safe failure");
   });
 });

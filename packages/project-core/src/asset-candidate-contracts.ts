@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
+import { canonicalSha256 } from "./canonical-json.js";
 import {
   productionAssetTypeSchema,
   referenceUsageSchema,
@@ -36,12 +36,26 @@ export const assetCandidateRequirementSchema = z
       })
       .default({ allowUnspecifiedViewpoint: false, allowUnspecifiedShotScale: false }),
   })
+  .strict()
   .superRefine((value, context) => {
     if (!value.productionAssetId && !value.characterProfileId && !value.productionAssetVersionId) {
       context.addIssue({
         code: "custom",
         message: "A stable production or character identity is required",
       });
+    }
+    for (const [field, values] of [
+      ["referenceUsages", value.referenceUsages],
+      ["viewpoints", value.viewpoints],
+      ["shotScales", value.shotScales],
+    ] as const) {
+      if (new Set(values).size !== values.length) {
+        context.addIssue({
+          code: "custom",
+          path: [field],
+          message: `${field} must not contain duplicates`,
+        });
+      }
     }
   });
 
@@ -60,11 +74,88 @@ export const candidateReasonCodes = [
   "NO_ELIGIBLE_CANDIDATE",
 ] as const;
 
+export const candidateReasonCodeSchema = z.enum(candidateReasonCodes);
+export const candidateMatchedRuleSchema = z.enum([
+  "PROJECT_MATCH",
+  "IDENTITY_MATCH",
+  "VERSION_MATCH",
+  "STATE_MATCH",
+  "LIFECYCLE_ELIGIBLE",
+  "OWNER_APPROVED",
+  "REFERENCE_USAGE_MATCH",
+  "VIEWPOINT_AND_SCALE_MATCH",
+  "MEDIA_CAPABILITY_MATCH",
+]);
+
+export const assetCandidateScoreFactsSchema = z
+  .object({
+    preferred: z.number().int().min(0).max(1),
+    usageExact: z.number().int().min(0).max(1),
+    viewpointExact: z.number().int().min(0).max(1),
+    shotScaleExact: z.number().int().min(0).max(1),
+    probeComplete: z.number().int().min(0).max(1),
+    effectivePixels: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const assetCandidateIdentitySchema = z
+  .object({
+    productionAssetVersionId: z.string().uuid(),
+    characterStateVersionId: z.string().uuid().nullable(),
+    versionId: z.string().uuid(),
+  })
+  .strict();
+
+const assetCandidateReferenceSchema = z
+  .object({
+    projectAssetId: z.string().uuid(),
+    productionAssetVersionId: z.string().uuid(),
+    bindingId: z.string().uuid(),
+  })
+  .strict();
+
+export const eligibleAssetCandidateSchema = assetCandidateReferenceSchema.extend({
+  matchedRules: z.array(candidateMatchedRuleSchema),
+  scoreFacts: assetCandidateScoreFactsSchema,
+});
+
+export const rejectedAssetCandidateSchema = assetCandidateReferenceSchema.extend({
+  matchedRules: z.array(candidateMatchedRuleSchema),
+  reasonCodes: z.array(candidateReasonCodeSchema).min(1),
+});
+
+export const assetCandidateResultSchema = z
+  .object({
+    policyVersion: z.literal("deterministic-assets-v1"),
+    inputHash: z.string().regex(/^[a-f0-9]{64}$/),
+    resolvedIdentity: assetCandidateIdentitySchema,
+    eligible: z.array(eligibleAssetCandidateSchema),
+    rejected: z.array(rejectedAssetCandidateSchema),
+    gaps: z.array(z.union([referenceUsageSchema, candidateReasonCodeSchema])),
+    formalSelectionCreated: z.literal(false),
+  })
+  .strict();
+
 export function canonicalCandidateRequirementHash(
   value: z.infer<typeof assetCandidateRequirementSchema>,
 ) {
-  const normalized = JSON.stringify(value, Object.keys(value).sort());
-  return createHash("sha256").update(normalized).digest("hex");
+  return canonicalSha256(omitUndefinedObjectFields(value));
+}
+
+function omitUndefinedObjectFields(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(omitUndefinedObjectFields);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, child]) => child !== undefined)
+        .map(([key, child]) => [key, omitUndefinedObjectFields(child)]),
+    );
+  }
+  return value;
 }
 
 export type AssetCandidateRequirement = z.infer<typeof assetCandidateRequirementSchema>;
+export type AssetCandidateResult = z.infer<typeof assetCandidateResultSchema>;
+export type AssetCandidateReasonCode = z.infer<typeof candidateReasonCodeSchema>;
+export type AssetCandidateMatchedRule = z.infer<typeof candidateMatchedRuleSchema>;
+export type AssetCandidateScoreFacts = z.infer<typeof assetCandidateScoreFactsSchema>;

@@ -1,4 +1,8 @@
-import { assetCandidateRequirementSchema, AssetCandidateService } from "@comfyuiflow/project-core";
+import {
+  assetCandidateRequirementSchema,
+  AssetCandidateService,
+  ProjectAssetError,
+} from "@comfyuiflow/project-core";
 import { apiError, jsonBody } from "../../../../../../lib/api";
 
 const service = new AssetCandidateService();
@@ -9,7 +13,11 @@ export async function POST(request: Request, context: Context) {
     const projectId = (await context.params).projectId;
     const body = assetCandidateRequirementSchema.parse(await jsonBody(request));
     if (body.projectId !== projectId) {
-      throw new Error("Candidate requirement project does not match route project");
+      throw new ProjectAssetError(
+        "CROSS_PROJECT",
+        "Candidate requirement must match the route project",
+        409,
+      );
     }
     return Response.json(await service.preview(body));
   } catch (error) {
