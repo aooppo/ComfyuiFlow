@@ -54,6 +54,24 @@ export class GenerationQaService {
 
     const referenceImages = await Promise.all(
       (target.slotManifestJson as any[]).map(async (slot) => {
+        if (slot.sourceKind === "KEYFRAME_ARTIFACT" && slot.keyframeArtifactId) {
+          const keyframe = await this.client.keyframeArtifact.findUnique({
+            where: { id: slot.keyframeArtifactId },
+          });
+          if (!keyframe || keyframe.sha256 !== slot.sha256)
+            throw new ProjectAssetError("QA_NOT_READY", "Start keyframe changed", 409);
+          const absolutePath = await this.sourceStorage.resolveVerified(
+            keyframe.storageKey,
+            keyframe.sha256,
+            Number(keyframe.byteSize),
+          );
+          return {
+            role: slot.role,
+            mimeType: keyframe.detectedMimeType,
+            sha256: keyframe.sha256,
+            content: new Uint8Array(await this.readBytes(absolutePath)),
+          };
+        }
         const reference = spec.references.find(
           (item) => item.projectAssetId === slot.projectAssetId,
         );
@@ -109,6 +127,11 @@ export class GenerationQaService {
       expectedFacts: {
         positivePrompt: spec.positivePrompt,
         executionPrompt: target.compiledPrompt,
+        startBoundaryHash: target.startBoundaryHash,
+        endBoundaryHash: target.endBoundaryHash,
+        startKeyframeHash: target.startKeyframeHash,
+        endKeyframeHash: target.endKeyframeHash,
+        endKeyframeSoftTarget: target.endKeyframeSoftTarget,
       },
     });
     const inputHash = canonicalSha256({

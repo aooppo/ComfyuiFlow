@@ -643,6 +643,7 @@ export const GenerationProviderCapabilitiesV1Schema = z
     profileId: GenerationProviderProfileIdSchema,
     providerId: z.string().min(1),
     modelId: z.string().min(1),
+    videoControlTier: z.enum(["ORDINARY_REFERENCE", "LOCKED_START", "LOCKED_START_END"]),
     mode: z.literal("REFERENCE_TO_VIDEO"),
     aspectRatio: z.literal("PORTRAIT_9_16"),
     durationSeconds: z.literal(4),
@@ -675,6 +676,8 @@ export const GenerationExecutionSlotV1Schema = z
     characterStateVersionId: UuidSchema.nullable(),
     sha256: Sha256Schema,
     displayName: z.string().min(1).max(120),
+    sourceKind: z.enum(["PROJECT_ASSET", "KEYFRAME_ARTIFACT"]).optional(),
+    keyframeArtifactId: UuidSchema.optional(),
   })
   .strict();
 
@@ -688,6 +691,19 @@ export const GenerationExecutionPreviewShotV1Schema = z
     compiledPromptHash: Sha256Schema.nullable(),
     targetHash: Sha256Schema.nullable(),
     slots: z.array(GenerationExecutionSlotV1Schema).max(5),
+    continuity: z
+      .object({
+        startBoundaryHash: Sha256Schema,
+        endBoundaryHash: Sha256Schema,
+        startKeyframeArtifactId: UuidSchema,
+        startKeyframeHash: Sha256Schema,
+        endKeyframeArtifactId: UuidSchema,
+        endKeyframeHash: Sha256Schema,
+        endKeyframeSoftTarget: z.boolean(),
+        warnings: z.array(z.string().min(1).max(240)),
+      })
+      .strict()
+      .nullable(),
   })
   .strict();
 
@@ -708,6 +724,9 @@ export const GenerationExecutionPreviewV1Schema = z
     externalCalls: z.literal(0),
     retryOfJobId: UuidSchema.nullable(),
     retryRequirements: z.string().trim().min(1).max(4_000).nullable(),
+    continuityProfileVersionId: UuidSchema.nullable(),
+    keyframePlanVersionId: UuidSchema.nullable(),
+    continuityScopeHash: Sha256Schema.nullable(),
   })
   .strict();
 
@@ -717,6 +736,10 @@ export const CreateGenerationExecutionPreviewV1Schema = z
     generationSpecIds: z.array(UuidSchema).min(1).max(20),
     retryOfJobId: UuidSchema.optional(),
     retryRequirements: z.string().trim().min(1).max(4_000).optional(),
+    keyframePlanVersionId: UuidSchema.optional(),
+    requiredVideoControlTier: z
+      .enum(["ORDINARY_REFERENCE", "LOCKED_START", "LOCKED_START_END"])
+      .optional(),
   })
   .strict()
   .refine((value) => new Set(value.generationSpecIds).size === value.generationSpecIds.length, {
@@ -736,6 +759,10 @@ export const CreateGenerationBatchV1Schema = z
     expiresInSeconds: z.number().int().min(30).max(900).default(300),
     retryOfJobId: UuidSchema.optional(),
     retryRequirements: z.string().trim().min(1).max(4_000).optional(),
+    keyframePlanVersionId: UuidSchema.optional(),
+    requiredVideoControlTier: z
+      .enum(["ORDINARY_REFERENCE", "LOCKED_START", "LOCKED_START_END"])
+      .optional(),
   })
   .strict()
   .refine((value) => Boolean(value.retryOfJobId) === Boolean(value.retryRequirements), {
@@ -850,3 +877,212 @@ export type GenerationJobStatusV1 = z.infer<typeof GenerationJobStatusV1Schema>;
 export type AiQaRequestV1 = z.infer<typeof AiQaRequestV1Schema>;
 export type AiQaResultV1 = z.infer<typeof AiQaResultV1Schema>;
 export type HumanQaDecisionV1 = z.infer<typeof HumanQaDecisionV1Schema>;
+
+export const ContinuitySubjectKindV1Schema = z.enum([
+  "ENVIRONMENT",
+  "CHARACTER",
+  "PRODUCT",
+  "PROP",
+  "CAMERA",
+  "VISUAL_STYLE",
+]);
+export const ContinuityPolicyV1Schema = z.enum(["WHOLE_FILM_HOLD", "SHOT_CHANGE", "UNIMPORTANT"]);
+export const ContinuityImportanceV1Schema = z.enum(["HARD", "SOFT"]);
+export const ContinuityIssueSeverityV1Schema = z.enum(["BLOCKER", "WARNING"]);
+export const ContinuityActionV1Schema = z.enum([
+  "INHERIT_PREVIOUS",
+  "DECLARE_SHOT_CHANGE",
+  "SELECT_APPROVED_REFERENCE",
+]);
+
+export const ContinuityRuleInputV1Schema = z
+  .object({
+    propertyKey: z.string().trim().min(1).max(120),
+    policy: ContinuityPolicyV1Schema,
+    importance: ContinuityImportanceV1Schema,
+    expectedValue: z.unknown(),
+    explanation: z.string().trim().max(2_000).optional(),
+  })
+  .strict();
+
+export const ContinuitySubjectInputV1Schema = z
+  .object({
+    subjectKey: z.string().trim().min(1).max(160),
+    kind: ContinuitySubjectKindV1Schema,
+    label: z.string().trim().min(1).max(160),
+    productionAssetVersionId: UuidSchema.nullable().optional(),
+    assetVersionFileId: UuidSchema.nullable().optional(),
+    sourceSha256: Sha256Schema.nullable().optional(),
+    facts: z.record(z.string(), z.unknown()),
+    rules: z.array(ContinuityRuleInputV1Schema).min(1).max(40),
+  })
+  .strict();
+
+export const ContinuityBoundaryInputV1Schema = z
+  .object({
+    boundaryIndex: z.number().int().min(0).max(20),
+    label: z.string().trim().min(1).max(160),
+    state: z.record(z.string(), z.unknown()),
+  })
+  .strict();
+
+export const ShotContinuityStateInputV1Schema = z
+  .object({
+    storyboardShotId: UuidSchema,
+    ordinal: z.number().int().min(1).max(20),
+    startBoundaryIndex: z.number().int().min(0).max(19),
+    endBoundaryIndex: z.number().int().min(1).max(20),
+    declaredChanges: z.record(z.string(), z.unknown()),
+  })
+  .strict()
+  .refine((value) => value.endBoundaryIndex === value.startBoundaryIndex + 1, {
+    message: "Each shot must reference two adjacent shared boundaries",
+  });
+
+export const CreateContinuityVersionV1Schema = z
+  .object({
+    parentVersionId: UuidSchema.optional(),
+    expectedRowVersion: z.number().int().nonnegative(),
+    subjects: z.array(ContinuitySubjectInputV1Schema).min(1).max(100),
+    boundaries: z.array(ContinuityBoundaryInputV1Schema).min(2).max(21),
+    shots: z.array(ShotContinuityStateInputV1Schema).min(1).max(20),
+    idempotencyKey: z.string().trim().min(1).max(120),
+  })
+  .strict();
+
+export const ContinuityIssueV1Schema = z
+  .object({
+    severity: ContinuityIssueSeverityV1Schema,
+    code: z.string().min(1).max(80),
+    subjectKey: z.string().max(160).nullable(),
+    shotOrdinal: z.number().int().min(1).max(20).nullable(),
+    boundaryIndex: z.number().int().min(0).max(20).nullable(),
+    message: z.string().min(1).max(2_000),
+    actions: z.array(ContinuityActionV1Schema).max(3),
+  })
+  .strict();
+
+export const ContinuityPreflightV1Schema = z
+  .object({
+    schemaVersion: z.literal("continuity-preflight-v1"),
+    continuityProfileVersionId: UuidSchema,
+    ready: z.boolean(),
+    blockers: z.array(ContinuityIssueV1Schema),
+    warnings: z.array(ContinuityIssueV1Schema),
+    preflightHash: Sha256Schema,
+    externalCalls: z.literal(0),
+  })
+  .strict();
+
+export const ContinuityDecisionInputV1Schema = z
+  .object({
+    decision: z.enum(["APPROVED", "REJECTED", "REVOKED"]),
+    preflightHash: Sha256Schema,
+    idempotencyKey: z.string().trim().min(1).max(120),
+    notes: z.string().trim().max(8_000).optional(),
+  })
+  .strict();
+
+export const KeyframeProviderProfileIdSchema = z.enum([
+  "fake-keyframe-v1",
+  "codexmanager-gpt-image-2-v1",
+]);
+export const KeyframeCapabilityV1Schema = z
+  .object({
+    schemaVersion: z.literal("keyframe-capability-v1"),
+    profileId: KeyframeProviderProfileIdSchema,
+    providerId: z.enum(["fake", "codexmanager-local"]),
+    modelId: z.string().min(1).max(160),
+    modelSnapshot: z.string().min(1).max(160),
+    generation: z.boolean(),
+    editing: z.boolean(),
+    multipleReferenceImages: z.boolean(),
+    highFidelityInput: z.boolean(),
+    maximumReferenceImages: z.number().int().min(0).max(20),
+    providerRequestSize: z.literal("1024x1536"),
+    width: z.literal(768),
+    height: z.literal(1344),
+    quality: z.literal("low"),
+    priceAvailable: z.boolean(),
+    estimatedCostUsdPerImage: z.number().nonnegative().nullable(),
+    priceAsOf: z.string().datetime().nullable(),
+    priceExpiresAt: z.string().datetime().nullable(),
+    liveReady: z.boolean(),
+    blockers: z.array(z.string().min(1).max(80)),
+  })
+  .strict();
+
+export const KeyframePlanPreviewTargetV1Schema = z
+  .object({
+    boundaryId: UuidSchema,
+    boundaryIndex: z.number().int().min(0).max(20),
+    label: z.string().min(1).max(160),
+    stateHash: Sha256Schema,
+    referenceCount: z.number().int().min(0).max(20),
+    referencesHash: Sha256Schema,
+    promptHash: Sha256Schema,
+    targetHash: Sha256Schema,
+  })
+  .strict();
+
+export const KeyframePlanPreviewV1Schema = z
+  .object({
+    schemaVersion: z.literal("keyframe-plan-preview-v1"),
+    projectId: UuidSchema,
+    continuityProfileVersionId: UuidSchema,
+    capability: KeyframeCapabilityV1Schema,
+    targets: z.array(KeyframePlanPreviewTargetV1Schema).min(2).max(21),
+    maximumCalls: z.number().int().min(0).max(21),
+    estimatedMaximumCostUsd: z.number().nonnegative().nullable(),
+    noRetry: z.literal(true),
+    externalCalls: z.literal(0),
+    ready: z.boolean(),
+    blockers: z.array(z.string().min(1).max(80)),
+    planHash: Sha256Schema,
+  })
+  .strict();
+
+export const PreviewKeyframePlanV1Schema = z
+  .object({ providerProfileId: KeyframeProviderProfileIdSchema.default("fake-keyframe-v1") })
+  .strict();
+
+export const CreateKeyframePlanV1Schema = z
+  .object({
+    providerProfileId: KeyframeProviderProfileIdSchema,
+    planHash: Sha256Schema,
+  })
+  .strict();
+
+export const AuthorizeKeyframePlanV1Schema = z
+  .object({
+    planHash: Sha256Schema,
+    confirmed: z.literal(true),
+    maximumCalls: z.number().int().min(1).max(21),
+    expiresInSeconds: z.number().int().min(30).max(900).default(300),
+    idempotencyKey: z.string().trim().min(1).max(120),
+  })
+  .strict();
+
+export const KeyframeDecisionInputV1Schema = z
+  .object({
+    decision: z.enum(["APPROVED", "REJECTED"]),
+    idempotencyKey: z.string().trim().min(1).max(120),
+    notes: z.string().trim().max(8_000).optional(),
+  })
+  .strict();
+
+export const VideoControlTierV1Schema = z.enum([
+  "ORDINARY_REFERENCE",
+  "LOCKED_START",
+  "LOCKED_START_END",
+]);
+
+export type ContinuitySubjectKindV1 = z.infer<typeof ContinuitySubjectKindV1Schema>;
+export type ContinuityPolicyV1 = z.infer<typeof ContinuityPolicyV1Schema>;
+export type ContinuitySubjectInputV1 = z.infer<typeof ContinuitySubjectInputV1Schema>;
+export type CreateContinuityVersionV1 = z.infer<typeof CreateContinuityVersionV1Schema>;
+export type ContinuityPreflightV1 = z.infer<typeof ContinuityPreflightV1Schema>;
+export type KeyframeProviderProfileId = z.infer<typeof KeyframeProviderProfileIdSchema>;
+export type KeyframeCapabilityV1 = z.infer<typeof KeyframeCapabilityV1Schema>;
+export type KeyframePlanPreviewV1 = z.infer<typeof KeyframePlanPreviewV1Schema>;
+export type VideoControlTierV1 = z.infer<typeof VideoControlTierV1Schema>;

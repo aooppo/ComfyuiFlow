@@ -23,6 +23,8 @@ import { prisma, type ProjectPrisma } from "./prisma.js";
 
 type PreviewShot = GenerationExecutionPreviewV1["shots"][number];
 
+type ContinuityBinding = NonNullable<PreviewShot["continuity"]>;
+
 const specInclude = {
   references: {
     include: {
@@ -114,6 +116,15 @@ export class GenerationExecutionService {
         );
     }
 
+    const continuityPlan = input.keyframePlanVersionId
+      ? await this.resolveContinuityPlan(
+          input.keyframePlanVersionId,
+          plan.projectId,
+          plan.storyboardVersionId,
+          specs.map((spec) => spec.ordinal),
+        )
+      : null;
+
     const compiled = new Map<string, string>();
     const shots: PreviewShot[] = [];
     for (const spec of specs) {
@@ -129,6 +140,9 @@ export class GenerationExecutionService {
         blockers.push("GENERATION_PROFILE_INCOMPATIBLE");
 
       const slotResult = await this.resolveSlots(spec.references, blockers);
+      const requestedTier = input.requiredVideoControlTier ?? "ORDINARY_REFERENCE";
+      if (this.videoTierRank(requestedTier) > this.videoTierRank(provider.videoControlTier))
+        blockers.push("VIDEO_CAPABILITY_INSUFFICIENT");
       if (input.providerProfileId === "minimax-h3-4s-v1") {
         if (this.environment.PROJECT_GENERATION_LIVE_ENABLED !== "true")
           blockers.push("LIVE_DISABLED");
@@ -146,7 +160,23 @@ export class GenerationExecutionService {
       let compiledPromptHash: string | null = null;
       let targetHash: string | null = null;
       let promptSummary = spec.positivePrompt.slice(0, 2_000);
-      if (slotResult.slots.length === 5) {
+      let resolvedSlots = slotResult.slots;
+      const continuity = continuityPlan?.shots.get(spec.ordinal) ?? null;
+      if (continuityPlan && !continuity) blockers.push("KEYFRAME_SCOPE_CHANGED");
+      if (continuity && resolvedSlots.length === 5) {
+        resolvedSlots = resolvedSlots.map((slot) =>
+          slot.role === "SCENE"
+            ? {
+                ...slot,
+                sha256: continuity.startKeyframeHash,
+                displayName: `已批准起始关键帧 K${spec.ordinal - 1}`,
+                sourceKind: "KEYFRAME_ARTIFACT" as const,
+                keyframeArtifactId: continuity.startKeyframeArtifactId,
+              }
+            : { ...slot, sourceKind: "PROJECT_ASSET" as const },
+        );
+      }
+      if (resolvedSlots.length === 5) {
         const prompt = compileH3GenerationPrompt({
           positivePrompt: spec.positivePrompt,
           sceneName: slotResult.names.scene,
@@ -174,7 +204,8 @@ export class GenerationExecutionService {
           outputHash: spec.outputHash,
           provider,
           compiledPromptHash,
-          slots: slotResult.slots,
+          slots: resolvedSlots,
+          continuity,
         });
       }
       shots.push({
@@ -185,7 +216,8 @@ export class GenerationExecutionService {
         promptSummary,
         compiledPromptHash,
         targetHash,
-        slots: slotResult.slots,
+        slots: resolvedSlots,
+        continuity,
       });
     }
 
@@ -210,6 +242,9 @@ export class GenerationExecutionService {
       externalCalls: 0 as const,
       retryOfJobId: input.retryOfJobId ?? null,
       retryRequirements: input.retryRequirements ?? null,
+      continuityProfileVersionId: continuityPlan?.continuityProfileVersionId ?? null,
+      keyframePlanVersionId: continuityPlan?.keyframePlanVersionId ?? null,
+      continuityScopeHash: continuityPlan?.scopeHash ?? null,
     };
     const publicPreview = GenerationExecutionPreviewV1Schema.parse({
       ...previewCore,
@@ -329,6 +364,95 @@ export class GenerationExecutionService {
     };
   }
 
+  private videoTierRank(tier: "ORDINARY_REFERENCE" | "LOCKED_START" | "LOCKED_START_END") {
+    return { ORDINARY_REFERENCE: 0, LOCKED_START: 1, LOCKED_START_END: 2 }[tier];
+  }
+
+  private async resolveContinuityPlan(
+    keyframePlanVersionId: string,
+    projectId: string,
+    storyboardVersionId: string,
+    ordinals: number[],
+  ) {
+    const plan = await this.client.keyframePlanVersion.findUnique({
+      where: { id: keyframePlanVersionId },
+      include: {
+        continuityProfileVersion: { include: { continuityProfile: true } },
+        targets: {
+          orderBy: { boundaryIndex: "asc" },
+          include: {
+            shotBoundary: true,
+            attempts: {
+              include: {
+                artifact: { include: { decisions: { orderBy: { createdAt: "desc" } } } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!plan || plan.projectId !== projectId)
+      throw this.error("KEYFRAME_SCOPE_CHANGED", "Approved keyframe plan was not found", 409);
+    const profile = plan.continuityProfileVersion;
+    if (
+      plan.status !== "APPROVED" ||
+      profile.storyboardVersionId !== storyboardVersionId ||
+      profile.continuityProfile.approvedVersionId !== profile.id
+    )
+      throw this.error(
+        "KEYFRAME_SCOPE_CHANGED",
+        "Approve a current keyframe contact sheet before video preview",
+        409,
+      );
+    const approvedByBoundary = new Map<
+      number,
+      { artifactId: string; sha256: string; boundaryHash: string }
+    >();
+    for (const target of plan.targets) {
+      const artifact = target.attempts[0]?.artifact;
+      if (!artifact || artifact.decisions[0]?.decision !== "APPROVED")
+        throw this.error("KEYFRAME_SCOPE_CHANGED", "Every boundary keyframe must be approved", 409);
+      await this.storage.resolveVerified(
+        artifact.storageKey,
+        artifact.sha256,
+        Number(artifact.byteSize),
+      );
+      approvedByBoundary.set(target.boundaryIndex, {
+        artifactId: artifact.id,
+        sha256: artifact.sha256,
+        boundaryHash: target.shotBoundary.stateHash,
+      });
+    }
+    const shots = new Map<number, ContinuityBinding>();
+    for (const ordinal of ordinals) {
+      const start = approvedByBoundary.get(ordinal - 1);
+      const end = approvedByBoundary.get(ordinal);
+      if (!start || !end)
+        throw this.error("KEYFRAME_SCOPE_CHANGED", "Shot boundary keyframes are incomplete", 409);
+      shots.set(ordinal, {
+        startBoundaryHash: start.boundaryHash,
+        endBoundaryHash: end.boundaryHash,
+        startKeyframeArtifactId: start.artifactId,
+        startKeyframeHash: start.sha256,
+        endKeyframeArtifactId: end.artifactId,
+        endKeyframeHash: end.sha256,
+        endKeyframeSoftTarget: true,
+        warnings: ["当前 H3 为普通参考：结束关键帧只用于 AI QA 对比，不能硬锁最后一帧"],
+      });
+    }
+    return {
+      continuityProfileVersionId: profile.id,
+      keyframePlanVersionId: plan.id,
+      scopeHash: canonicalSha256({
+        profileOutputHash: profile.outputHash,
+        keyframePlanHash: plan.planHash,
+        providerProfileId: plan.providerProfileId,
+        shots: [...shots.entries()],
+      }),
+      shots,
+    };
+  }
+
   async createBatch(rawInput: CreateGenerationBatchInput, idempotencyKey: string): Promise<any> {
     if (!idempotencyKey.trim())
       throw this.error("PRECONDITION_REQUIRED", "Idempotency-Key is required", 428);
@@ -349,6 +473,12 @@ export class GenerationExecutionService {
       generationSpecIds: input.generationSpecIds,
       ...(input.retryOfJobId ? { retryOfJobId: input.retryOfJobId } : {}),
       ...(input.retryRequirements ? { retryRequirements: input.retryRequirements } : {}),
+      ...(input.keyframePlanVersionId
+        ? { keyframePlanVersionId: input.keyframePlanVersionId }
+        : {}),
+      ...(input.requiredVideoControlTier
+        ? { requiredVideoControlTier: input.requiredVideoControlTier }
+        : {}),
     });
     if (built.public.previewHash !== input.previewHash)
       throw this.error("PREVIEW_STALE", "Preview changed; review it again before confirming", 409);
@@ -388,6 +518,10 @@ export class GenerationExecutionService {
             workflowId: provider.workflowId,
             workflowVersion: provider.workflowVersion,
             workflowSha256: provider.workflowSha256,
+            continuityProfileVersionId: built.public.continuityProfileVersionId,
+            keyframePlanVersionId: built.public.keyframePlanVersionId,
+            continuityScopeHash: built.public.continuityScopeHash,
+            videoControlTier: provider.videoControlTier,
             previewHash: built.public.previewHash,
             scopeHash,
             idempotencyKey,
@@ -407,6 +541,11 @@ export class GenerationExecutionService {
               referencesHash: canonicalSha256(shot.slots),
               compiledPrompt: built.compiled.get(shot.generationSpecId)!,
               slotManifestJson: shot.slots as Prisma.InputJsonValue,
+              startBoundaryHash: shot.continuity?.startBoundaryHash ?? null,
+              endBoundaryHash: shot.continuity?.endBoundaryHash ?? null,
+              startKeyframeHash: shot.continuity?.startKeyframeHash ?? null,
+              endKeyframeHash: shot.continuity?.endKeyframeHash ?? null,
+              endKeyframeSoftTarget: shot.continuity?.endKeyframeSoftTarget ?? false,
               ...(input.retryOfJobId ? { retryOfJobId: input.retryOfJobId } : {}),
             },
           });
@@ -436,6 +575,43 @@ export class GenerationExecutionService {
     );
     void requestHash;
     return this.getBatch(batchId);
+  }
+
+  async assertContinuityCurrent(batchId: string) {
+    const batch = await this.client.generationBatch.findUnique({
+      where: { id: batchId },
+      include: {
+        generationPlanVersion: { include: { generationPlan: true } },
+        targets: { orderBy: { ordinal: "asc" } },
+      },
+    });
+    if (!batch)
+      throw this.error("GENERATION_TARGET_INVALID", "Generation batch was not found", 404);
+    if (!batch.keyframePlanVersionId) return { current: true as const };
+    const continuity = await this.resolveContinuityPlan(
+      batch.keyframePlanVersionId,
+      batch.projectId,
+      batch.generationPlanVersion.generationPlan.storyboardVersionId,
+      batch.targets.map((target) => target.ordinal),
+    );
+    if (batch.continuityScopeHash !== continuity.scopeHash)
+      throw this.error("KEYFRAME_SCOPE_CHANGED", "Continuity scope changed before submission", 409);
+    for (const target of batch.targets) {
+      const expected = continuity.shots.get(target.ordinal);
+      if (
+        !expected ||
+        target.startBoundaryHash !== expected.startBoundaryHash ||
+        target.endBoundaryHash !== expected.endBoundaryHash ||
+        target.startKeyframeHash !== expected.startKeyframeHash ||
+        target.endKeyframeHash !== expected.endKeyframeHash
+      )
+        throw this.error(
+          "KEYFRAME_SCOPE_CHANGED",
+          "A shot boundary changed before submission",
+          409,
+        );
+    }
+    return { current: true as const };
   }
 
   async getBatch(batchId: string): Promise<any> {

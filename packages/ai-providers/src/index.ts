@@ -6,3 +6,5 @@ export * from "./openai-asset-understanding-provider.js";
 export * from "./openai-provider.js";
 export * from "./provider.js";
 export * from "./video-qa-provider.js";
+export * from "./keyframe-image-provider.js";
+export * from "./codexmanager-keyframe-provider.js";

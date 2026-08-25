@@ -94,6 +94,7 @@ describe("generation execution contracts", () => {
           promptSummary: "one approved shot",
           compiledPromptHash: "b".repeat(64),
           targetHash: "c".repeat(64),
+          continuity: null,
           slots: slots.map((role) => ({
             role,
             projectAssetId: crypto.randomUUID(),
@@ -114,6 +115,9 @@ describe("generation execution contracts", () => {
       externalCalls: 0,
       retryOfJobId: null,
       retryRequirements: null,
+      continuityProfileVersionId: null,
+      keyframePlanVersionId: null,
+      continuityScopeHash: null,
     };
     expect(GenerationExecutionPreviewV1Schema.parse(preview).shots[0]?.slots).toHaveLength(5);
     expect(() =>

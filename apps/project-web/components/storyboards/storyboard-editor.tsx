@@ -604,9 +604,15 @@ export function StoryboardEditor({
           {storyboard.approvedVersionId && (
             <section className="shotPlanNavigation" aria-label="Shot Plan navigation">
               <div>
-                <h3>Shot Plan</h3>
-                <p>已有计划和它们的生成批次会永久保留；重新生成不会覆盖先前的结果。</p>
+                <h3>下一步：全片一致性</h3>
+                <p>先确认场景、人物、产品、道具和镜头交界状态，再进入付费生成。</p>
               </div>
+              <a
+                className="primaryButton"
+                href={`/projects/${projectId}/storyboards/${storyboardId}/continuity`}
+              >
+                设置全片一致性
+              </a>
               {generationPlans.length > 0 ? (
                 <>
                   <a

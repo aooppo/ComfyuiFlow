@@ -26,6 +26,7 @@ const base = {
     "CHARACTER_REAR",
   ] as const,
   outputMediaType: "video/mp4" as const,
+  videoControlTier: "ORDINARY_REFERENCE" as const,
   workflowVersion: "1.0.0",
 };
 

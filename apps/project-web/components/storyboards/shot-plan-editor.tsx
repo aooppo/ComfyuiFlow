@@ -69,6 +69,9 @@ interface ExecutionPreview {
   maximumAiQaCalls: number;
   aiQaProviderId: string;
   aiQaModelId: string;
+  continuityProfileVersionId: string | null;
+  keyframePlanVersionId: string | null;
+  continuityScopeHash: string | null;
   provider: {
     profileId: "fake-video-v1" | "minimax-h3-4s-v1";
     providerId: string;
@@ -77,6 +80,7 @@ interface ExecutionPreview {
     workflowVersion: string;
     workflowSha256: string;
     costEstimateUsd: number | null;
+    videoControlTier: "ORDINARY_REFERENCE" | "LOCKED_START" | "LOCKED_START_END";
   };
   shots: Array<{
     generationSpecId: string;
@@ -89,8 +93,29 @@ interface ExecutionPreview {
       projectAssetId: string;
       displayName: string;
       sha256: string;
+      sourceKind?: "PROJECT_ASSET" | "KEYFRAME_ARTIFACT";
+      keyframeArtifactId?: string;
     }>;
+    continuity: null | {
+      startBoundaryHash: string;
+      endBoundaryHash: string;
+      startKeyframeArtifactId: string;
+      startKeyframeHash: string;
+      endKeyframeArtifactId: string;
+      endKeyframeHash: string;
+      endKeyframeSoftTarget: boolean;
+      warnings: string[];
+    };
   }>;
+}
+
+interface ContinuitySummary {
+  profile: null | {
+    headVersion: {
+      id: string;
+      keyframePlans: Array<{ id: string; status: string; createdAt: string }>;
+    };
+  };
 }
 
 interface BatchView {
@@ -165,6 +190,25 @@ interface PlanAssemblyState {
   sources: AssemblySourceView[];
   currentAssembly: PlanAssemblyView | null;
   assemblies: PlanAssemblyView[];
+}
+
+interface PlanDraftState {
+  eligible: boolean;
+  missingOrdinals: number[];
+  sourceSetHash: string | null;
+  warnings: Array<{ ordinal: number; warning: string }>;
+  currentDraft: null | {
+    id: string;
+    contentUrl: string;
+    downloadUrl: string;
+    width: number;
+    height: number;
+    fps: number;
+    durationSeconds: number;
+    createdAt: string;
+    warnings: Array<{ ordinal: number; warning: string }>;
+  };
+  history: Array<{ id: string; stale: boolean; createdAt: string; contentUrl: string }>;
 }
 
 const activeBatchStatuses = new Set(["QUEUED", "RUNNING", "PAUSED", "AWAITING_HUMAN_QA"]);
@@ -248,13 +292,17 @@ export function ShotPlanEditor({
   const [retryRequirements, setRetryRequirements] = useState("");
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [assemblyState, setAssemblyState] = useState<PlanAssemblyState | null>(null);
+  const [draftState, setDraftState] = useState<PlanDraftState | null>(null);
   const [assembling, setAssembling] = useState(false);
+  const [drafting, setDrafting] = useState(false);
+  const [approvedKeyframePlanId, setApprovedKeyframePlanId] = useState<string | null>(null);
   const retryPanelRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
-    const [planResponse, versionsResponse] = await Promise.all([
+    const [planResponse, versionsResponse, continuityResponse] = await Promise.all([
       fetch(`/api/generation-plans/${planId}`),
       fetch(`/api/generation-plans/${planId}/versions`),
+      fetch(`/api/storyboards/${storyboardId}/continuity`),
     ]);
     const body = (await planResponse.json()) as PlanView & { error?: { message: string } };
     if (!planResponse.ok) throw new Error(body.error?.message ?? "Shot plan could not be loaded");
@@ -267,13 +315,23 @@ export function ShotPlanEditor({
       current.length ? current : body.headVersion.specs.map((spec) => spec.id),
     );
     setVersions(history.versions ?? []);
+    if (continuityResponse.ok) {
+      const continuity = (await continuityResponse.json()) as ContinuitySummary;
+      setApprovedKeyframePlanId(
+        continuity.profile?.headVersion.keyframePlans.find((item) => item.status === "APPROVED")
+          ?.id ?? null,
+      );
+    } else {
+      setApprovedKeyframePlanId(null);
+    }
     setEtag(planResponse.headers.get("etag") ?? `"generation-plan-${body.rowVersion}"`);
     if (body.approvedVersionId) {
-      const [batchResponse, assemblyResponse] = await Promise.all([
+      const [batchResponse, assemblyResponse, draftResponse] = await Promise.all([
         fetch(
           `/api/generation-batches?generationPlanVersionId=${encodeURIComponent(body.approvedVersionId)}`,
         ),
         fetch(`/api/generation-plans/${planId}/assemblies`),
+        fetch(`/api/generation-plans/${planId}/drafts`),
       ]);
       if (batchResponse.ok) {
         const loaded = (await batchResponse.json()) as {
@@ -294,12 +352,14 @@ export function ShotPlanEditor({
       if (assemblyResponse.ok) {
         setAssemblyState((await assemblyResponse.json()) as PlanAssemblyState);
       }
+      if (draftResponse.ok) setDraftState((await draftResponse.json()) as PlanDraftState);
     } else {
       setBatch(null);
       setBatchHistory([]);
       setAssemblyState(null);
+      setDraftState(null);
     }
-  }, [planId]);
+  }, [planId, storyboardId]);
 
   useEffect(() => {
     void load().catch((reason: unknown) =>
@@ -433,6 +493,12 @@ export function ShotPlanEditor({
         body: JSON.stringify({
           providerProfileId: providerProfile,
           generationSpecIds: requestedSpecIds,
+          ...(approvedKeyframePlanId
+            ? {
+                keyframePlanVersionId: approvedKeyframePlanId,
+                requiredVideoControlTier: "ORDINARY_REFERENCE",
+              }
+            : {}),
           ...(retryJobId
             ? {
                 retryOfJobId: retryJobId,
@@ -474,6 +540,12 @@ export function ShotPlanEditor({
         previewHash: executionPreview.previewHash,
         confirmed: true,
         expiresInSeconds: 300,
+        ...(executionPreview.keyframePlanVersionId
+          ? {
+              keyframePlanVersionId: executionPreview.keyframePlanVersionId,
+              requiredVideoControlTier: "ORDINARY_REFERENCE",
+            }
+          : {}),
         ...(executionPreview.retryOfJobId
           ? {
               retryOfJobId: executionPreview.retryOfJobId,
@@ -512,6 +584,37 @@ export function ShotPlanEditor({
     const response = await fetch(`/api/generation-plans/${planId}/assemblies`);
     if (!response.ok) return;
     setAssemblyState((await response.json()) as PlanAssemblyState);
+  }
+
+  async function refreshDraft() {
+    const response = await fetch(`/api/generation-plans/${planId}/drafts`);
+    if (response.ok) setDraftState((await response.json()) as PlanDraftState);
+  }
+
+  async function createDraft() {
+    if (!draftState?.eligible || !draftState.sourceSetHash) return;
+    setDrafting(true);
+    setError("");
+    const response = await fetch(`/api/generation-plans/${planId}/drafts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": crypto.randomUUID(),
+      },
+      body: JSON.stringify({ expectedSourceSetHash: draftState.sourceSetHash }),
+    });
+    const body = (await response.json()) as {
+      state?: PlanDraftState;
+      error?: { message: string };
+    };
+    if (!response.ok) {
+      setError(body.error?.message ?? "整片草稿创建失败。");
+      await refreshDraft();
+    } else {
+      if (body.state) setDraftState(body.state);
+      setMessage("带告警的整片草稿已在本地创建；它不是最终成片，也没有改变人工 PASS。");
+    }
+    setDrafting(false);
   }
 
   async function createAssembly() {
@@ -564,7 +667,7 @@ export function ShotPlanEditor({
       const body = (await response.json()) as { error?: { message: string } };
       setError(body.error?.message ?? "Human QA decision could not be recorded");
     } else {
-      await Promise.all([refreshBatch(), refreshAssembly()]);
+      await Promise.all([refreshBatch(), refreshAssembly(), refreshDraft()]);
     }
   }
 
@@ -811,6 +914,12 @@ export function ShotPlanEditor({
     <main className="pageFrame storyboardPage">
       <a className="backLink" href={`/projects/${projectId}/storyboards/${storyboardId}`}>
         ← Storyboard
+      </a>
+      <a
+        className="backLink"
+        href={`/projects/${projectId}/storyboards/${storyboardId}/continuity`}
+      >
+        全片一致性设置
       </a>
       <header className="storyboardHero">
         <div>
@@ -1174,6 +1283,28 @@ export function ShotPlanEditor({
                 ? "。CodexManager：每个分镜最多一次外部 AI 调用；本应用无法核实价格。"
                 : ". CodexManager: at most one external AI call per shot; price cannot be verified by this app."}
             </p>
+            <p>
+              <strong>
+                {executionPreview.provider.videoControlTier === "ORDINARY_REFERENCE"
+                  ? isChinese
+                    ? "普通参考"
+                    : "Ordinary reference"
+                  : executionPreview.provider.videoControlTier === "LOCKED_START"
+                    ? isChinese
+                      ? "锁定首帧"
+                      : "Locked start frame"
+                    : isChinese
+                      ? "锁定首尾帧"
+                      : "Locked start and end frames"}
+              </strong>
+              {executionPreview.keyframePlanVersionId
+                ? isChinese
+                  ? " · 已绑定批准的关键帧方案。H3 使用起始关键帧作为场景参考，目标结束帧仅由 AI QA 对比，不能保证逐像素到达。"
+                  : " · An approved keyframe plan is bound. H3 uses the start frame as its scene reference; the target end frame is only checked by AI QA and is not pixel-locked."
+                : isChinese
+                  ? " · 未绑定关键帧方案，本次只能沿用普通素材参考。"
+                  : " · No keyframe plan is bound; this run can only use ordinary asset references."}
+            </p>
             {executionPreview.shots.map((shot) => (
               <article key={shot.generationSpecId} className="executionShot">
                 <h3>
@@ -1186,7 +1317,6 @@ export function ShotPlanEditor({
                       ? "已阻止"
                       : "blocked"}
                 </h3>
-                <p>{shot.promptSummary}</p>
                 {shot.blockers.length > 0 && (
                   <p className="formError">{shot.blockers.map(t).join(" · ")}</p>
                 )}
@@ -1194,15 +1324,33 @@ export function ShotPlanEditor({
                   {shot.slots.map((slot) => (
                     <figure key={slot.role}>
                       <img
-                        src={`/api/assets/${slot.projectAssetId}/content`}
+                        src={
+                          slot.sourceKind === "KEYFRAME_ARTIFACT" && slot.keyframeArtifactId
+                            ? `/api/keyframe-artifacts/${slot.keyframeArtifactId}/content`
+                            : `/api/assets/${slot.projectAssetId}/content`
+                        }
                         alt={slot.displayName}
                       />
                       <figcaption>{t(slot.role)}</figcaption>
                     </figure>
                   ))}
                 </div>
+                {shot.continuity && (
+                  <div className="noticeStack">
+                    <p>
+                      {isChinese ? "起始画面：" : "Start frame: "}K{shot.ordinal - 1} ·{" "}
+                      {isChinese ? "结束目标：" : "End target: "}K{shot.ordinal}
+                    </p>
+                    {shot.continuity.warnings.map((warning) => (
+                      <p key={warning} className="formWarning">
+                        {warning}
+                      </p>
+                    ))}
+                  </div>
+                )}
                 <details>
-                  <summary>{isChinese ? "证据" : "Evidence"}</summary>
+                  <summary>{isChinese ? "高级信息" : "Advanced information"}</summary>
+                  <p>{shot.promptSummary}</p>
                   <p>
                     {isChinese ? "工作流" : "Workflow"} {executionPreview.provider.workflowId} v
                     {executionPreview.provider.workflowVersion}
@@ -1376,6 +1524,72 @@ export function ShotPlanEditor({
               .map((historicalBatch) => (
                 <div key={historicalBatch.id}>{renderBatchPanel(historicalBatch, true)}</div>
               ))}
+          </section>
+        )}
+        {plan.approvedVersionId && (
+          <section className="assemblyWorkspace draftWorkspace" aria-label="带告警的整片草稿">
+            <div>
+              <p className="eyebrow">本地草稿 · 不是最终成片</p>
+              <h3>带告警的整片草稿</h3>
+              <p>
+                只要每个 Shot
+                都有可播放、技术有效的结果，就能先按顺序整体观看。视觉偏差和未通过状态会保留为告警；不会自动重试，也不会自动变成人工
+                PASS。
+              </p>
+            </div>
+            {!draftState ? (
+              <p className="noticePanel">正在检查可播放结果…</p>
+            ) : !draftState.eligible ? (
+              <p className="noticePanel">
+                还缺少 {draftState.missingOrdinals.map((ordinal) => `Shot ${ordinal}`).join("、")}{" "}
+                的可播放结果。
+              </p>
+            ) : (
+              <>
+                {draftState.warnings.length > 0 && (
+                  <div className="warningPanel">
+                    <strong>草稿将带以下告警</strong>
+                    <ul>
+                      {draftState.warnings.map((warning, index) => (
+                        <li key={`${warning.ordinal}-${index}`}>
+                          Shot {warning.ordinal}：{warning.warning}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {!draftState.currentDraft && (
+                  <button
+                    className="primaryButton"
+                    disabled={drafting}
+                    onClick={() => void createDraft()}
+                  >
+                    {drafting ? "正在本地生成草稿…" : "生成带告警的整片草稿"}
+                  </button>
+                )}
+              </>
+            )}
+            {draftState?.currentDraft && (
+              <article className="assemblyCard currentAssembly draftCard">
+                <div className="batchHeading">
+                  <div>
+                    <p className="eyebrow">DRAFT · 不可自动转正</p>
+                    <h3>当前整片草稿</h3>
+                  </div>
+                  <time dateTime={draftState.currentDraft.createdAt}>
+                    {new Date(draftState.currentDraft.createdAt).toLocaleString()}
+                  </time>
+                </div>
+                <video controls preload="metadata" src={draftState.currentDraft.contentUrl} />
+                <a className="panelButton" href={draftState.currentDraft.downloadUrl}>
+                  下载草稿
+                </a>
+                <p className="fieldHint">
+                  {draftState.currentDraft.width}×{draftState.currentDraft.height} ·{" "}
+                  {draftState.currentDraft.fps.toFixed(2)} fps · 明确非最终成片
+                </p>
+              </article>
+            )}
           </section>
         )}
         {plan.approvedVersionId && (

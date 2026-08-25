@@ -155,6 +155,15 @@ export class GenerationWorker {
       }
       let providerTaskId = job.providerTaskId;
       if (job.status === "QUEUED") {
+        try {
+          await this.execution.assertContinuityCurrent(job.generationBatchId);
+        } catch (error) {
+          if (error instanceof ProjectAssetError) {
+            await this.pausePreflight(job.id, job.generationBatchId, error.code);
+            return { id: job.id, status: "QUEUED" as const, safeResultCode: error.code };
+          }
+          throw error;
+        }
         const [generationReadiness, qaReadiness] = await Promise.all([
           this.provider.preflight(),
           this.qaProvider.validateConfiguration(),
@@ -292,6 +301,18 @@ export class GenerationWorker {
   private async materializeSlots(slots: GenerationExecutionSlotV1[]) {
     return Promise.all(
       slots.map(async (slot): Promise<MaterializedGenerationSlot> => {
+        if (slot.sourceKind === "KEYFRAME_ARTIFACT" && slot.keyframeArtifactId) {
+          const keyframe = await this.client.keyframeArtifact.findUnique({
+            where: { id: slot.keyframeArtifactId },
+          });
+          if (!keyframe || keyframe.sha256 !== slot.sha256) throw new Error("REFERENCE_NOT_READY");
+          const localPath = await this.sourceStorage.resolveVerified(
+            keyframe.storageKey,
+            keyframe.sha256,
+            Number(keyframe.byteSize),
+          );
+          return { ...slot, localPath };
+        }
         const asset = await this.client.asset.findUnique({
           where: { id: slot.projectAssetId },
           include: { storedObject: true },
