@@ -123,10 +123,10 @@ describe.runIf(enabled)("Continuity PostgreSQL lineage", () => {
       data: {
         projectId: storyboard.projectId,
         storedObjectId: stored.id,
-        originalFilename: "approved-room.png",
-        displayName: "批准的主场景",
+        originalFilename: "approved-prop.png",
+        displayName: "批准的动态道具",
         mediaType: "IMAGE",
-        role: "SCENE",
+        role: "PROP",
         status: "READY",
         width: 2,
         height: 2,
@@ -135,9 +135,9 @@ describe.runIf(enabled)("Continuity PostgreSQL lineage", () => {
     const productionAsset = await client.productionAsset.create({
       data: {
         projectId: storyboard.projectId,
-        type: "SCENE",
-        name: "批准的主场景",
-        normalizedName: "批准的主场景",
+        type: "PROP",
+        name: "批准的动态道具",
+        normalizedName: "批准的动态道具",
       },
     });
     const productionVersion = await client.productionAssetVersion.create({
@@ -146,7 +146,7 @@ describe.runIf(enabled)("Continuity PostgreSQL lineage", () => {
         productionAssetId: productionAsset.id,
         versionNumber: 1,
         status: "ACTIVE",
-        displayName: "批准的主场景",
+        displayName: "批准的动态道具",
         sourceType: "OWNER",
         publishedAt: new Date(),
       },
@@ -155,79 +155,28 @@ describe.runIf(enabled)("Continuity PostgreSQL lineage", () => {
       where: { id: productionAsset.id },
       data: { currentVersionId: productionVersion.id },
     });
-    const versionFile = await client.assetVersionFile.create({
+    await client.assetVersionFile.create({
       data: {
         projectId: storyboard.projectId,
         productionAssetVersionId: productionVersion.id,
         projectAssetId: projectAsset.id,
-        referenceUsage: "SCENE_STYLE",
+        referenceUsage: "PROP_DETAIL",
         approvalStatus: "ACCEPTED",
         isPreferred: true,
         status: "ACTIVE",
       },
     });
 
-    const view = await continuity.getForStoryboard(storyboardId);
-    const head = view.profile!.headVersion!;
-    const boundaryIndex = new Map(
-      head.boundaries.map((boundary) => [boundary.id, boundary.boundaryIndex]),
-    );
-    const withReference = await continuity.save(view.profile!.id, {
-      parentVersionId: head.id,
-      expectedRowVersion: view.profile!.rowVersion,
+    const latestStoryboard = await storyboards.get(storyboardId);
+    const withReference = await continuity.suggest(storyboardId, {
+      expectedStoryboardRowVersion: latestStoryboard.rowVersion,
       idempotencyKey: randomUUID(),
-      subjects: [
-        ...head.subjects.map((subject) => ({
-          subjectKey: subject.subjectKey,
-          kind: subject.kind,
-          label: subject.label,
-          productionAssetVersionId: subject.productionAssetVersionId,
-          assetVersionFileId: subject.assetVersionFileId,
-          sourceSha256: subject.sourceSha256,
-          facts: subject.factsJson as Record<string, unknown>,
-          rules: subject.rules.map((rule) => ({
-            propertyKey: rule.propertyKey,
-            policy: rule.policy,
-            importance: rule.importance,
-            expectedValue: rule.expectedValueJson,
-            ...(rule.explanation ? { explanation: rule.explanation } : {}),
-          })),
-        })),
-        {
-          subjectKey: "environment:approved-room",
-          kind: "ENVIRONMENT",
-          label: "批准的主场景",
-          productionAssetVersionId: productionVersion.id,
-          assetVersionFileId: versionFile.id,
-          sourceSha256: preserved.sha256,
-          facts: { layout: "approved" },
-          rules: [
-            {
-              propertyKey: "canonical_state",
-              policy: "WHOLE_FILM_HOLD",
-              importance: "HARD",
-              expectedValue: preserved.sha256,
-              explanation: "全片保持同一个主场景",
-            },
-          ],
-        },
-      ],
-      boundaries: head.boundaries.map((boundary) => ({
-        boundaryIndex: boundary.boundaryIndex,
-        label: boundary.label,
-        state: {
-          ...(boundary.stateJson as Record<string, unknown>),
-          "environment:approved-room": preserved.sha256,
-        },
-      })),
-      shots: head.shotStates.map((shot) => ({
-        storyboardShotId: shot.storyboardShotId,
-        ordinal: shot.ordinal,
-        startBoundaryIndex: boundaryIndex.get(shot.startBoundaryId)!,
-        endBoundaryIndex: boundaryIndex.get(shot.endBoundaryId)!,
-        declaredChanges: shot.declaredChangesJson as Record<string, unknown>,
-      })),
     });
+    const dynamicProp = withReference.subjects.find(
+      (subject) => subject.productionAssetVersionId === productionVersion.id,
+    );
+    expect(dynamicProp).toMatchObject({ kind: "PROP", label: "批准的动态道具" });
+    expect(dynamicProp?.rules[0]?.policy).toBe("SHOT_CHANGE");
     const preflight = await continuity.preflight(withReference.id);
     expect(preflight.ready).toBe(true);
     await continuity.decide(withReference.id, {

@@ -70,7 +70,6 @@ export class CodexManagerKeyframeImageProvider implements KeyframeImageProvider 
     form.set("size", capability.providerRequestSize);
     form.set("quality", input.quality);
     form.set("n", "1");
-    form.set("input_fidelity", "high");
     input.references.forEach((reference, index) => {
       form.append(
         "image[]",

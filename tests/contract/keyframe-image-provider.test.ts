@@ -73,5 +73,6 @@ describe("keyframe image provider safety", () => {
     const [, init] = fetchSpy.mock.calls[0]!;
     expect(init?.method).toBe("POST");
     expect(init?.body).toBeInstanceOf(FormData);
+    expect((init?.body as FormData).has("input_fidelity")).toBe(false);
   });
 });

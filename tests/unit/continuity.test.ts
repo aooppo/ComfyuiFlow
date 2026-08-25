@@ -67,6 +67,31 @@ describe("continuity registry and zero-call preflight", () => {
     );
   });
 
+  it("carries approved dynamic props through every boundary with declared shot changes", () => {
+    const suggestion = buildContinuitySuggestion({
+      assets: [
+        {
+          subjectKey: "prop:wine-glass",
+          kind: "PROP",
+          label: "red wine glass",
+          sourceSha256: "c".repeat(64),
+          defaultPolicy: "SHOT_CHANGE",
+          facts: { dynamicCandidate: true },
+        },
+      ],
+      shots,
+    });
+    const subject = suggestion.subjects.find((item) => item.subjectKey === "prop:wine-glass");
+    expect(subject?.rules[0]?.policy).toBe("SHOT_CHANGE");
+    expect(suggestion.boundaries).toHaveLength(4);
+    expect(suggestion.boundaries[1]?.state["prop:wine-glass"]).toMatchObject({
+      previousEndState: "end-1",
+      nextStartState: "start-2",
+    });
+    expect(suggestion.shots.every((shot) => shot.declaredChanges["prop:wine-glass"])).toBe(true);
+    expect(preflightContinuityData(crypto.randomUUID(), suggestion).ready).toBe(true);
+  });
+
   it("records provider dimensions and normalizes deterministically to H3 portrait", async () => {
     const providerPng = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAACXBIWXMAAAABAAAAAQBPJcTWAAAAEklEQVR4nGNkYPjLwMDAwgAGAAsXAQPfmWhAAAAAAElFTkSuQmCC",

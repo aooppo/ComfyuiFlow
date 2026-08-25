@@ -357,9 +357,9 @@ export function ContinuityWizard({
     }
   }
 
-  async function createAndRunFake() {
-    if (!view?.profile?.approvedVersionId || !preview || providerProfileId !== "fake-keyframe-v1")
-      return;
+  async function createAuthorizeAndRun() {
+    if (!view?.profile?.approvedVersionId || !preview?.ready) return;
+    const isFake = providerProfileId === "fake-keyframe-v1";
     setBusy(true);
     setError("");
     try {
@@ -395,12 +395,16 @@ export function ContinuityWizard({
       const state = (await executeResponse.json()) as KeyframeState & {
         error?: { message: string };
       };
-      if (!executeResponse.ok) throw new Error(state.error?.message ?? "Fake 关键帧未完成");
+      if (!executeResponse.ok) throw new Error(state.error?.message ?? "关键帧批次未完成");
       setKeyframes(state);
-      setMessage(`已生成 ${preview.maximumCalls} 张本地 Fake 关键帧；外部调用 0 次。`);
+      setMessage(
+        isFake
+          ? `已生成 ${preview.maximumCalls} 张本地 Fake 关键帧；外部调用 0 次。`
+          : `LIVE 批次已按上限提交；最多 ${preview.maximumCalls} 次图片调用，失败不自动重试。`,
+      );
       await load();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Fake 关键帧未完成");
+      setError(reason instanceof Error ? reason.message : "关键帧批次未完成");
     } finally {
       setBusy(false);
     }
@@ -469,11 +473,18 @@ export function ContinuityWizard({
             <div className="sectionHeadingRow">
               <div>
                 <h2>1. 全片哪些内容必须保持不变？</h2>
-                <p>重要人物、场景、产品和道具默认全片保持；你只需确认。</p>
+                <p>
+                  人物、场景和主产品默认全片保持；未占用视频参考槽的批准道具也会列出，并默认允许逐镜变化。
+                </p>
               </div>
-              <button className="panelButton" disabled={busy} onClick={saveVersion}>
-                保存为新版本
-              </button>
+              <div className="inlineActions">
+                <button className="panelButton" disabled={busy} onClick={createSuggestions}>
+                  重新扫描批准素材
+                </button>
+                <button className="panelButton" disabled={busy} onClick={saveVersion}>
+                  保存为新版本
+                </button>
+              </div>
             </div>
             <div className="continuitySubjectGrid">
               {subjects.map((subject) => (
@@ -590,7 +601,7 @@ export function ContinuityWizard({
                 >
                   <option value="fake-keyframe-v1">本地 Fake（0 credit，用于检查流程）</option>
                   <option value="codexmanager-gpt-image-2-v1">
-                    Codex Manager · GPT Image 2（LIVE，默认关闭）
+                    Codex Manager · GPT Image 2（LIVE，需费用确认）
                   </option>
                 </select>
               </label>
@@ -631,14 +642,20 @@ export function ContinuityWizard({
                   {preview.blockers.length > 0 && (
                     <p className="errorPanel">当前不能执行：{preview.blockers.join("、")}</p>
                   )}
-                  {providerProfileId === "fake-keyframe-v1" && preview.ready && (
-                    <button className="primaryButton" disabled={busy} onClick={createAndRunFake}>
-                      确认并生成本地 Fake 联系表
+                  {preview.ready && (
+                    <button
+                      className="primaryButton"
+                      disabled={busy}
+                      onClick={createAuthorizeAndRun}
+                    >
+                      {providerProfileId === "fake-keyframe-v1"
+                        ? "确认并生成本地 Fake 联系表"
+                        : `确认并生成 ${preview.maximumCalls} 张 LIVE 关键帧（最多 $${preview.estimatedMaximumCostUsd?.toFixed(4)}）`}
                     </button>
                   )}
-                  {providerProfileId !== "fake-keyframe-v1" && (
+                  {providerProfileId !== "fake-keyframe-v1" && !preview.ready && (
                     <p className="noticePanel">
-                      此处只完成零调用预览。LIVE 生成需要当次价格、调用上限和新的明确确认。
+                      当前只完成零调用预览。所有门控通过后才会显示 LIVE 生成确认按钮。
                     </p>
                   )}
                 </div>

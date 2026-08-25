@@ -24,6 +24,7 @@ export interface ContinuitySeedAsset {
   productionAssetVersionId?: string | null;
   assetVersionFileId?: string | null;
   sourceSha256?: string | null;
+  defaultPolicy?: "WHOLE_FILM_HOLD" | "SHOT_CHANGE" | "UNIMPORTANT";
   facts: Record<string, unknown>;
 }
 
@@ -41,7 +42,7 @@ function subjectRule(subject: ContinuitySeedAsset): ContinuitySubjectInputV1["ru
   const registered = continuitySubjectRegistry[subject.kind];
   return {
     propertyKey: "canonical_state",
-    policy: registered.defaultPolicy,
+    policy: subject.defaultPolicy ?? registered.defaultPolicy,
     importance: registered.defaultImportance,
     expectedValue: subject.sourceSha256 ?? subject.facts,
     explanation: `${registered.label}默认由全片统一设置管理`,
@@ -67,15 +68,20 @@ export function buildContinuitySuggestion(input: {
   };
   const seeds = [...assets, camera, style];
   const subjects: ContinuitySubjectInputV1[] = seeds.map((subject) => ({
-    ...subject,
+    subjectKey: subject.subjectKey,
+    kind: subject.kind,
+    label: subject.label,
     productionAssetVersionId: subject.productionAssetVersionId ?? null,
     assetVersionFileId: subject.assetVersionFileId ?? null,
     sourceSha256: subject.sourceSha256 ?? null,
+    facts: subject.facts,
     rules: [subjectRule(subject)],
   }));
 
+  const stableAssets = assets.filter((subject) => subject.defaultPolicy !== "SHOT_CHANGE");
+  const dynamicAssets = assets.filter((subject) => subject.defaultPolicy === "SHOT_CHANGE");
   const stableState = Object.fromEntries(
-    assets.map((subject) => [subject.subjectKey, subject.sourceSha256 ?? subject.facts]),
+    stableAssets.map((subject) => [subject.subjectKey, subject.sourceSha256 ?? subject.facts]),
   );
   const boundaries = Array.from({ length: input.shots.length + 1 }, (_, boundaryIndex) => {
     const prior = input.shots[Math.max(0, boundaryIndex - 1)];
@@ -90,6 +96,17 @@ export function buildContinuitySuggestion(input: {
             : `Shot ${boundaryIndex} → ${boundaryIndex + 1}`,
       state: {
         ...stableState,
+        ...Object.fromEntries(
+          dynamicAssets.map((subject) => [
+            subject.subjectKey,
+            {
+              identitySha256: subject.sourceSha256 ?? null,
+              previousEndState: boundaryIndex === 0 ? null : (prior?.endState ?? null),
+              nextStartState:
+                boundaryIndex === input.shots.length ? null : (next?.startState ?? null),
+            },
+          ]),
+        ),
         "camera:whole-film": {
           previous: prior?.camera ?? "",
           next: next?.camera ?? "",
@@ -106,6 +123,12 @@ export function buildContinuitySuggestion(input: {
     endBoundaryIndex: index + 1,
     declaredChanges: {
       "camera:whole-film": { camera: shot.camera, composition: shot.composition },
+      ...Object.fromEntries(
+        dynamicAssets.map((subject) => [
+          subject.subjectKey,
+          { startState: shot.startState, endState: shot.endState },
+        ]),
+      ),
       narrative: { startState: shot.startState, endState: shot.endState },
     },
   }));

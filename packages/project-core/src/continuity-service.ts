@@ -140,6 +140,51 @@ export class ContinuityService {
         },
       });
     }
+    const approvedProjectProps = await this.client.productionAsset.findMany({
+      where: {
+        projectId: storyboard.projectId,
+        status: "ACTIVE",
+        type: "PROP",
+      },
+      include: {
+        currentVersion: {
+          include: {
+            files: {
+              where: { status: "ACTIVE", approvalStatus: "ACCEPTED" },
+              include: { projectAsset: { include: { storedObject: true } } },
+              orderBy: [{ isPreferred: "desc" }, { createdAt: "desc" }],
+            },
+          },
+        },
+      },
+      orderBy: { name: "asc" },
+    });
+    for (const productionAsset of approvedProjectProps) {
+      const version = productionAsset.currentVersion;
+      const file = version?.files.find(
+        (candidate) =>
+          candidate.projectAsset.status === "READY" &&
+          candidate.projectAsset.mediaType === "IMAGE" &&
+          candidate.projectAsset.storedObject.verificationStatus === "VERIFIED",
+      );
+      if (!version || version.status !== "ACTIVE" || !file || seen.has(version.id)) continue;
+      seen.add(version.id);
+      assets.push({
+        subjectKey: `prop:${version.id}`,
+        kind: "PROP",
+        label: version.displayName,
+        productionAssetVersionId: version.id,
+        assetVersionFileId: file.id,
+        sourceSha256: file.projectAsset.storedObject.sha256,
+        defaultPolicy: "SHOT_CHANGE",
+        facts: {
+          description: version.description ?? "",
+          referenceUsage: file.referenceUsage,
+          source: "approved-project-prop",
+          dynamicCandidate: true,
+        },
+      });
+    }
     const suggestion = buildContinuitySuggestion({ assets, shots: approved.shots });
     return this.appendVersion(storyboard, approved.id, approved.manifest.id, {
       ...suggestion,
