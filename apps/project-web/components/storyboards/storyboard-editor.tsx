@@ -8,8 +8,20 @@ interface CandidatePreview {
   gaps: Array<{ requirementId: string; code: string }>;
   results: Array<{
     requirementId: string;
+    requirementKey: string;
+    shotOrdinal: number;
+    assetType: string;
+    referenceUsages: string[];
     result: {
-      eligible: Array<{ bindingId: string; projectAssetId: string }>;
+      eligible: Array<{
+        bindingId: string;
+        projectAssetId: string;
+        assetName?: string;
+        fileName?: string;
+        referenceUsage?: string;
+        viewpoint?: string;
+        shotScale?: string;
+      }>;
       rejected: Array<{ bindingId: string; reasonCodes: string[] }>;
     };
   }>;
@@ -63,7 +75,14 @@ export function StoryboardEditor({
   }, [load]);
 
   const canApprove = useMemo(
-    () => shots.length === 3 && shots.every((shot, index) => shot.ordinal === index + 1),
+    () =>
+      shots.length >= 1 &&
+      shots.length <= 20 &&
+      shots.every((shot, index) => shot.ordinal === index + 1),
+    [shots],
+  );
+  const requirementCount = useMemo(
+    () => shots.reduce((total, shot) => total + shot.requirements.length, 0),
     [shots],
   );
 
@@ -97,7 +116,7 @@ export function StoryboardEditor({
     );
   }
 
-  async function save() {
+  async function save(includeProjectAssetRequirements = false) {
     if (!storyboard) return;
     await request(
       `/api/storyboards/${storyboardId}/versions`,
@@ -107,6 +126,7 @@ export function StoryboardEditor({
         body: JSON.stringify({
           parentVersionId: storyboard.headVersionId,
           creativeBrief: storyboard.creativeBrief,
+          includeProjectAssetRequirements,
           shots: shots.map((shot, index) => ({
             schemaVersion: "shot-draft-v1",
             shotKey: shot.shotKey,
@@ -129,11 +149,21 @@ export function StoryboardEditor({
           })),
         }),
       },
-      "A new immutable version was saved.",
+      includeProjectAssetRequirements
+        ? "A new version was saved with the project’s structured asset requirements."
+        : "A new immutable version was saved.",
     );
   }
 
   async function previewAssets() {
+    if (!storyboard?.headVersionId || requirementCount === 0) {
+      setPreview(null);
+      setError("");
+      setMessage(
+        "This version has no structured asset requirements, so there are no candidates to preview. Save a new version with project asset requirements first.",
+      );
+      return;
+    }
     const response = await fetch(
       `/api/storyboard-versions/${storyboard?.headVersionId}/asset-candidates/preview`,
       { method: "POST" },
@@ -141,7 +171,19 @@ export function StoryboardEditor({
     const body = (await response.json()) as CandidatePreview & { error?: { message: string } };
     if (!response.ok) return setError(body.error?.message ?? "Candidates could not be previewed");
     setPreview(body);
-    setMessage("Candidate preview completed without creating a formal selection.");
+    setSelections((current) =>
+      Object.fromEntries(
+        body.results.flatMap((entry) => {
+          const selected = current[entry.requirementId] ?? entry.result.eligible[0]?.bindingId;
+          return selected ? [[entry.requirementId, selected]] : [];
+        }),
+      ),
+    );
+    setMessage(
+      body.results.length === 0
+        ? "This version has no structured asset requirements, so there are no candidates to preview."
+        : "Candidate preview completed. The highest-ranked eligible candidate for each requirement was preselected as an editable recommendation; no formal selection was created.",
+    );
   }
 
   async function freezeManifest() {
@@ -231,6 +273,36 @@ export function StoryboardEditor({
     });
   }
 
+  function addShot() {
+    if (shots.length >= 20) return;
+    const ordinal = shots.length + 1;
+    setShots((current) => [
+      ...current,
+      {
+        shotKey: crypto.randomUUID(),
+        ordinal,
+        title: `Shot ${ordinal}`,
+        creativeDescription: "Describe this shot.",
+        startState: "Describe the opening state.",
+        action: "Describe the action.",
+        endState: "Describe the ending state.",
+        camera: "Describe shot size and camera movement.",
+        composition: "Describe composition and focus.",
+        continuityRequirements: [],
+        durationSeconds: 3,
+        requirements: [],
+      },
+    ]);
+  }
+
+  function removeShot(index: number) {
+    setShots((current) =>
+      current
+        .filter((_, shotIndex) => shotIndex !== index)
+        .map((shot, shotIndex) => ({ ...shot, ordinal: shotIndex + 1 })),
+    );
+  }
+
   if (!storyboard)
     return (
       <main className="pageFrame">
@@ -245,16 +317,26 @@ export function StoryboardEditor({
       </a>
       <header className="storyboardHero">
         <div>
-          <p className="eyebrow">Three-shot draft · Fake Director · 0 external calls</p>
+          <p className="eyebrow">
+            Flexible shot draft · Fake Director starts with 3 · 0 external calls
+          </p>
           <h1>{storyboard.title}</h1>
           <p>{storyboard.creativeBrief}</p>
         </div>
         <div className="storyboardActions">
-          <button className="panelButton" disabled={busy} onClick={() => void generate()}>
+          <button
+            className="panelButton"
+            disabled={busy || storyboard.status === "ARCHIVED"}
+            onClick={() => void generate()}
+          >
             {storyboard.headVersion ? "New Fake proposal" : "Generate three shots"}
           </button>
-          {storyboard.headVersion && (
-            <button className="primaryButton" disabled={busy} onClick={() => void save()}>
+          {shots.length > 0 && (
+            <button
+              className="primaryButton"
+              disabled={busy || shots.length === 0 || storyboard.status === "ARCHIVED"}
+              onClick={() => void save()}
+            >
               Save new version
             </button>
           )}
@@ -262,14 +344,46 @@ export function StoryboardEditor({
       </header>
       {message && <p className="successPanel">{message}</p>}
       {error && <p className="formError">{error}</p>}
+      {storyboard.status === "ARCHIVED" && (
+        <p className="noticePanel">
+          This storyboard is archived and remains read-only until restored.
+        </p>
+      )}
+      <div className="storyboardActions shotStructureActions">
+        <button
+          className="panelButton"
+          disabled={busy || shots.length >= 20 || storyboard.status === "ARCHIVED"}
+          onClick={addShot}
+        >
+          Add shot
+        </button>
+        <span>{shots.length} / 20 shots</span>
+      </div>
       <section className="shotGrid">
         {shots.map((shot, index) => (
           <article className="shotCard" key={shot.shotKey}>
             <div className="shotCardHeader">
               <span>Shot {index + 1}</span>
               <div>
-                <button onClick={() => move(index, -1)}>↑</button>
-                <button onClick={() => move(index, 1)}>↓</button>
+                <button
+                  disabled={index === 0 || storyboard.status === "ARCHIVED"}
+                  onClick={() => move(index, -1)}
+                >
+                  ↑
+                </button>
+                <button
+                  disabled={index === shots.length - 1 || storyboard.status === "ARCHIVED"}
+                  onClick={() => move(index, 1)}
+                >
+                  ↓
+                </button>
+                <button
+                  className="dangerTextButton"
+                  disabled={storyboard.status === "ARCHIVED"}
+                  onClick={() => removeShot(index)}
+                >
+                  Remove
+                </button>
               </div>
             </div>
             {(
@@ -287,6 +401,7 @@ export function StoryboardEditor({
                 {field.replaceAll(/([A-Z])/g, " $1")}
                 <textarea
                   value={String(shot[field])}
+                  disabled={storyboard.status === "ARCHIVED"}
                   onChange={(event) => updateShot(index, field, event.target.value)}
                 />
               </label>
@@ -299,14 +414,38 @@ export function StoryboardEditor({
                 max="30"
                 step="0.1"
                 value={shot.durationSeconds}
+                disabled={storyboard.status === "ARCHIVED"}
                 onChange={(event) =>
                   updateShot(index, "durationSeconds", Number(event.target.value))
                 }
               />
             </label>
+            <div className="shotRequirements" aria-label={`Shot ${index + 1} asset requirements`}>
+              <strong>Structured asset requirements</strong>
+              {shot.requirements.length ? (
+                <ul>
+                  {shot.requirements.map((requirement) => (
+                    <li key={requirement.id}>{formatRequirement(requirement.requirementKey)}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No structured asset requirements on this version.</p>
+              )}
+            </div>
           </article>
         ))}
       </section>
+      {storyboard.headVersion && requirementCount === 0 && (
+        <section className="noticePanel">
+          <p>
+            This version has no structured asset requirements. Your shot text can stay unchanged;
+            save a new version to add the project’s published semantic assets as requirements.
+          </p>
+          <button className="panelButton" disabled={busy} onClick={() => void save(true)}>
+            Save with project asset requirements
+          </button>
+        </section>
+      )}
       <section className="storyboardPanel">
         <h2>Version history and comparison</h2>
         <div className="comparisonSelectors">
@@ -357,17 +496,35 @@ export function StoryboardEditor({
             Preview is always read-only. Formal binding and approval stay closed until Phase 2
             verification passes.
           </p>
-          <button className="panelButton" onClick={() => void previewAssets()}>
+          {!storyboard.formalAssetBindingEnabled && (
+            <p className="noticePanel">
+              Formal asset binding is closed because the recorded Phase 2 Gate is not complete.
+            </p>
+          )}
+          <button
+            className="panelButton"
+            disabled={busy || storyboard.status === "ARCHIVED"}
+            onClick={() => void previewAssets()}
+          >
             Preview asset candidates
           </button>
           {preview && (
             <div className="candidateResults">
               <p>
-                {preview.gaps.length ? `${preview.gaps.length} blocking gaps` : "No candidate gaps"}
+                {preview.results.length === 0
+                  ? "No structured asset requirements were found for this version."
+                  : preview.gaps.length
+                    ? `${preview.gaps.length} blocking gaps`
+                    : "All structured asset requirements have eligible candidates"}
               </p>
               {preview.results.map((entry) => (
                 <label key={entry.requirementId}>
-                  Requirement {entry.requirementId.slice(0, 8)}
+                  {formatRequirement(entry.requirementKey)} · Shot {entry.shotOrdinal}
+                  {entry.result.eligible.length > 0 && (
+                    <small className="recommendationNote">
+                      Recommended from the structured shot requirement · editable
+                    </small>
+                  )}
                   <select
                     value={selections[entry.requirementId] ?? ""}
                     onChange={(event) =>
@@ -380,7 +537,7 @@ export function StoryboardEditor({
                     <option value="">Select eligible asset</option>
                     {entry.result.eligible.map((candidate) => (
                       <option key={candidate.bindingId} value={candidate.bindingId}>
-                        {candidate.projectAssetId.slice(0, 8)}
+                        {formatCandidate(candidate)}
                       </option>
                     ))}
                   </select>
@@ -391,14 +548,27 @@ export function StoryboardEditor({
           <div className="storyboardActions">
             <button
               className="panelButton"
-              disabled={!preview || preview.gaps.length > 0}
+              disabled={
+                busy ||
+                !preview ||
+                preview.results.length === 0 ||
+                preview.gaps.length > 0 ||
+                !storyboard.formalAssetBindingEnabled ||
+                storyboard.status === "ARCHIVED"
+              }
               onClick={() => void freezeManifest()}
             >
               Freeze asset manifest
             </button>
             <button
               className="primaryButton"
-              disabled={!canApprove || !storyboard.headVersion.manifest}
+              disabled={
+                busy ||
+                !canApprove ||
+                !storyboard.headVersion.manifest ||
+                !storyboard.formalAssetBindingEnabled ||
+                storyboard.status === "ARCHIVED"
+              }
               onClick={() => void decide("APPROVED")}
             >
               Approve storyboard
@@ -421,4 +591,22 @@ export function StoryboardEditor({
       )}
     </main>
   );
+}
+
+function formatRequirement(requirementKey: string) {
+  const match = /^shot-\d+-([^-]+)-(.+)$/.exec(requirementKey);
+  if (!match) return requirementKey;
+  return `@${match[2]!.replaceAll("-", " ")} · ${match[1]!.toUpperCase()}`;
+}
+
+function formatCandidate(
+  candidate: CandidatePreview["results"][number]["result"]["eligible"][number],
+) {
+  const primary = candidate.assetName ?? candidate.fileName ?? "Eligible asset";
+  const file =
+    candidate.fileName && candidate.fileName !== primary ? ` · ${candidate.fileName}` : "";
+  const details = [candidate.referenceUsage, candidate.viewpoint, candidate.shotScale]
+    .filter(Boolean)
+    .join(" · ");
+  return `${primary}${file}${details ? ` · ${details}` : ""}`;
 }

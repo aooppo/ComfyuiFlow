@@ -67,8 +67,10 @@ No remaining code task was found.
 
 ## Phase 4 Human QA
 
-- Reviewer: _pending Owner entry_
-- Decision: _pending_
-- Notes: Please verify Shot Plan create/edit/conflict/history/preflight/approve/revoke and the distinction
-  between Storyboard approval, Shot Plan approval, and generation authorization. Phase 2/3 PASS from
-  task `01a03663-5cc7-7ad3-8ba2-e37e927639e1` is retained and is not being requested again.
+- Reviewer: Owner
+- Decision: `PASS`
+- Recorded: 2026-08-25
+- Scope: Owner accepted the Phase 4 Shot Plan workspace and the visible distinction between
+  Storyboard approval, Shot Plan approval, and generation authorization. This decision does not
+  authorize Provider, ComfyUI, or video-generation calls. Phase 2/3 PASS from task
+  `01a03663-5cc7-7ad3-8ba2-e37e927639e1` is retained and is not being requested again.

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { FakeStoryboardProvider, FAKE_STORYBOARD_MODEL_ID } from "@comfyuiflow/ai-providers";
+import type { StoryboardAssetRequirementV1 } from "@comfyuiflow/contracts";
 import { AssetCandidateService } from "./asset-candidate-service.js";
 import { assetCandidateRequirementSchema } from "./asset-candidate-contracts.js";
 import { canonicalSha256 } from "./canonical-json.js";
@@ -32,11 +33,14 @@ export class StoryboardService {
     private readonly fakeProvider = new FakeStoryboardProvider(),
   ) {}
 
-  async list(projectId: string, limit = 50) {
+  async list(projectId: string, limit = 50, status: "ACTIVE" | "ARCHIVED" = "ACTIVE") {
     await this.requireProject(projectId, false);
     return this.client.storyboard.findMany({
-      where: { projectId },
-      include: { headVersion: { include: { shots: { orderBy: { ordinal: "asc" } } } } },
+      where: { projectId, status },
+      include: {
+        headVersion: { include: { shots: { orderBy: { ordinal: "asc" } } } },
+        _count: { select: { versions: true, runs: true, decisions: true, generationPlans: true } },
+      },
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       take: Math.min(Math.max(limit, 1), 100),
     });
@@ -48,6 +52,49 @@ export class StoryboardService {
     return this.client.storyboard.create({ data: { projectId, ...input } });
   }
 
+  async archive(storyboardId: string, expectedRowVersion: number) {
+    return this.setLifecycle(storyboardId, expectedRowVersion, "ARCHIVED");
+  }
+
+  async restore(storyboardId: string, expectedRowVersion: number) {
+    return this.setLifecycle(storyboardId, expectedRowVersion, "ACTIVE");
+  }
+
+  async deleteEmpty(storyboardId: string, expectedRowVersion: number) {
+    return this.client.$transaction(async (tx) => {
+      const storyboard = await tx.storyboard.findUnique({
+        where: { id: storyboardId },
+        include: {
+          _count: {
+            select: { versions: true, runs: true, decisions: true, generationPlans: true },
+          },
+        },
+      });
+      if (!storyboard) throw this.notFound();
+      await this.requireProject(storyboard.projectId, true);
+      if (storyboard.rowVersion !== expectedRowVersion) throw this.conflict();
+      if (storyboard.status !== "ACTIVE") {
+        throw new ProjectAssetError(
+          "STORYBOARD_ARCHIVED",
+          "Restore this storyboard before deleting it",
+          409,
+        );
+      }
+      if (Object.values(storyboard._count).some((count) => count > 0)) {
+        throw new ProjectAssetError(
+          "STORYBOARD_DELETE_REQUIRES_ARCHIVE",
+          "This storyboard has history and can only be archived",
+          409,
+        );
+      }
+      const deleted = await tx.storyboard.deleteMany({
+        where: { id: storyboardId, rowVersion: expectedRowVersion, status: "ACTIVE" },
+      });
+      if (deleted.count !== 1) throw this.conflict();
+      return { id: storyboardId, deleted: true as const };
+    });
+  }
+
   async get(storyboardId: string) {
     const storyboard = await this.client.storyboard.findUnique({
       where: { id: storyboardId },
@@ -57,7 +104,10 @@ export class StoryboardService {
       },
     });
     if (!storyboard) throw this.notFound();
-    return storyboard;
+    return {
+      ...storyboard,
+      formalAssetBindingEnabled: this.gate.phase2BindingsEnabled,
+    };
   }
 
   async listVersions(storyboardId: string) {
@@ -94,8 +144,10 @@ export class StoryboardService {
 
   async generate(storyboardId: string, expectedRowVersion: number) {
     const storyboard = await this.get(storyboardId);
+    this.requireActiveStoryboard(storyboard.status);
     await this.requireProject(storyboard.projectId, true);
     if (storyboard.rowVersion !== expectedRowVersion) throw this.conflict();
+    const assetRequirements = await this.defaultAssetRequirements(storyboard.projectId, [1, 2, 3]);
     const request = {
       taskType: "STORYBOARD_GENERATION_V1" as const,
       contractVersion: "storyboard-generation-v1" as const,
@@ -105,7 +157,7 @@ export class StoryboardService {
       creativeBrief: storyboard.creativeBrief,
       shotCount: 3 as const,
       promptTemplateVersion: "storyboard-three-shot-v1" as const,
-      assetRequirements: [],
+      assetRequirements,
     };
     const requestHash = canonicalSha256(request);
     try {
@@ -117,6 +169,7 @@ export class StoryboardService {
           parentVersionId: storyboard.headVersionId,
           creativeBrief: storyboard.creativeBrief,
           shots: proposal.shots,
+          includeProjectAssetRequirements: false,
         },
         {
           requestHash,
@@ -154,26 +207,78 @@ export class StoryboardService {
     expectedRowVersion: number,
     rawInput: AppendStoryboardVersionInput,
   ) {
-    return this.appendVersion(
-      storyboardId,
-      expectedRowVersion,
-      appendStoryboardVersionSchema.parse(rawInput),
-    );
+    const input = appendStoryboardVersionSchema.parse(rawInput);
+    const current = await this.get(storyboardId);
+    this.requireActiveStoryboard(current.status);
+    const projectRequirements = input.includeProjectAssetRequirements
+      ? await this.defaultAssetRequirements(
+          current.projectId,
+          input.shots.map((shot) => shot.ordinal),
+        )
+      : [];
+    return this.appendVersion(storyboardId, expectedRowVersion, {
+      ...input,
+      shots: input.shots.map((shot) => ({
+        ...shot,
+        assetRequirements:
+          shot.assetRequirements.length > 0
+            ? shot.assetRequirements
+            : projectRequirements.filter((requirement) => requirement.shotOrdinal === shot.ordinal),
+      })),
+    });
   }
 
   async previewAssets(versionId: string) {
     const version = await this.getVersion(versionId);
-    const requirements = version.shots.flatMap((shot) => shot.requirements);
+    const requirements = version.shots.flatMap((shot) =>
+      shot.requirements.map((requirement) => ({ requirement, shotOrdinal: shot.ordinal })),
+    );
     const candidateService = new AssetCandidateService(this.client);
-    const results = [];
-    for (const requirement of requirements) {
+    const rawResults = [];
+    for (const { requirement, shotOrdinal } of requirements) {
       const input = assetCandidateRequirementSchema.parse(requirement.inputJson);
-      results.push({
+      rawResults.push({
         requirementId: requirement.id,
+        requirementKey: requirement.requirementKey,
+        shotOrdinal,
+        assetType: input.assetType,
+        referenceUsages: input.referenceUsages,
         result: await candidateService.preview(input),
       });
     }
-    const gaps = results.flatMap(({ requirementId, result }) =>
+    const candidateFileIds = rawResults.flatMap(({ result }) =>
+      result.eligible.map((candidate) => candidate.bindingId),
+    );
+    const candidateFiles = await this.client.assetVersionFile.findMany({
+      where: { projectId: version.projectId, id: { in: candidateFileIds } },
+      include: {
+        projectAsset: { select: { displayName: true } },
+        productionAssetVersion: { include: { productionAsset: { select: { name: true } } } },
+      },
+    });
+    const candidateLabels = new Map(
+      candidateFiles.map((file) => [
+        file.id,
+        {
+          assetName: file.productionAssetVersion.productionAsset.name,
+          fileName: file.projectAsset.displayName,
+          referenceUsage: file.referenceUsage,
+          viewpoint: file.viewpoint,
+          shotScale: file.shotScale,
+        },
+      ]),
+    );
+    const results = rawResults.map((entry) => ({
+      ...entry,
+      result: {
+        ...entry.result,
+        eligible: entry.result.eligible.map((candidate) => ({
+          ...candidate,
+          ...candidateLabels.get(candidate.bindingId),
+        })),
+      },
+    }));
+    const gaps = rawResults.flatMap(({ requirementId, result }) =>
       result.gaps.map((code) => ({ requirementId, code })),
     );
     return {
@@ -181,7 +286,7 @@ export class StoryboardService {
       policyVersion: "deterministic-assets-v1" as const,
       results,
       gaps,
-      resultHash: canonicalSha256(results),
+      resultHash: canonicalSha256(rawResults),
       formalSelectionCreated: false as const,
     };
   }
@@ -193,6 +298,7 @@ export class StoryboardService {
     const storyboard = await this.client.storyboard.findUnique({
       where: { id: version.storyboardId },
     });
+    if (storyboard) this.requireActiveStoryboard(storyboard.status);
     if (!storyboard || storyboard.headVersionId !== version.id) throw this.conflict();
     const preview = await this.previewAssets(versionId);
     if (preview.resultHash !== input.candidateResultHash) {
@@ -272,7 +378,7 @@ export class StoryboardService {
         }
       }
       const manifestId = randomUUID();
-      return tx.assetResolutionManifest.create({
+      await tx.assetResolutionManifest.create({
         data: {
           id: manifestId,
           projectId: version.projectId,
@@ -289,8 +395,19 @@ export class StoryboardService {
           candidateSnapshotJson: preview as never,
           candidateResultHash: preview.resultHash,
           finalBindingsHash: canonicalSha256(bindings),
-          bindings: { create: bindings as never },
         },
+      });
+      if (bindings.length > 0) {
+        await tx.shotAssetBinding.createMany({
+          data: bindings.map((binding) => ({
+            ...binding,
+            projectId: version.projectId,
+            manifestId,
+          })),
+        });
+      }
+      return tx.assetResolutionManifest.findUniqueOrThrow({
+        where: { id: manifestId },
         include: { bindings: true },
       });
     });
@@ -315,14 +432,19 @@ export class StoryboardService {
     const storyboard = await this.client.storyboard.findUnique({
       where: { id: version.storyboardId },
     });
+    if (storyboard) this.requireActiveStoryboard(storyboard.status);
     if (!storyboard || storyboard.rowVersion !== expectedRowVersion) throw this.conflict();
     if (input.decision === "APPROVED") {
       if (storyboard.headVersionId !== version.id) throw this.conflict();
       const ordinals = version.shots.map((shot) => shot.ordinal);
-      if (ordinals.length !== 3 || ordinals.some((value, index) => value !== index + 1)) {
+      if (
+        ordinals.length < 1 ||
+        ordinals.length > 20 ||
+        ordinals.some((value, index) => value !== index + 1)
+      ) {
         throw new ProjectAssetError(
           "SHOT_COUNT_INVALID",
-          "Approval requires exactly three ordered shots",
+          "Approval requires 1–20 contiguously ordered shots",
           422,
         );
       }
@@ -381,7 +503,7 @@ export class StoryboardService {
   private async appendVersion(
     storyboardId: string,
     expectedRowVersion: number,
-    rawInput: AppendStoryboardVersionInput,
+    rawInput: ReturnType<typeof appendStoryboardVersionSchema.parse>,
     run?: { requestHash: string; responseId: string; resolvedModelId: string },
   ) {
     const input = appendStoryboardVersionSchema.parse(rawInput);
@@ -389,6 +511,7 @@ export class StoryboardService {
       async (tx) => {
         const storyboard = await tx.storyboard.findUnique({ where: { id: storyboardId } });
         if (!storyboard) throw this.notFound();
+        this.requireActiveStoryboard(storyboard.status);
         const project = await tx.project.findUnique({ where: { id: storyboard.projectId } });
         if (!project || project.status !== "ACTIVE") {
           throw new ProjectAssetError(
@@ -508,6 +631,97 @@ export class StoryboardService {
     );
   }
 
+  private async defaultAssetRequirements(
+    projectId: string,
+    shotOrdinals: number[],
+  ): Promise<StoryboardAssetRequirementV1[]> {
+    const [assets, activeStates] = await Promise.all([
+      this.client.productionAsset.findMany({
+        where: {
+          projectId,
+          status: "ACTIVE",
+          currentVersionId: { not: null },
+        },
+        include: { characterProfile: { select: { id: true } } },
+        orderBy: [{ type: "asc" }, { normalizedName: "asc" }, { id: "asc" }],
+      }),
+      this.client.characterStateVersion.findMany({
+        where: {
+          projectId,
+          status: "ACTIVE",
+          characterVersion: { status: "ACTIVE" },
+        },
+        select: {
+          id: true,
+          characterVersionId: true,
+          characterVersion: { select: { productionAssetVersionId: true } },
+        },
+        orderBy: [{ publishedAt: "desc" }, { id: "asc" }],
+      }),
+    ]);
+    const stateByCharacterAssetVersion = new Map<string, (typeof activeStates)[number]>();
+    for (const state of activeStates) {
+      stateByCharacterAssetVersion.set(
+        state.characterVersion.productionAssetVersionId,
+        stateByCharacterAssetVersion.get(state.characterVersion.productionAssetVersionId) ?? state,
+      );
+    }
+
+    const usageForType = {
+      CHARACTER: "IDENTITY",
+      OUTFIT: "OUTFIT_DETAIL",
+      PROP: "PROP_DETAIL",
+      SCENE: "SCENE_STYLE",
+      HAIR: "OUTFIT_DETAIL",
+      MAKEUP: "OUTFIT_DETAIL",
+      ACCESSORY: "OUTFIT_DETAIL",
+    } as const;
+
+    return shotOrdinals.flatMap((shotOrdinal) =>
+      assets.flatMap((asset) => {
+        const referenceUsage = usageForType[asset.type as keyof typeof usageForType];
+        if (!referenceUsage || !asset.currentVersionId) return [];
+        const requirementKey = `shot-${shotOrdinal}-${asset.type.toLocaleLowerCase()}-${toRequirementSlug(asset.name)}`;
+        const state =
+          asset.type === "CHARACTER"
+            ? stateByCharacterAssetVersion.get(asset.currentVersionId)
+            : undefined;
+        const parsedCandidateInput = assetCandidateRequirementSchema.parse({
+          contractVersion: "asset-candidate-v1",
+          projectId,
+          requirementId: requirementKey,
+          assetType: asset.type,
+          productionAssetId: asset.id,
+          productionAssetVersionId: asset.currentVersionId,
+          ...(asset.type === "CHARACTER" && asset.characterProfile
+            ? {
+                characterProfileId: asset.characterProfile.id,
+                ...(state
+                  ? {
+                      characterVersionId: state.characterVersionId,
+                      characterStateVersionId: state.id,
+                    }
+                  : {}),
+              }
+            : {}),
+          referenceUsages: [referenceUsage],
+          viewpoints: [],
+          shotScales: [],
+          mediaCapability: { mediaType: "IMAGE", acceptedMimeTypes: [] },
+          policy: { allowUnspecifiedViewpoint: false, allowUnspecifiedShotScale: false },
+        });
+        return {
+          shotOrdinal,
+          requirementKey,
+          contractVersion: "asset-candidate-v1" as const,
+          candidateInput: JSON.parse(
+            JSON.stringify(parsedCandidateInput),
+          ) as StoryboardAssetRequirementV1["candidateInput"],
+        };
+      }),
+    );
+  }
+
   private requireGate() {
     if (!this.gate.phase2BindingsEnabled) {
       throw new ProjectAssetError(
@@ -516,6 +730,44 @@ export class StoryboardService {
         409,
       );
     }
+  }
+
+  private requireActiveStoryboard(status: "ACTIVE" | "ARCHIVED") {
+    if (status !== "ACTIVE") {
+      throw new ProjectAssetError(
+        "STORYBOARD_ARCHIVED",
+        "Restore this storyboard before changing it",
+        409,
+      );
+    }
+  }
+
+  private async setLifecycle(
+    storyboardId: string,
+    expectedRowVersion: number,
+    status: "ACTIVE" | "ARCHIVED",
+  ) {
+    const storyboard = await this.client.storyboard.findUnique({ where: { id: storyboardId } });
+    if (!storyboard) throw this.notFound();
+    await this.requireProject(storyboard.projectId, true);
+    if (storyboard.rowVersion !== expectedRowVersion) throw this.conflict();
+    if (storyboard.status === status) {
+      throw new ProjectAssetError(
+        status === "ACTIVE" ? "STORYBOARD_ALREADY_ACTIVE" : "STORYBOARD_ARCHIVED",
+        status === "ACTIVE" ? "Storyboard is already active" : "Storyboard is already archived",
+        409,
+      );
+    }
+    const updated = await this.client.storyboard.updateMany({
+      where: { id: storyboardId, rowVersion: expectedRowVersion, status: storyboard.status },
+      data: {
+        status,
+        archivedAt: status === "ARCHIVED" ? new Date() : null,
+        rowVersion: { increment: 1 },
+      },
+    });
+    if (updated.count !== 1) throw this.conflict();
+    return this.get(storyboardId);
   }
 
   private async requireProject(projectId: string, active: boolean) {
@@ -542,4 +794,14 @@ export class StoryboardService {
       412,
     );
   }
+}
+
+function toRequirementSlug(value: string) {
+  const slug = value
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return slug || "asset";
 }

@@ -9,16 +9,17 @@ export function StoryboardLibrary({ projectId }: { projectId: string }) {
   const [creativeBrief, setCreativeBrief] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<"ACTIVE" | "ARCHIVED">("ACTIVE");
 
   const load = useCallback(async () => {
-    const response = await fetch(`/api/projects/${projectId}/storyboards`);
+    const response = await fetch(`/api/projects/${projectId}/storyboards?status=${status}`);
     const body = (await response.json()) as {
       storyboards?: StoryboardListItem[];
       error?: { message: string };
     };
     if (!response.ok) throw new Error(body.error?.message ?? "Storyboards could not be loaded");
     setItems(body.storyboards ?? []);
-  }, [projectId]);
+  }, [projectId, status]);
 
   useEffect(() => {
     void load().catch((reason: unknown) =>
@@ -46,6 +47,37 @@ export function StoryboardLibrary({ projectId }: { projectId: string }) {
     }
   }
 
+  async function lifecycle(item: StoryboardListItem) {
+    const hasHistory = Object.values(item._count).some((count) => count > 0);
+    const action = item.status === "ARCHIVED" ? "restore" : hasHistory ? "archive" : "delete";
+    const question =
+      action === "delete"
+        ? `Permanently delete “${item.title}”? This empty storyboard cannot be recovered.`
+        : action === "archive"
+          ? `Archive “${item.title}”? Its history will remain recoverable.`
+          : `Restore “${item.title}” to the active list?`;
+    if (!window.confirm(question)) return;
+    setBusy(true);
+    setError("");
+    try {
+      const path =
+        action === "delete"
+          ? `/api/storyboards/${item.id}`
+          : `/api/storyboards/${item.id}/${action}`;
+      const response = await fetch(path, {
+        method: action === "delete" ? "DELETE" : "POST",
+        headers: { "If-Match": `"storyboard-${item.rowVersion}"` },
+      });
+      const body = (await response.json()) as { error?: { message: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "Storyboard action failed");
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Storyboard action failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <main className="pageFrame storyboardPage">
       <a className="backLink" href={`/projects/${projectId}`}>
@@ -56,7 +88,8 @@ export function StoryboardLibrary({ projectId }: { projectId: string }) {
           <p className="eyebrow">Creative planning · zero external calls</p>
           <h1>Storyboards</h1>
           <p>
-            Create a three-shot draft, preserve every version, and resolve approved assets later.
+            Start with three shots, then add, remove, and reorder up to twenty while preserving
+            every version.
           </p>
         </div>
       </header>
@@ -83,23 +116,62 @@ export function StoryboardLibrary({ projectId }: { projectId: string }) {
           {busy ? "Creating…" : "Create storyboard"}
         </button>
       </section>
+      <div className="storyboardListTabs" role="tablist" aria-label="Storyboard status">
+        <button
+          className={status === "ACTIVE" ? "primaryButton" : "panelButton"}
+          onClick={() => setStatus("ACTIVE")}
+        >
+          Active
+        </button>
+        <button
+          className={status === "ARCHIVED" ? "primaryButton" : "panelButton"}
+          onClick={() => setStatus("ARCHIVED")}
+        >
+          Archived
+        </button>
+      </div>
       <section className="storyboardGrid">
         {items.map((item) => (
-          <a
-            className="storyboardCard"
-            href={`/projects/${projectId}/storyboards/${item.id}`}
-            key={item.id}
-          >
-            <p className="eyebrow">{item.approvedVersionId ? "Owner approved" : "Draft"}</p>
-            <h2>{item.title}</h2>
-            <p>{item.creativeBrief}</p>
-            <span>
-              {item.headVersion
-                ? `Version ${item.headVersion.versionNumber} · ${item.headVersion.shots.length} shots`
-                : "No proposal yet"}
-            </span>
-          </a>
+          <article className="storyboardCard storyboardCardWithActions" key={item.id}>
+            <a href={`/projects/${projectId}/storyboards/${item.id}`}>
+              <p className="eyebrow">
+                {item.status === "ARCHIVED"
+                  ? "Archived"
+                  : item.approvedVersionId
+                    ? "Owner approved"
+                    : "Draft"}
+              </p>
+              <h2>{item.title}</h2>
+              <p>{item.creativeBrief}</p>
+              <span>
+                {item.headVersion
+                  ? `Version ${item.headVersion.versionNumber} · ${item.headVersion.shots.length} shots`
+                  : "No proposal yet"}
+              </span>
+            </a>
+            <details className="storyboardCardMenu">
+              <summary aria-label={`Actions for ${item.title}`}>Actions</summary>
+              <div>
+                <button
+                  className={item.status === "ARCHIVED" ? "panelButton" : "dangerTextButton"}
+                  disabled={busy}
+                  onClick={() => void lifecycle(item)}
+                >
+                  {item.status === "ARCHIVED"
+                    ? "Restore"
+                    : Object.values(item._count).some((count) => count > 0)
+                      ? "Archive"
+                      : "Delete"}
+                </button>
+              </div>
+            </details>
+          </article>
         ))}
+        {items.length === 0 && (
+          <p className="noticePanel">
+            {status === "ACTIVE" ? "No active storyboards." : "No archived storyboards."}
+          </p>
+        )}
       </section>
     </main>
   );

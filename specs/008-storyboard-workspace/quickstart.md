@@ -1,4 +1,4 @@
-# Quickstart Validation: Three-Shot Storyboard Workspace
+# Quickstart Validation: Flexible Storyboard Workspace
 
 ## Safe prerequisites
 
@@ -24,7 +24,8 @@ With the local Web app running against isolated QA data:
 
 1. Open an active project and enter Storyboards from the project page.
 2. Create a storyboard, run Fake Director, and confirm exactly three understandable shot cards.
-3. Edit, reorder, save, refresh, and compare old/current versions.
+3. Add, remove, edit, reorder, and save a 1–20-shot owner version; refresh and compare old/current
+   versions.
 4. Use two tabs to demonstrate an actionable stale-version conflict.
 5. Inspect per-shot candidate gaps. With the gate closed, confirm binding and approval are blocked.
 6. After Phase 2 evidence opens the server gate, bind eligible assets, freeze the manifest, approve,

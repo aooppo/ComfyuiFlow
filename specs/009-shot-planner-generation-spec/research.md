@@ -14,8 +14,8 @@
 
 ## R-003: One spec per approved shot
 
-**Decision**: Require exactly three ordered specs and preserve stable shotKey identity.
-**Rationale**: Phase 3 approval fixes a three-shot boundary.
+**Decision**: Require exactly one ordered spec for each of 1–20 source shots and preserve stable shotKey identity.
+**Rationale**: Storyboard approval freezes a bounded, contiguous 1–20-shot source boundary.
 **Alternatives**: Arbitrary counts wait for a Storyboard contract change.
 
 ## R-004: Exact reference rows

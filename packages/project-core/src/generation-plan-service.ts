@@ -93,6 +93,12 @@ export class GenerationPlanService {
       );
     if (version.project.status !== "ACTIVE")
       throw this.error("PROJECT_ARCHIVED", "Restore this project before creating a shot plan", 409);
+    if (version.storyboard.status !== "ACTIVE")
+      throw this.error(
+        "STORYBOARD_ARCHIVED",
+        "Restore this storyboard before creating a shot plan",
+        409,
+      );
     if (version.storyboard.approvedVersionId !== version.id)
       throw this.error(
         "STORYBOARD_NOT_APPROVED",
@@ -105,7 +111,7 @@ export class GenerationPlanService {
         "The approved storyboard has no frozen asset manifest",
         409,
       );
-    this.assertThreeShots(version.shots.map((shot) => shot.ordinal));
+    this.assertVariableShots(version.shots.map((shot) => shot.ordinal));
     const requirementIds = new Set(
       version.shots.flatMap((shot) => shot.requirements.map((requirement) => requirement.id)),
     );
@@ -201,6 +207,12 @@ export class GenerationPlanService {
             throw this.error(
               "STORYBOARD_NOT_APPROVED",
               "Approve this storyboard version before creating a shot plan",
+              409,
+            );
+          if (currentStoryboard.status !== "ACTIVE")
+            throw this.error(
+              "STORYBOARD_ARCHIVED",
+              "Restore this storyboard before creating a shot plan",
               409,
             );
           if (currentManifest?.storyboardVersionId !== version.id)
@@ -302,7 +314,7 @@ export class GenerationPlanService {
       async (tx) => {
         const plan = await tx.generationPlan.findUnique({
           where: { id: planId },
-          include: { project: true, headVersion: { include: versionInclude } },
+          include: { project: true, storyboard: true, headVersion: { include: versionInclude } },
         });
         if (!plan || !plan.headVersion)
           throw this.error("GENERATION_PLAN_NOT_FOUND", "Generation plan was not found", 404);
@@ -310,6 +322,12 @@ export class GenerationPlanService {
           throw this.error(
             "PROJECT_ARCHIVED",
             "Restore this project before editing the shot plan",
+            409,
+          );
+        if (plan.storyboard.status !== "ACTIVE")
+          throw this.error(
+            "STORYBOARD_ARCHIVED",
+            "Restore this storyboard before editing the shot plan",
             409,
           );
         if (plan.rowVersion !== expectedRowVersion || plan.headVersionId !== input.parentVersionId)
@@ -380,10 +398,12 @@ export class GenerationPlanService {
     const shotResults: Array<{ ordinal: number; blockers: string[] }> = [];
     if (plan.storyboard.approvedVersionId !== plan.storyboardVersionId)
       blockers.add("STORYBOARD_NOT_APPROVED");
+    if (plan.storyboard.status !== "ACTIVE") blockers.add("STORYBOARD_ARCHIVED");
     if (plan.manifest.storyboardVersionId !== plan.storyboardVersionId)
       blockers.add("MANIFEST_STALE");
     if (
-      version.specs.length !== 3 ||
+      version.specs.length < 1 ||
+      version.specs.length > 20 ||
       version.specs.some((spec, index) => spec.ordinal !== index + 1)
     )
       blockers.add("GENERATION_SPEC_INVALID");
@@ -481,7 +501,7 @@ export class GenerationPlanService {
     }
     const version = await this.client.generationPlanVersion.findUnique({
       where: { id: versionId },
-      include: { generationPlan: { include: { project: true } } },
+      include: { generationPlan: { include: { project: true, storyboard: true } } },
     });
     if (!version)
       throw this.error(
@@ -494,6 +514,12 @@ export class GenerationPlanService {
       throw this.error(
         "PROJECT_ARCHIVED",
         "Restore this project before deciding the shot plan",
+        409,
+      );
+    if (plan.storyboard.status !== "ACTIVE")
+      throw this.error(
+        "STORYBOARD_ARCHIVED",
+        "Restore this storyboard before deciding the shot plan",
         409,
       );
     if (plan.rowVersion !== expectedRowVersion || plan.headVersionId !== version.id)
@@ -523,6 +549,12 @@ export class GenerationPlanService {
           throw this.error(
             "PROJECT_ARCHIVED",
             "Restore this project before deciding the shot plan",
+            409,
+          );
+        if (currentStoryboard?.status !== "ACTIVE")
+          throw this.error(
+            "STORYBOARD_ARCHIVED",
+            "Restore this storyboard before deciding the shot plan",
             409,
           );
         if (
@@ -564,6 +596,13 @@ export class GenerationPlanService {
     const expectedByOrdinal = new Map(
       plan.headVersion!.specs.map((spec) => [spec.ordinal, this.toContractSpec(plan, spec)]),
     );
+    if (rawSpecs.length !== expectedByOrdinal.size) {
+      throw this.error(
+        "GENERATION_SPEC_INVALID",
+        "Every source shot must have exactly one generation specification",
+        422,
+      );
+    }
     return rawSpecs.map((raw) => {
       const spec = GenerationSpecV1Schema.parse(raw);
       const expected = expectedByOrdinal.get(spec.ordinal);
@@ -710,11 +749,15 @@ export class GenerationPlanService {
     }
   }
 
-  private assertThreeShots(ordinals: number[]) {
-    if (ordinals.length !== 3 || ordinals.some((ordinal, index) => ordinal !== index + 1))
+  private assertVariableShots(ordinals: number[]) {
+    if (
+      ordinals.length < 1 ||
+      ordinals.length > 20 ||
+      ordinals.some((ordinal, index) => ordinal !== index + 1)
+    )
       throw this.error(
         "GENERATION_SPEC_INVALID",
-        "A generation plan requires exactly three ordered storyboard shots",
+        "A generation plan requires 1–20 contiguously ordered storyboard shots",
         422,
       );
   }

@@ -49,6 +49,7 @@ const zh: Record<string, string> = {
     "要归档这个项目吗？所有原始文件和项目详情都会保留。",
   "Add a creative brief to keep the work focused.": "添加创意说明，让制作目标保持清晰。",
   "Plan a three-shot storyboard": "规划三镜头分镜",
+  "Plan a flexible storyboard": "规划灵活镜头数的分镜",
   "Fake Director, immutable versions, and explainable asset gaps · 0 external calls":
     "Fake Director、不可变版本与可解释素材缺口 · 0 次外部调用",
   "Open storyboards →": "打开分镜工作区 →",
@@ -312,20 +313,40 @@ const zh: Record<string, string> = {
   Storyboards: "分镜",
   "Create a three-shot draft, preserve every version, and resolve approved assets later.":
     "创建三镜头草稿、保留每个版本，并在后续解析已批准素材。",
+  "Start with three shots, then add, remove, and reorder up to twenty while preserving every version.":
+    "从三镜头开始，可增删并重新排序至最多二十个镜头，同时保留每个历史版本。",
   "Start a storyboard": "创建分镜",
   Title: "标题",
   "Create storyboard": "创建分镜",
   "Opening storyboard…": "正在打开分镜…",
   "Three-shot draft · Fake Director · 0 external calls":
     "三镜头草稿 · Fake Director · 0 次外部调用",
+  "Flexible shot draft · Fake Director starts with 3 · 0 external calls":
+    "灵活镜头草稿 · Fake Director 默认生成 3 个 · 0 次外部调用",
   "Generate three shots": "生成三镜头",
   "New Fake proposal": "生成新的 Fake 提案",
   "Save new version": "保存新版本",
+  "Add shot": "添加镜头",
+  Actions: "操作",
+  Delete: "永久删除",
+  "No active storyboards.": "没有进行中的分镜。",
+  "No archived storyboards.": "没有已归档的分镜。",
+  "This storyboard is archived and remains read-only until restored.":
+    "该分镜已归档，恢复之前保持只读。",
   "A deterministic three-shot proposal was added. External calls: 0.":
     "已添加确定性的三镜头提案。外部调用：0。",
   "A new immutable version was saved.": "新的不可变版本已保存。",
+  "A new version was saved with the project’s structured asset requirements.":
+    "已保存新版本，并补充项目的结构化素材需求。",
   "Candidate preview completed without creating a formal selection.":
     "候选预览已完成，没有创建正式选择。",
+  "Candidate preview completed. The highest-ranked eligible candidate for each requirement was preselected as an editable recommendation; no formal selection was created.":
+    "候选预览已完成。每项需求已预选排名最高的可用候选作为可编辑建议；没有创建正式选择。",
+  "Recommended from the structured shot requirement · editable": "根据结构化镜头需求推荐 · 可修改",
+  "This version has no structured asset requirements, so there are no candidates to preview. Save a new version with project asset requirements first.":
+    "当前版本没有结构化素材需求，因此没有候选可预览。请先保存一个包含项目素材需求的新版本。",
+  "This version has no structured asset requirements, so there are no candidates to preview.":
+    "当前版本没有结构化素材需求，因此没有候选可预览。",
   "Formal asset binding and approval remain closed until Phase 2 verification passes":
     "Phase 2 验证通过前，正式素材绑定和批准保持关闭",
   "Version history and comparison": "版本历史与对比",
@@ -336,6 +357,16 @@ const zh: Record<string, string> = {
     "预览始终为只读。Phase 2 验证通过前，正式绑定和批准保持关闭。",
   "Preview asset candidates": "预览素材候选",
   "No candidate gaps": "没有候选缺口",
+  "All structured asset requirements have eligible candidates":
+    "所有结构化素材需求都有符合条件的候选。",
+  "No structured asset requirements were found for this version.": "当前版本没有结构化素材需求。",
+  "Structured asset requirements": "结构化素材需求",
+  "No structured asset requirements on this version.": "当前版本没有结构化素材需求。",
+  "This version has no structured asset requirements. Your shot text can stay unchanged; save a new version to add the project’s published semantic assets as requirements.":
+    "当前版本没有结构化素材需求。镜头文字无需改动，保存新版本即可把项目中已发布的语义素材加入需求。",
+  "Save with project asset requirements": "保存并补充项目素材需求",
+  "Formal asset binding is closed because the recorded Phase 2 Gate is not complete.":
+    "正式素材绑定仍关闭：Phase 2 Gate 的验证记录尚未完成。",
   "Select eligible asset": "选择符合条件的素材",
   "Freeze asset manifest": "冻结素材清单",
   "Approve storyboard": "批准分镜",
@@ -380,6 +411,10 @@ const patterns: Array<[RegExp, (...values: string[]) => string]> = [
     (state, revision) => `${translateUiText(state, "zh-CN")} · 修订 ${revision}`,
   ],
   [/^(\d+) blocking gaps$/, (count) => `${count} 个阻塞缺口`],
+  [
+    /^@(.+) · (CHARACTER|OUTFIT|PROP|SCENE|HAIR|MAKEUP|ACCESSORY)$/,
+    (name, type) => `@${name} · ${translateUiText(type, "zh-CN")}`,
+  ],
   [
     /^Status: (.+); recorded attempts: (\d+)$/,
     (status, attempts) => `状态：${status}；已记录尝试：${attempts}`,

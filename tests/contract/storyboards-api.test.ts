@@ -12,6 +12,8 @@ describe("Storyboard HTTP contract", () => {
       "/api/projects/{projectId}/storyboards",
       "/api/storyboards/{storyboardId}/generate",
       "/api/storyboards/{storyboardId}/versions",
+      "/api/storyboards/{storyboardId}/archive",
+      "/api/storyboards/{storyboardId}/restore",
       "/api/storyboard-versions/{versionId}/asset-candidates/preview",
       "/api/storyboard-versions/{versionId}/asset-resolution-manifests",
       "/api/storyboard-versions/{versionId}/decisions",
@@ -27,10 +29,14 @@ describe("Storyboard HTTP contract", () => {
   it("keeps stable error codes and physical route handlers in sync", async () => {
     expect(storyboardErrorCodes).toContain("VERSION_CONFLICT");
     expect(storyboardErrorCodes).toContain("PHASE2_GATE_CLOSED");
+    expect(storyboardErrorCodes).toContain("STORYBOARD_ARCHIVED");
+    expect(storyboardErrorCodes).toContain("STORYBOARD_DELETE_REQUIRES_ARCHIVE");
     for (const path of [
       "apps/project-web/app/api/projects/[projectId]/storyboards/route.ts",
       "apps/project-web/app/api/storyboards/[storyboardId]/generate/route.ts",
       "apps/project-web/app/api/storyboards/[storyboardId]/versions/route.ts",
+      "apps/project-web/app/api/storyboards/[storyboardId]/archive/route.ts",
+      "apps/project-web/app/api/storyboards/[storyboardId]/restore/route.ts",
       "apps/project-web/app/api/storyboard-versions/[versionId]/asset-candidates/preview/route.ts",
       "apps/project-web/app/api/storyboard-versions/[versionId]/asset-resolution-manifests/route.ts",
       "apps/project-web/app/api/storyboard-versions/[versionId]/decisions/route.ts",

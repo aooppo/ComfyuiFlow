@@ -59,8 +59,10 @@ AI/provider/ComfyUI service is required; Provider and generation calls remain `0
 ## Storyboard workspace
 
 Open a project and choose **Open storyboards**. The separate editor supports a deterministic
-three-shot Fake proposal, shot editing and ordering, immutable saves, refresh readback, and
-side-by-side version comparison. Candidate preview shows gaps without persisting a choice.
+three-shot Fake proposal followed by owner-controlled 1–20-shot editing, add/remove/reorder,
+immutable saves, refresh readback, and side-by-side version comparison. Empty Storyboards can be
+deleted; established Storyboards can be archived and restored without losing history. Candidate
+preview shows gaps without persisting a choice.
 
 Formal asset binding and approval are server-gated and default closed. When Phase 2 Human QA is
 complete, the server gate may be enabled to revalidate owner selections, freeze an exact manifest,

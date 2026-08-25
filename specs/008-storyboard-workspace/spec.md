@@ -36,8 +36,8 @@ the page, and verify that the same three ordered shots and zero-call provenance 
 
 ### User Story 2 - Edit and Compare Immutable Versions (Priority: P1)
 
-As the project owner, I can edit, reorder, save, and compare the three shots without overwriting an
-older version, so creative changes remain reversible and attributable.
+As the project owner, I can add, remove, edit, reorder, save, and compare 1–20 shots without
+overwriting an older version, so creative changes remain reversible and attributable.
 
 **Why this priority**: Human control and append-only history are required before any storyboard can
 be treated as an approved business decision.
@@ -53,7 +53,7 @@ session receives a conflict, then compare and reopen both immutable versions.
    attempts to save, **Then** the second receives an actionable version-conflict response and no
    content is overwritten.
 3. **Given** an incomplete working draft, **When** the owner saves it, **Then** it remains editable but
-   cannot be approved until it contains exactly three valid ordered shots.
+   cannot be approved until it contains 1–20 complete, unique, contiguous ordered shots.
 
 ---
 
@@ -78,7 +78,7 @@ manifest, and append an approval decision.
    operation fails closed and creates no binding, manifest, or decision.
 3. **Given** the gate is open and a selected candidate remains eligible, **When** the owner confirms
    it, **Then** the exact semantic version, state version, file binding, and project file are locked.
-4. **Given** exactly three valid shots and a complete frozen asset-resolution manifest, **When** the
+4. **Given** 1–20 valid shots and a complete frozen asset-resolution manifest, **When** the
    owner approves the current version, **Then** an append-only approval decision is recorded without
    authorizing generation.
 5. **Given** any missing, stale, cross-project, unapproved, inactive, or non-ready asset, **When**
@@ -86,10 +86,9 @@ manifest, and append an approval decision.
 
 ### Edge Cases
 
-- A proposal or saved draft that contains zero, one, two, or more than three shots remains
-  unapprovable; the Fake Director itself must always return exactly three.
+- A saved version must contain 1–20 shots; the Fake Director itself continues to return exactly three.
 - Duplicate or non-contiguous shot order values are normalized only in the editing form; persisted
-  versions must contain unique order values 1, 2, and 3 before approval.
+  versions must contain unique contiguous order values beginning at 1 before approval.
 - A stale `If-Match` value creates no new version and returns the current head identity.
 - Candidate eligibility changing after preview invalidates the proposed binding; confirmation must
   re-evaluate the candidate within the write transaction.
@@ -118,8 +117,8 @@ manifest, and append an approval decision.
   partial records.
 - **FR-008**: The owner MUST be able to view the current head, inspect version history, compare two
   versions, and reopen any historical version read-only.
-- **FR-009**: Incomplete drafts MAY be saved, but approval MUST require exactly three valid shots with
-  unique order values 1 through 3.
+- **FR-009**: Saved drafts and approval MUST require 1–20 valid shots with unique contiguous order
+  values beginning at 1; approval additionally requires a complete current manifest.
 - **FR-010**: Each shot MUST hold zero or more structured ShotAssetRequirements that embed the frozen
   `asset-candidate-v1` request and its canonical hash.
 - **FR-011**: Candidate preview MUST reuse the Phase 2 hard-filtering service and return eligible,
@@ -170,7 +169,7 @@ manifest, and append an approval decision.
   minutes without technical identifiers or command-line interaction.
 - **SC-002**: One hundred percent of saves preserve the prior version and reject stale-head writes
   without partial version, shot, requirement, or run records.
-- **SC-003**: Every approvable version contains exactly three shots ordered 1–3 and a complete frozen
+- **SC-003**: Every approvable version contains 1–20 contiguously ordered shots and a complete frozen
   manifest; every incomplete version is rejected with an explainable reason.
 - **SC-004**: Candidate preview produces the same normalized input and output hashes for unchanged
   data and never restores a hard-filtered candidate.
@@ -189,8 +188,8 @@ generation 0`.
 ## Assumptions
 
 - The application remains local, single-owner, and project-scoped.
-- The first approvable storyboard has exactly three portrait-video shots; responsive desktop browser
-  support is sufficient for this phase.
+- Fake Director starts with three portrait-video shots; owner-edited approvable versions support
+  1–20 shots, and responsive desktop browser support is sufficient for this phase.
 - Fake Director is the only enabled Storyboard Provider; adding a real Provider requires a separate
   feature, live gate, persisted authorization, and action-time confirmation.
 - Phase 2 convergence remains owned by `specs/007-asset-understanding`; this feature consumes its

@@ -14,7 +14,7 @@
 - [x] T007 [P] Add route, ETag, idempotency, and safe-error tests in `tests/contract/generation-plans-api.test.ts`
 - [x] T008 Add GenerationPlan entities and project relations in `packages/project-core/prisma/schema.prisma`
 - [x] T009 Add the additive migration, project-composite keys, and immutable triggers in `packages/project-core/prisma/migrations/202608250007_generation_plans/migration.sql`
-- [x] T010 Implement the pure deterministic three-shot transformation in `packages/project-core/src/deterministic-shot-planner.ts`
+- [x] T010 Implement the pure deterministic bounded variable-shot transformation in `packages/project-core/src/deterministic-shot-planner.ts`
 
 ## Phase 3: User Story 1 - Create a Deterministic Plan (P1)
 

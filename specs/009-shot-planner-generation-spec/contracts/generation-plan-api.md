@@ -7,7 +7,7 @@ Errors use `{ "error": { "code": "STABLE_CODE", "message": "safe text", "details
 - `POST /api/storyboard-versions/{versionId}/generation-plans`: requires `Idempotency-Key`; returns 201, ETag, `externalCalls: 0`, and `generationAuthorized: false`.
 - `GET /api/generation-plans/{planId}`: returns identity, head, approval projection, decisions, and ETag `"generation-plan-{rowVersion}"`.
 - `GET /api/generation-plans/{planId}/versions`: immutable version summaries.
-- `POST /api/generation-plans/{planId}/versions`: requires `If-Match` and parent; appends exactly three owner-edited specs.
+- `POST /api/generation-plans/{planId}/versions`: requires `If-Match` and parent; appends 1–20 owner-edited specs with exact source-shot alignment.
 - `POST /api/generation-plan-versions/{versionId}/preflight`: returns ready/blockers/shot results with zero writes/calls.
 - `POST /api/generation-plan-versions/{versionId}/decisions`: requires `If-Match` and `Idempotency-Key`; appends APPROVED or REVOKED.
 

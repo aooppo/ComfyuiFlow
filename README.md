@@ -213,11 +213,13 @@ DATABASE_URL=postgresql://comfyuiflow:comfyuiflow@127.0.0.1:5448/comfyuiflow pnp
 This never starts automatic retries or provider fallback. The normal local validation ledger is
 `Provider 0 / AI ranking 0 / ComfyUI or video generation 0`.
 
-## Phase 3 three-shot storyboard workspace
+## Phase 3 flexible storyboard workspace
 
 Each active project now links to a separate Storyboards workspace. The local Fake Director creates
 exactly three deterministic draft shots with zero external calls. Owner edits append immutable
-versions guarded by `If-Match`; historical versions remain readable and comparable.
+versions containing 1–20 shots guarded by `If-Match`; shots can be added, removed, and reordered,
+while historical versions remain readable and comparable. Empty Storyboards can be permanently
+deleted; Storyboards with durable history use recoverable archive/restore.
 
 Asset candidate preview remains read-only. Formal `ShotAssetBinding`, frozen
 `AssetResolutionManifest`, and append-only approval decisions are implemented but fail closed while
@@ -226,9 +228,9 @@ never authorizes AI, ComfyUI, video generation, QA acceptance, or final assembly
 
 ## Phase 4 Shot Planner
 
-An approved three-shot Storyboard now opens a separate **Shot Plan** workspace. The deterministic
-Planner converts the approved Storyboard and frozen asset Manifest into exactly three immutable,
-provider-neutral `GenerationSpec v1` records with canonical input, reference, and output hashes.
+An approved 1–20-shot Storyboard now opens a separate **Shot Plan** workspace. The deterministic
+Planner converts every approved Storyboard shot and its frozen asset Manifest into one immutable,
+provider-neutral `GenerationSpec v1` record with canonical input, reference, and output hashes.
 
 Owner prompt edits append new versions under `If-Match`; history remains comparable. Preflight
 rechecks Storyboard approval, Manifest identity, exact file readiness/approval, project isolation,

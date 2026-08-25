@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { GenerationPlanVersionInputV1Schema } from "@comfyuiflow/contracts";
 import {
   buildGenerationSpecs,
   DETERMINISTIC_SHOT_PLANNER_VERSION,
@@ -41,6 +42,28 @@ describe("GenerationSpec v1 deterministic planner", () => {
       true,
     );
     expect(new Set(first.map((spec) => spec.outputHash)).size).toBe(3);
+  });
+
+  it.each([1, 4, 20])("maps every source shot for a %i-shot plan", (count) => {
+    const source = input();
+    source.shots = Array.from({ length: count }, (_, index) => ({
+      ...source.shots[0]!,
+      id: randomUUID(),
+      shotKey: randomUUID(),
+      ordinal: index + 1,
+      action: `Action ${index + 1}`,
+    }));
+    const specs = buildGenerationSpecs(source);
+    expect(specs).toHaveLength(count);
+    expect(specs.map((spec) => spec.ordinal)).toEqual(
+      Array.from({ length: count }, (_, index) => index + 1),
+    );
+    expect(
+      GenerationPlanVersionInputV1Schema.parse({
+        parentVersionId: randomUUID(),
+        specs,
+      }).specs,
+    ).toHaveLength(count);
   });
 
   it("keeps references ordered and contains no provider or workflow parameters", () => {

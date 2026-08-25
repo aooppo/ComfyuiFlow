@@ -40,6 +40,9 @@ export interface StoryboardView {
   rowVersion: number;
   headVersionId: string | null;
   approvedVersionId: string | null;
+  status: "ACTIVE" | "ARCHIVED";
+  archivedAt: string | null;
+  formalAssetBindingEnabled: boolean;
   headVersion: StoryboardVersionView | null;
 }
 
@@ -49,6 +52,9 @@ export interface StoryboardListItem {
   creativeBrief: string;
   rowVersion: number;
   approvedVersionId: string | null;
+  status: "ACTIVE" | "ARCHIVED";
+  archivedAt: string | null;
   headVersion: null | { versionNumber: number; shots: Array<{ id: string }> };
+  _count: { versions: number; runs: number; decisions: number; generationPlans: number };
   updatedAt: string;
 }

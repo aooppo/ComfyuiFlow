@@ -31,6 +31,7 @@ describe.runIf(enabled)("Storyboard PostgreSQL workspace", () => {
       },
     });
     projectId = project.id;
+    await createActiveSemanticAsset(client, projectId, "PROP", "Coffee Table");
   });
 
   afterAll(async () => {
@@ -46,6 +47,36 @@ describe.runIf(enabled)("Storyboard PostgreSQL workspace", () => {
     const generated = await closed.generate(storyboard.id, 0);
     expect(generated.rowVersion).toBe(1);
     expect(generated.headVersion?.shots.map((shot) => shot.ordinal)).toEqual([1, 2, 3]);
+    expect(generated.headVersion?.shots.map((shot) => shot.requirements)).toEqual([
+      [
+        expect.objectContaining({
+          requirementKey: "shot-1-prop-coffee-table",
+          contractVersion: "asset-candidate-v1",
+        }),
+      ],
+      [
+        expect.objectContaining({
+          requirementKey: "shot-2-prop-coffee-table",
+          contractVersion: "asset-candidate-v1",
+        }),
+      ],
+      [
+        expect.objectContaining({
+          requirementKey: "shot-3-prop-coffee-table",
+          contractVersion: "asset-candidate-v1",
+        }),
+      ],
+    ]);
+    const generatedPreview = await closed.previewAssets(generated.headVersionId!);
+    expect(generatedPreview.gaps).toEqual([]);
+    const generatedManifest = await open.resolveAssets(generated.headVersionId!, {
+      candidateResultHash: generatedPreview.resultHash,
+      selections: generatedPreview.results.map((entry) => ({
+        requirementId: entry.requirementId,
+        assetVersionFileIds: [entry.result.eligible[0]!.bindingId],
+      })),
+    });
+    expect(generatedManifest.bindings).toHaveLength(3);
     expect(await client.storyboardDirectorRun.count({ where: { providerCallCount: 0 } })).toBe(1);
 
     const input = {
@@ -92,7 +123,11 @@ describe.runIf(enabled)("Storyboard PostgreSQL workspace", () => {
         selections: [],
       }),
     ).rejects.toMatchObject({ code: "PHASE2_GATE_CLOSED" });
-    expect(await client.assetResolutionManifest.count()).toBe(0);
+    expect(
+      await client.assetResolutionManifest.count({
+        where: { storyboardVersionId: storyboard.headVersionId! },
+      }),
+    ).toBe(0);
 
     const manifest = await open.resolveAssets(storyboard.headVersionId!, {
       candidateResultHash: preview.resultHash,
@@ -109,10 +144,107 @@ describe.runIf(enabled)("Storyboard PostgreSQL workspace", () => {
     const readback = await open.get(storyboard.id);
     expect(readback.approvedVersionId).toBe(storyboard.headVersionId);
   });
+
+  it("hard-deletes only empty storyboards and archives/restores versioned history", async () => {
+    const empty = await open.create(projectId, {
+      title: "Accidental empty card",
+      creativeBrief: "Delete before any durable history exists.",
+    });
+    await expect(open.deleteEmpty(empty.id, empty.rowVersion)).resolves.toEqual({
+      id: empty.id,
+      deleted: true,
+    });
+    expect(await client.storyboard.count({ where: { id: empty.id } })).toBe(0);
+
+    const versioned = await open.create(projectId, {
+      title: "Recoverable history",
+      creativeBrief: "Archive without destroying immutable versions.",
+    });
+    const generated = await open.generate(versioned.id, versioned.rowVersion);
+    const before = await open.getVersion(generated.headVersionId!);
+    const archived = await open.archive(versioned.id, generated.rowVersion);
+    expect(archived.status).toBe("ARCHIVED");
+    expect((await open.list(projectId)).some((item) => item.id === versioned.id)).toBe(false);
+    expect((await open.list(projectId, 50, "ARCHIVED")).map((item) => item.id)).toContain(
+      versioned.id,
+    );
+    await expect(open.generate(versioned.id, archived.rowVersion)).rejects.toMatchObject({
+      code: "STORYBOARD_ARCHIVED",
+    });
+    const restored = await open.restore(versioned.id, archived.rowVersion);
+    expect(restored.status).toBe("ACTIVE");
+    expect((await open.getVersion(generated.headVersionId!)).contentHash).toBe(before.contentHash);
+    await expect(open.deleteEmpty(versioned.id, restored.rowVersion)).rejects.toMatchObject({
+      code: "STORYBOARD_DELETE_REQUIRES_ARCHIVE",
+    });
+  });
 });
 
 async function reset(client: ProjectPrisma) {
   await client.$executeRawUnsafe(
     'TRUNCATE TABLE "StoryboardDecision", "ShotAssetBinding", "AssetResolutionManifest", "ShotAssetRequirement", "StoryboardShot", "StoryboardDirectorRun", "StoryboardVersion", "Storyboard", "Project" CASCADE',
   );
+}
+
+async function createActiveSemanticAsset(
+  client: ProjectPrisma,
+  projectId: string,
+  type: "PROP",
+  name: string,
+) {
+  const asset = await client.productionAsset.create({
+    data: {
+      projectId,
+      type,
+      name,
+      normalizedName: name.toLocaleLowerCase(),
+    },
+  });
+  const version = await client.productionAssetVersion.create({
+    data: {
+      projectId,
+      productionAssetId: asset.id,
+      versionNumber: 1,
+      displayName: name,
+      status: "ACTIVE",
+      publishedAt: new Date(),
+    },
+  });
+  await client.productionAsset.update({
+    where: { id: asset.id },
+    data: { currentVersionId: version.id },
+  });
+  const nonce = randomUUID().replaceAll("-", "");
+  const storedObject = await client.storedObject.create({
+    data: {
+      sha256: `${nonce}${nonce}`,
+      byteSize: 1,
+      detectedMimeType: "image/png",
+      storageKey: `tests/storyboard/${nonce}`,
+      verificationStatus: "VERIFIED",
+    },
+  });
+  const file = await client.asset.create({
+    data: {
+      projectId,
+      storedObjectId: storedObject.id,
+      originalFilename: `${name}.png`,
+      displayName: name,
+      mediaType: "IMAGE",
+      role: "PROP",
+      status: "READY",
+      width: 10,
+      height: 10,
+    },
+  });
+  await client.assetVersionFile.create({
+    data: {
+      projectId,
+      productionAssetVersionId: version.id,
+      projectAssetId: file.id,
+      referenceUsage: "PROP_DETAIL",
+      approvalStatus: "ACCEPTED",
+      status: "ACTIVE",
+    },
+  });
 }

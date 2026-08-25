@@ -292,6 +292,64 @@ textarea {
 .storyboardCard p {
   color: var(--muted);
 }
+.storyboardCardWithActions {
+  display: grid;
+  gap: 18px;
+  transition:
+    transform 0.2s,
+    border-color 0.2s;
+}
+.storyboardCardWithActions > a {
+  color: inherit;
+  text-decoration: none;
+}
+.storyboardListTabs,
+.shotStructureActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.storyboardListTabs button {
+  min-height: 40px;
+}
+.storyboardCardMenu {
+  justify-self: end;
+  position: relative;
+}
+.storyboardCardMenu summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 750;
+  list-style: none;
+  padding: 8px 10px;
+}
+.storyboardCardMenu summary::-webkit-details-marker {
+  display: none;
+}
+.storyboardCardMenu > div {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(45, 50, 46, 0.13);
+  padding: 8px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 2;
+}
+.dangerTextButton {
+  border: 1px solid rgba(156, 46, 46, 0.3);
+  border-radius: 10px;
+  background: #fff8f6;
+  color: var(--danger);
+  padding: 9px 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.dangerTextButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .shotCard {
   display: grid;
   gap: 15px;
@@ -310,6 +368,28 @@ textarea {
   border-radius: 9px;
   margin-left: 6px;
 }
+.shotRequirements {
+  display: grid;
+  gap: 8px;
+  padding: 13px;
+  border: 1px solid rgba(47, 79, 68, 0.16);
+  border-radius: 14px;
+  background: #f7f4ec;
+  color: var(--muted);
+  font-size: 14px;
+}
+.shotRequirements strong {
+  color: var(--ink);
+}
+.shotRequirements ul,
+.shotRequirements p {
+  margin: 0;
+}
+.shotRequirements ul {
+  display: grid;
+  gap: 4px;
+  padding-left: 18px;
+}
 .storyboardPanel {
   display: grid;
   gap: 18px;
@@ -327,6 +407,12 @@ textarea {
 .candidateResults {
   display: grid;
   gap: 12px;
+}
+.recommendationNote {
+  display: block;
+  margin: 5px 0;
+  color: var(--accent-dark);
+  font-size: 12px;
 }
 .successPanel {
   padding: 14px 18px;
@@ -439,6 +525,15 @@ textarea {
   text-align: center;
   color: var(--muted);
   background: rgba(255, 255, 255, 0.35);
+}
+.storyboardPage > .noticePanel {
+  display: grid;
+  gap: 14px;
+  text-align: left;
+  padding: 20px 24px;
+}
+.storyboardPage > .noticePanel p {
+  margin: 0;
 }
 .emptyPanel h3 {
   color: var(--ink);

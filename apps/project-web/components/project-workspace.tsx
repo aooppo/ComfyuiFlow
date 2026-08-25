@@ -50,7 +50,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
       <ProjectHeader project={project} onChange={setProject} />
       <a className="storyboardEntry" href={`/projects/${project.id}/storyboards`}>
         <span>
-          <strong>Plan a three-shot storyboard</strong>
+          <strong>Plan a flexible storyboard</strong>
           <small>
             Fake Director, immutable versions, and explainable asset gaps · 0 external calls
           </small>

@@ -4,9 +4,13 @@ import { apiError, jsonBody } from "../../../../../lib/api";
 const service = new StoryboardService();
 type Context = { params: Promise<{ projectId: string }> };
 
-export async function GET(_request: Request, context: Context) {
+export async function GET(request: Request, context: Context) {
   try {
-    return Response.json({ storyboards: await service.list((await context.params).projectId) });
+    const requestedStatus = new URL(request.url).searchParams.get("status");
+    const status = requestedStatus === "ARCHIVED" ? "ARCHIVED" : "ACTIVE";
+    return Response.json({
+      storyboards: await service.list((await context.params).projectId, 50, status),
+    });
   } catch (error) {
     return apiError(error);
   }

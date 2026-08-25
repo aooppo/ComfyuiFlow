@@ -175,10 +175,74 @@ describe.runIf(enabled)("Generation Plan PostgreSQL history", () => {
     expect(await client.generationPlan.count({ where: { projectId: foreignProject.id } })).toBe(0);
   });
 
+  it.each([1, 4, 20])(
+    "persists one deterministic spec per source shot for %i shots",
+    async (count) => {
+      const project = await client.project.findFirstOrThrow({ where: { status: "ACTIVE" } });
+      const storyboard = await storyboards.create(project.id, {
+        title: `${count} source shots`,
+        creativeBrief: `A variable ${count}-shot story.`,
+      });
+      const generated = await storyboards.generate(storyboard.id, 0);
+      const generatedVersion = await storyboards.getVersion(generated.headVersionId!);
+      const source = generatedVersion.shots[0]!;
+      const shots = Array.from({ length: count }, (_, index) => {
+        const existing = generatedVersion.shots[index];
+        const shot = existing ?? source;
+        return {
+          schemaVersion: "shot-draft-v1" as const,
+          shotKey: existing?.shotKey ?? randomUUID(),
+          ordinal: index + 1,
+          title: existing?.title ?? `Owner shot ${index + 1}`,
+          creativeDescription: shot.creativeDescription,
+          startState: shot.startState,
+          action: `${shot.action} Variable ${index + 1}.`,
+          endState: shot.endState,
+          camera: shot.camera,
+          composition: shot.composition,
+          continuityRequirements: shot.continuityRequirements as string[],
+          durationSeconds: shot.durationSeconds,
+          assetRequirements: [],
+        };
+      });
+      const saved = await storyboards.save(storyboard.id, generated.rowVersion, {
+        parentVersionId: generated.headVersionId,
+        creativeBrief: generated.creativeBrief,
+        shots,
+      });
+      const preview = await storyboards.previewAssets(saved.headVersionId!);
+      await storyboards.resolveAssets(saved.headVersionId!, {
+        candidateResultHash: preview.resultHash,
+        selections: [],
+      });
+      const approved = await storyboards.decide(
+        saved.headVersionId!,
+        saved.rowVersion,
+        randomUUID(),
+        { decision: "APPROVED" },
+      );
+      expect(approved.generationAuthorized).toBe(false);
+      const plan = await plans.create(saved.headVersionId!, randomUUID());
+      expect(plan.headVersion?.specs).toHaveLength(count);
+      expect((await plans.preflight(plan.headVersionId!)).ready).toBe(true);
+    },
+  );
+
   it("blocks decisions for archived projects and invalidates preflight after a Storyboard edit", async () => {
     const source = await storyboards.getVersion(approvedVersionId);
     const storyboard = await storyboards.get(source.storyboardId);
     const plan = await plans.create(approvedVersionId, randomUUID());
+    const archivedStoryboard = await storyboards.archive(storyboard.id, storyboard.rowVersion);
+    expect((await plans.preflight(plan.headVersionId!)).blockers).toContain("STORYBOARD_ARCHIVED");
+    await expect(
+      plans.decide(plan.headVersionId!, plan.rowVersion, randomUUID(), {
+        decision: "APPROVED",
+      }),
+    ).rejects.toMatchObject({ code: "STORYBOARD_ARCHIVED" });
+    const restoredStoryboard = await storyboards.restore(
+      storyboard.id,
+      archivedStoryboard.rowVersion,
+    );
     await client.project.update({
       where: { id: source.projectId },
       data: { status: "ARCHIVED", archivedAt: new Date() },
@@ -192,7 +256,7 @@ describe.runIf(enabled)("Generation Plan PostgreSQL history", () => {
       where: { id: source.projectId },
       data: { status: "ACTIVE", archivedAt: null },
     });
-    await storyboards.save(storyboard.id, storyboard.rowVersion, {
+    await storyboards.save(storyboard.id, restoredStoryboard.rowVersion, {
       parentVersionId: storyboard.headVersionId,
       creativeBrief: storyboard.creativeBrief,
       shots: source.shots.map((shot) => ({

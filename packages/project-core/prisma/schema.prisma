@@ -13,6 +13,11 @@ enum ProjectStatus {
   ARCHIVED
 }
 
+enum StoryboardStatus {
+  ACTIVE
+  ARCHIVED
+}
+
 enum TargetAspectRatio {
   PORTRAIT_9_16
   LANDSCAPE_16_9
@@ -744,6 +749,8 @@ model Storyboard {
   creativeBrief     String
   headVersionId     String?                 @unique @db.Uuid
   approvedVersionId String?                 @unique @db.Uuid
+  status            StoryboardStatus        @default(ACTIVE)
+  archivedAt        DateTime?
   rowVersion        Int                     @default(0)
   createdAt         DateTime                @default(now())
   updatedAt         DateTime                @updatedAt
@@ -756,6 +763,7 @@ model Storyboard {
   generationPlans   GenerationPlan[]
 
   @@unique([projectId, id])
+  @@index([projectId, status, updatedAt(sort: Desc)])
   @@index([projectId, updatedAt(sort: Desc)])
 }
 

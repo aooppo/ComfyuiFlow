@@ -8,11 +8,34 @@ export const createStoryboardSchema = z.object({
 
 export const storyboardShotInputSchema = ShotDraftV1Schema;
 
-export const appendStoryboardVersionSchema = z.object({
-  parentVersionId: z.string().uuid().nullable(),
-  creativeBrief: z.string().trim().min(1).max(4_000),
-  shots: z.array(storyboardShotInputSchema).max(20),
-});
+export const appendStoryboardVersionSchema = z
+  .object({
+    parentVersionId: z.string().uuid().nullable(),
+    creativeBrief: z.string().trim().min(1).max(4_000),
+    shots: z.array(storyboardShotInputSchema).min(1).max(20),
+    includeProjectAssetRequirements: z.boolean().default(false),
+  })
+  .superRefine((value, context) => {
+    if (new Set(value.shots.map((shot) => shot.shotKey)).size !== value.shots.length) {
+      context.addIssue({ code: "custom", path: ["shots"], message: "Shot keys must be unique" });
+    }
+    if (value.shots.some((shot, index) => shot.ordinal !== index + 1)) {
+      context.addIssue({
+        code: "custom",
+        path: ["shots"],
+        message: "Shot ordinals must be contiguous beginning at 1",
+      });
+    }
+    value.shots.forEach((shot, index) => {
+      if (shot.assetRequirements.some((item) => item.shotOrdinal !== index + 1)) {
+        context.addIssue({
+          code: "custom",
+          path: ["shots", index, "assetRequirements"],
+          message: "Asset requirement ordinal must match its shot",
+        });
+      }
+    });
+  });
 
 export const storyboardResolutionSchema = z.object({
   candidateResultHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -34,6 +57,9 @@ export const storyboardDecisionSchema = z.object({
 export const storyboardErrorCodes = [
   "STORYBOARD_NOT_FOUND",
   "STORYBOARD_VERSION_NOT_FOUND",
+  "STORYBOARD_ARCHIVED",
+  "STORYBOARD_ALREADY_ACTIVE",
+  "STORYBOARD_DELETE_REQUIRES_ARCHIVE",
   "PRECONDITION_REQUIRED",
   "VERSION_CONFLICT",
   "SHOT_COUNT_INVALID",
@@ -58,5 +84,5 @@ export function parseStoryboardEtag(value: string | null) {
 }
 
 export type CreateStoryboardInput = z.infer<typeof createStoryboardSchema>;
-export type AppendStoryboardVersionInput = z.infer<typeof appendStoryboardVersionSchema>;
+export type AppendStoryboardVersionInput = z.input<typeof appendStoryboardVersionSchema>;
 export type StoryboardResolutionInput = z.infer<typeof storyboardResolutionSchema>;

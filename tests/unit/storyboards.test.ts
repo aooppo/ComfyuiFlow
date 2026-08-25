@@ -21,14 +21,44 @@ describe("storyboard service contracts", () => {
     expect(parseStoryboardEtag("7")).toBeNull();
   });
 
-  it("allows incomplete saved drafts but rejects malformed shot payloads", () => {
+  it("accepts 1-20 contiguous unique shots and rejects empty or malformed payloads", () => {
+    const shot = (ordinal: number) => ({
+      schemaVersion: "shot-draft-v1" as const,
+      shotKey: `00000000-0000-4000-8000-${String(ordinal).padStart(12, "0")}`,
+      ordinal,
+      title: `Shot ${ordinal}`,
+      creativeDescription: "Description",
+      startState: "Start",
+      action: "Action",
+      endState: "End",
+      camera: "Camera",
+      composition: "Composition",
+      continuityRequirements: [],
+      durationSeconds: 3,
+      assetRequirements: [],
+    });
     expect(
       appendStoryboardVersionSchema.parse({
         parentVersionId: null,
         creativeBrief: "Work in progress",
-        shots: [],
+        shots: Array.from({ length: 20 }, (_, index) => shot(index + 1)),
+        includeProjectAssetRequirements: true,
       }).shots,
-    ).toEqual([]);
+    ).toHaveLength(20);
+    expect(() =>
+      appendStoryboardVersionSchema.parse({
+        parentVersionId: null,
+        creativeBrief: "Empty",
+        shots: [],
+      }),
+    ).toThrow();
+    expect(() =>
+      appendStoryboardVersionSchema.parse({
+        parentVersionId: null,
+        creativeBrief: "Gapped",
+        shots: [shot(1), shot(3)],
+      }),
+    ).toThrow();
     expect(() =>
       appendStoryboardVersionSchema.parse({
         parentVersionId: null,

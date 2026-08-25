@@ -43,7 +43,7 @@ isolation, candidate authority, and approval gates.
 - [x] T017 [P] [US2] Add failing concurrent append, stale ETag, and history tests in `tests/integration/storyboard-versioning.test.ts`
 - [x] T018 [US2] Implement owner version append, head compare-and-swap, version reads, history, and comparison projections in `packages/project-core/src/storyboard-service.ts`
 - [x] T019 [US2] Implement Storyboard/version GET and append routes with ETag/If-Match under `apps/project-web/app/api/storyboards/` and `apps/project-web/app/api/storyboard-versions/`
-- [x] T020 [US2] Implement the separate three-shot editor, ordering, save-conflict recovery, history, and comparison UI in `apps/project-web/components/storyboards/` and `apps/project-web/app/projects/[projectId]/storyboards/[storyboardId]/page.tsx`
+- [x] T020 [US2] Implement the separate variable-shot editor, ordering, save-conflict recovery, history, and comparison UI in `apps/project-web/components/storyboards/` and `apps/project-web/app/projects/[projectId]/storyboards/[storyboardId]/page.tsx`
 
 ## Phase 5: User Story 3 - Preview, Resolve, and Approve Assets (P2)
 
@@ -61,6 +61,12 @@ isolation, candidate authority, and approval gates.
 - [x] T027 Update `README.md`, `apps/project-web/README.md`, and `specs/008-storyboard-workspace/verification.md` with boundaries, migration evidence, Human QA, and the zero-call ledger
 - [x] T028 Run Spec Kit analyze plus repository format, lint, type, unit/contract/integration, Prisma, isolated PostgreSQL, build, secret, and diff gates; record exact evidence in `specs/008-storyboard-workspace/verification.md`
 - [x] T029 Run Spec Kit converge against FR-001–FR-022 and SC-001–SC-010, append any genuine residual tasks, implement them, and rerun convergence
+
+## Phase 7: Candidate Requirement Usability Convergence
+
+- [x] T030 [US3] Build deterministic, project-scoped structured asset requirements for each Fake Director proposal in `packages/project-core/src/storyboard-service.ts`; preserve explicit owner requirements and never create a formal binding or approval.
+- [x] T031 [US3] Make the storyboard editor distinguish “no requirements” from “no gaps”, show each shot’s structured requirements, and visibly disable manifest/approval actions while the Phase 2 gate is closed in `apps/project-web/components/storyboards/`.
+- [x] T032 [P] [US3] Add Fake-proposal requirement, candidate-preview empty-state, and gate-closed UI/service regression coverage in `tests/{unit,contract,integration}/`.
 
 ## Dependencies and Parallel Execution
 

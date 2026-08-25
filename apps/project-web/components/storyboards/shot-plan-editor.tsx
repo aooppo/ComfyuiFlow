@@ -232,6 +232,7 @@ export function ShotPlanEditor({
             Storyboard approval: confirmed · Shot Plan approval:{" "}
             {plan.approvedVersionId ? "confirmed" : "pending"}
           </p>
+          <p>{specs.length} source shots · one GenerationSpec per shot</p>
         </div>
       </header>
       <p className="noticePanel">

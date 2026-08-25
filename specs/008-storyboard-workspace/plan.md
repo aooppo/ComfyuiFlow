@@ -1,4 +1,4 @@
-# Implementation Plan: Three-Shot Storyboard Workspace
+# Implementation Plan: Storyboard Workspace
 
 **Branch**: `codex/phase-0-discovery` | **Date**: 2026-08-25 | **Spec**: [spec.md](spec.md)
 
@@ -6,9 +6,9 @@
 
 ## Summary
 
-Add a local three-shot storyboard workspace to the existing TypeScript modular monolith. Storyboard
-content is stored as immutable PostgreSQL versions, generated only by a deterministic zero-call Fake
-Director, edited through an independent Next.js route, and protected by optimistic concurrency.
+Add a local storyboard workspace to the existing TypeScript modular monolith. The deterministic
+zero-call Fake Director starts with three shots; owner-authored immutable PostgreSQL versions support
+1–20 shots through an independent Next.js route protected by optimistic concurrency.
 Phase 2 candidate previews remain read-only until the server-only Phase 2 gate is open; after the
 gate, formal bindings, a frozen resolution manifest, and an explicit owner decision complete the
 storyboard without authorizing video generation.
@@ -31,7 +31,7 @@ storyboard without authorizing video generation.
 
 **Constraints**: Zero external calls; append-only versions; project isolation; gate-closed formal selection by default; no automatic retry/fallback
 
-**Scale/Scope**: Single owner, local projects, three-shot MVP, up to 50 storyboard versions per project in normal use
+**Scale/Scope**: Single owner, local projects, 1–20 shots per saved version, up to 50 storyboard versions per project in normal use
 
 ## Constitution Check
 

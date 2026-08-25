@@ -12,7 +12,7 @@ Extend the modular monolith with a deterministic, zero-call Shot Planner. It con
 **Dependencies**: Next.js 15, React 19, Prisma 6.19, Zod 4, existing canonical JSON
 **Storage**: PostgreSQL for plan state/provenance; local StorageProvider remains read-only
 **Testing**: Vitest, isolated PostgreSQL, migration rehearsal, browser QA
-**Constraints**: exactly three specs, append-only, project isolation, zero external calls, no Provider/workflow fields
+**Constraints**: 1–20 source-aligned specs, append-only, project isolation, zero external calls, no Provider/workflow fields
 **Scale**: local single owner; up to 50 plan versions; preflight under two seconds
 
 ## Constitution Check

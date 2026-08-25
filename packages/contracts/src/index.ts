@@ -477,7 +477,7 @@ export type AssetUnderstandingProviderResult = z.infer<
 
 export const StoryboardAssetRequirementV1Schema = z
   .object({
-    shotOrdinal: z.number().int().min(1).max(3),
+    shotOrdinal: z.number().int().min(1).max(20),
     requirementKey: z.string().trim().min(1).max(120),
     contractVersion: z.literal("asset-candidate-v1"),
     candidateInput: z.record(z.string(), z.json()),
@@ -488,7 +488,7 @@ export const ShotDraftV1Schema = z
   .object({
     schemaVersion: z.literal("shot-draft-v1"),
     shotKey: UuidSchema,
-    ordinal: z.number().int().min(1).max(3),
+    ordinal: z.number().int().min(1).max(20),
     title: z.string().trim().min(1).max(120),
     creativeDescription: z.string().trim().min(1).max(4_000),
     startState: z.string().trim().min(1).max(2_000),
@@ -595,7 +595,7 @@ export const GenerationSpecV1Schema = z
     manifestId: UuidSchema,
     storyboardShotId: UuidSchema,
     shotKey: UuidSchema,
-    ordinal: z.number().int().min(1).max(3),
+    ordinal: z.number().int().min(1).max(20),
     startState: z.string().trim().min(1).max(2_000),
     action: z.string().trim().min(1).max(2_000),
     endState: z.string().trim().min(1).max(2_000),
@@ -615,12 +615,16 @@ export const GenerationSpecV1Schema = z
 export const GenerationPlanVersionInputV1Schema = z
   .object({
     parentVersionId: UuidSchema,
-    specs: z.array(GenerationSpecV1Schema).length(3),
+    specs: z.array(GenerationSpecV1Schema).min(1).max(20),
   })
   .strict()
   .superRefine((value, context) => {
     if (value.specs.some((spec, index) => spec.ordinal !== index + 1)) {
-      context.addIssue({ code: "custom", path: ["specs"], message: "Specs must be ordered 1-3" });
+      context.addIssue({
+        code: "custom",
+        path: ["specs"],
+        message: "Specs must have contiguous ordinals beginning at 1",
+      });
     }
   });
 

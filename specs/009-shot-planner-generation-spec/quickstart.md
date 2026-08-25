@@ -1,7 +1,7 @@
 # Quickstart Validation: Shot Planner and GenerationSpec
 
 1. Apply migrations to an isolated `*_test` PostgreSQL database.
-2. Create and approve a three-shot Storyboard with a frozen Manifest.
+2. Create and approve 1-, 4-, and 20-shot Storyboards with frozen Manifests.
 3. Create two plans with distinct idempotency keys; verify distinct IDs and identical content/hashes.
 4. Replay one key with the same request, then mismatched input; verify replay and conflict behavior.
 5. Edit in two sessions; verify one append and one zero-write conflict.

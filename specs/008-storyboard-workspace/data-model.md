@@ -28,7 +28,7 @@
 - `ordinal`, title, creative description, start/action/end, camera, composition, continuity array,
   and duration.
 - Unique `(storyboardVersionId, ordinal)` and `(storyboardVersionId, shotKey)`.
-- Draft versions may contain 0–20 shots; approval requires exactly ordinals 1, 2, and 3.
+- Saved draft and approved versions contain 1–20 shots with contiguous ordinals beginning at 1.
 
 ## ShotAssetRequirement
 
@@ -56,7 +56,7 @@
 
 - Immutable `APPROVED` or `REVOKED` event with project/storyboard/version/manifest identity,
   idempotency key, optional notes, and timestamp.
-- Approval requires the current head, exactly three valid shots, complete requirements, and a frozen
+- Approval requires the current head, 1–20 valid contiguous shots, complete requirements, and a frozen
   manifest. Revocation appends a new event and clears only the Storyboard approval projection.
 
 ## State Transitions
