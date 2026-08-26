@@ -15,7 +15,7 @@ describe.runIf(enabled)("Capability workflow PostgreSQL foundation", () => {
     }
     client = (await import("@comfyuiflow/project-core")).prisma;
     await client.$executeRawUnsafe(
-      'TRUNCATE TABLE "GenerationAssemblySourceV3Record", "GenerationAssemblyV3Record", "GenerationRetryPreviewV3Record", "GenerationOwnerDecisionV3Record", "GenerationArtifactV3Record", "GenerationAttemptV3Record", "AuthorizationConsumptionV3Record", "MaterializedGraphSnapshotV3Record", "ReferencePlanV3Record", "TrialScopeRevocation", "TrialScopeApprovalItem", "TrialScopeApproval", "GenerationBatchTargetV3Record", "GenerationBatchV3Record", "CapabilityImplementationEvidence", "CapabilityRegistryPublication", "CapabilityDiscoveryCandidate", "GenerationAuthorizationV3Record", "GenerationPlanV3Record", "GenerationSpecV3Record", "PlanningInputSnapshotV3Record", "ShotRequirementSpecV3Record", "CapabilityGenerationImplementation", "CapabilityCompilerProfile", "CapabilityAdapterProfile", "CapabilityModelProfile", "CapabilityProviderProfile", "CapabilityRuntimeProfile", "ShotAssetBinding", "AssetResolutionManifest", "ShotAssetRequirement", "StoryboardShot", "StoryboardVersion", "Storyboard", "AssetVersionFile", "ProductionAssetVersion", "ProductionAsset", "Asset", "StoredObject", "Project" CASCADE',
+      'TRUNCATE TABLE "AiQaResultV3Record", "AiQaRunV3Record", "GenerationAssemblySourceV3Record", "GenerationAssemblyV3Record", "GenerationRetryPreviewV3Record", "GenerationOwnerDecisionV3Record", "GenerationArtifactV3Record", "GenerationAttemptV3Record", "AuthorizationConsumptionV3Record", "MaterializedGraphSnapshotV3Record", "ReferencePlanV3Record", "TrialScopeRevocation", "TrialScopeApprovalItem", "TrialScopeApproval", "GenerationBatchTargetV3Record", "GenerationBatchV3Record", "CapabilityImplementationEvidence", "CapabilityRegistryPublication", "CapabilityDiscoveryCandidate", "GenerationAuthorizationV3Record", "GenerationPlanV3Record", "GenerationSpecV3Record", "PlanningInputSnapshotV3Record", "ShotRequirementSpecV3Record", "CapabilityGenerationImplementation", "CapabilityCompilerProfile", "CapabilityAdapterProfile", "CapabilityModelProfile", "CapabilityProviderProfile", "CapabilityRuntimeProfile", "ShotAssetBinding", "AssetResolutionManifest", "ShotAssetRequirement", "StoryboardShot", "StoryboardVersion", "Storyboard", "AssetVersionFile", "ProductionAssetVersion", "ProductionAsset", "Asset", "StoredObject", "Project" CASCADE',
     );
   });
 
@@ -35,11 +35,12 @@ describe.runIf(enabled)("Capability workflow PostgreSQL foundation", () => {
           'TrialScopeApprovalItem', 'TrialScopeRevocation', 'ReferencePlanV3Record',
           'MaterializedGraphSnapshotV3Record', 'AuthorizationConsumptionV3Record',
           'GenerationAttemptV3Record', 'GenerationArtifactV3Record',
+          'AiQaRunV3Record', 'AiQaResultV3Record',
           'GenerationOwnerDecisionV3Record', 'GenerationRetryPreviewV3Record',
           'GenerationAssemblyV3Record', 'GenerationAssemblySourceV3Record')
        ORDER BY table_name`,
     );
-    expect(tables).toHaveLength(28);
+    expect(tables).toHaveLength(30);
     await expect(
       client.$queryRawUnsafe(`SELECT COUNT(*)::int AS count FROM "GenerationSpec"`),
     ).resolves.toEqual([expect.objectContaining({ count: expect.any(Number) })]);
@@ -496,6 +497,14 @@ describe.runIf(enabled)("Capability workflow PostgreSQL foundation", () => {
     const { GenerationExecutionService } = await import("@comfyuiflow/project-core");
     const execution = new GenerationExecutionService(client, undefined, {
       PROJECT_GENERATION_LIVE_ENABLED: "true",
+      VIDEO_QA_LIVE_ENABLED: "true",
+      VIDEO_QA_PROVIDER_PROFILE: "codexmanager-local",
+      VIDEO_QA_MODEL_ID: "gpt-5.4",
+      VIDEO_QA_BILLING_CHANNEL: "test",
+      VIDEO_QA_MAX_COST_MICROS: "10000",
+      VIDEO_QA_PRICE_EFFECTIVE_AT: "2026-08-01T00:00:00.000Z",
+      VIDEO_QA_PRICE_EXPIRES_AT: "2026-09-01T00:00:00.000Z",
+      CODEX_MANAGER_API_KEY: "test-only-key",
     });
     const executionPreview = await execution.previewV3(automaticallyBound.planId, {
       schemaVersion: "capability-generation-execution-preview-request-v3",

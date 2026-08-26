@@ -489,7 +489,11 @@ packages/project-core/prisma/schema.prisma`; `pnpm typecheck`; `pnpm lint`; targ
   `packages/project-core/src/workflow-agent/compilers/hailuo03.ts` and
   `tests/unit/workflow-agent-registry.test.ts`. All Feature 016 files modified in this closure were
   individually formatted.
-- The only reachable PostgreSQL listener is `comfyuiflow-phase14-project-postgres-1` on 5448, owned by
-  the Phase 14 worktree. It was not migrated, reset, queried for project data, or reused. T129–T137
-  stay open pending a target-owned serial PostgreSQL/migration rehearsal and the added QA/browser tests.
+- The Phase 14 PostgreSQL listener on 5448 was not migrated, reset, queried for project data, or
+  reused. Instead, a temporary container `comfyuiflow-016-postgres-test` on 5549 was initialized with
+  the blank `comfyuiflow_test` database, all 26 migrations were applied, and
+  `RUN_PROJECT_DB_TESTS=1 pnpm vitest run tests/integration/capability-workflow-postgres.test.ts`
+  passed 6/6. The container was stopped with `--rm` immediately afterward. T130/T132–T137 remain
+  open for dedicated V3 QA, retry/assembly concurrency, browser, performance, and full regression
+  coverage.
 - External calls in this closure: Director 0, AI QA 0, ComfyUI `/prompt` 0, Hailuo/video Provider 0.
