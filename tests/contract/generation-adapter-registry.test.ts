@@ -5,7 +5,13 @@ import {
   type ComfyUiExecutionPlanStore,
   type FrozenComfyUiExecutionRecord,
 } from "@comfyuiflow/comfyui-bridge";
-import { ComfyUiExecutionPlanAdapter, GenerationAdapterRegistry } from "@comfyuiflow/project-core";
+import {
+  CapabilityCompilerRegistry,
+  CapabilityRegistryLoader,
+  ComfyUiExecutionPlanAdapter,
+  createCapabilityAdapterFactoryRegistry,
+  GenerationAdapterRegistry,
+} from "@comfyuiflow/project-core";
 
 const sha = (value: string) => value.repeat(64).slice(0, 64);
 
@@ -164,5 +170,51 @@ describe("Workflow Agent ComfyUI adapter", () => {
       status: "IN_PROGRESS",
     });
     expect(status).toHaveBeenCalledWith(record.providerTaskId);
+  });
+});
+
+describe("Web and Worker exact capability composition", () => {
+  it("resolves the same implementation, compiler, adapter, runtime, provider, and model versions", async () => {
+    const registry = await new CapabilityRegistryLoader().load();
+    const implementation = registry.resolveExact({
+      id: "implementation.hailuo03-reference-partner",
+      version: "1.0.0",
+    });
+    const adapter = registry.adaptersByRef.get(
+      `${implementation.adapterRef.id}@${implementation.adapterRef.version}`,
+    )!;
+    const compiler = registry.compilersByRef.get(
+      `${implementation.compilerRef.id}@${implementation.compilerRef.version}`,
+    )!;
+    const mcp = { callTool: async () => ({ ready: true, blockers: [] }) };
+    const factories = createCapabilityAdapterFactoryRegistry();
+    const web = {
+      implementation,
+      adapter: factories.create(adapter, { comfyUiMcp: mcp }),
+      compiler: new CapabilityCompilerRegistry().resolveExact(compiler, implementation.compilerRef),
+    };
+    const worker = {
+      implementation: registry.resolveExact({
+        id: implementation.id,
+        version: implementation.version,
+      }),
+      adapter: factories.create(adapter, { comfyUiMcp: mcp }),
+      compiler: new CapabilityCompilerRegistry().resolveExact(compiler, implementation.compilerRef),
+    };
+    expect({
+      implementation: `${web.implementation.id}@${web.implementation.version}`,
+      runtime: web.implementation.runtimeRef,
+      provider: web.implementation.providerRef,
+      model: web.implementation.modelRef,
+      adapter: `${web.adapter.adapterId}@${web.adapter.adapterVersion}`,
+      compiler: web.compiler,
+    }).toEqual({
+      implementation: `${worker.implementation.id}@${worker.implementation.version}`,
+      runtime: worker.implementation.runtimeRef,
+      provider: worker.implementation.providerRef,
+      model: worker.implementation.modelRef,
+      adapter: `${worker.adapter.adapterId}@${worker.adapter.adapterVersion}`,
+      compiler: worker.compiler,
+    });
   });
 });

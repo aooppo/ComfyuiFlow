@@ -331,6 +331,7 @@ enum QaAdvisoryStatus {
 enum HumanQaDecisionType {
   PASS
   FAIL
+  RISK_ACCEPTED
 }
 
 enum ContinuitySubjectKind {
@@ -454,6 +455,69 @@ enum RepairAction {
   REPLACE_ASSET
 }
 
+enum CapabilityImplementationLifecycle {
+  DISCOVERED
+  TRIAL
+  READY
+  DEPRECATED
+  DISABLED
+}
+
+enum CapabilityDiscoveryStatus {
+  DISCOVERED
+  REVIEW_REJECTED
+  PUBLISHED
+}
+
+enum CapabilityEvidenceKind {
+  FIXTURE
+  CONTRACT
+  RUNTIME_READINESS
+  AUTHORIZED_REAL_EXECUTION
+}
+
+enum CapabilityEvidenceOutcome {
+  PASS
+  FAIL
+  AMBIGUOUS
+}
+
+enum GenerationPlanV3State {
+  DRAFT
+  VALID
+  BLOCKED
+  AUTHORIZED
+  SUBMITTED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum GenerationAuthorizationV3State {
+  ACTIVE
+  CONSUMED
+  EXPIRED
+  CANCELLED
+}
+
+enum GenerationBatchV3State {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum GenerationBatchTargetV3State {
+  QUEUED
+  RUNNING
+  SUBMITTED
+  COMPLETED
+  FAILED
+  AMBIGUOUS
+  CANCELLED
+}
+
 model Project {
   id                                  String                               @id @default(uuid()) @db.Uuid
   name                                String                               @db.VarChar(120)
@@ -514,6 +578,7 @@ model Project {
   generationPlanDrafts                GenerationPlanDraft[]
   generationDraftSources              GenerationPlanDraftSource[]
   shotExecutionPlans                  ShotExecutionPlan[]
+  trialScopeApprovals                 TrialScopeApproval[]
 
   @@index([status, updatedAt(sort: Desc)])
 }
@@ -995,6 +1060,7 @@ model Storyboard {
   decisions              StoryboardDecision[]
   generationPlans        GenerationPlan[]
   continuityProfile      ContinuityProfile?
+  trialScopeApprovals    TrialScopeApproval[]
 
   @@unique([projectId, id])
   @@index([projectId, status, updatedAt(sort: Desc)])
@@ -1073,6 +1139,7 @@ model StoryboardVersion {
   decisions                 StoryboardDecision[]
   generationPlans           GenerationPlan[]
   continuityProfileVersions ContinuityProfileVersion[]
+  trialScopeApprovals       TrialScopeApproval[]
 
   @@unique([storyboardId, versionNumber])
   @@unique([storyboardId, id])
@@ -2192,4 +2259,391 @@ model GenerationPlanDraftSource {
   @@unique([generationPlanDraftId, generationSpecId])
   @@unique([projectId, id])
   @@index([generatedArtifactId])
+}
+
+model CapabilityRuntimeProfile {
+  id          String   @id @default(uuid()) @db.Uuid
+  profileKey  String   @db.VarChar(160)
+  version     String   @db.VarChar(80)
+  kind        String   @db.VarChar(40)
+  payloadJson Json
+  payloadHash String   @db.Char(64)
+  createdAt   DateTime @default(now())
+
+  @@unique([profileKey, version])
+}
+
+model CapabilityProviderProfile {
+  id          String   @id @default(uuid()) @db.Uuid
+  profileKey  String   @db.VarChar(160)
+  version     String   @db.VarChar(80)
+  kind        String   @db.VarChar(40)
+  payloadJson Json
+  payloadHash String   @db.Char(64)
+  createdAt   DateTime @default(now())
+
+  @@unique([profileKey, version])
+}
+
+model CapabilityModelProfile {
+  id              String   @id @default(uuid()) @db.Uuid
+  profileKey      String   @db.VarChar(160)
+  version         String   @db.VarChar(80)
+  providerKey     String   @db.VarChar(160)
+  providerVersion String   @db.VarChar(80)
+  payloadJson     Json
+  payloadHash     String   @db.Char(64)
+  createdAt       DateTime @default(now())
+
+  @@unique([profileKey, version])
+  @@index([providerKey, providerVersion])
+}
+
+model CapabilityAdapterProfile {
+  id          String   @id @default(uuid()) @db.Uuid
+  profileKey  String   @db.VarChar(160)
+  version     String   @db.VarChar(80)
+  factoryKey  String   @db.VarChar(160)
+  payloadJson Json
+  payloadHash String   @db.Char(64)
+  createdAt   DateTime @default(now())
+
+  @@unique([profileKey, version])
+  @@index([factoryKey, version])
+}
+
+model CapabilityCompilerProfile {
+  id          String   @id @default(uuid()) @db.Uuid
+  profileKey  String   @db.VarChar(160)
+  version     String   @db.VarChar(80)
+  compilerKey String   @db.VarChar(160)
+  payloadJson Json
+  payloadHash String   @db.Char(64)
+  createdAt   DateTime @default(now())
+
+  @@unique([profileKey, version])
+  @@index([compilerKey, version])
+}
+
+model CapabilityGenerationImplementation {
+  id                  String                            @id @default(uuid()) @db.Uuid
+  implementationKey   String                            @db.VarChar(160)
+  version             String                            @db.VarChar(80)
+  runtimeKey          String                            @db.VarChar(160)
+  runtimeVersion      String                            @db.VarChar(80)
+  providerKey         String                            @db.VarChar(160)
+  providerVersion     String                            @db.VarChar(80)
+  modelKey            String                            @db.VarChar(160)
+  modelVersion        String                            @db.VarChar(80)
+  adapterKey          String                            @db.VarChar(160)
+  adapterVersion      String                            @db.VarChar(80)
+  compilerKey         String                            @db.VarChar(160)
+  compilerVersion     String                            @db.VarChar(80)
+  capabilityJson      Json
+  costPolicyJson      Json
+  compositionHash     String                            @db.Char(64)
+  lifecycle           CapabilityImplementationLifecycle
+  lifecycleReasonCode String?                           @db.VarChar(160)
+  evidencePolicy      String                            @default("EXACT_VERSION_REAL_RESULT") @db.VarChar(80)
+  testOnly            Boolean                           @default(false)
+  lifecycleUpdatedAt  DateTime                          @default(now())
+  createdAt           DateTime                          @default(now())
+
+  @@unique([implementationKey, version])
+  @@index([lifecycle, lifecycleUpdatedAt(sort: Desc)])
+}
+
+model CapabilityDiscoveryCandidate {
+  id              String                    @id @default(uuid()) @db.Uuid
+  candidateKey    String                    @db.VarChar(160)
+  version         String                    @db.VarChar(80)
+  runtimeKey      String                    @db.VarChar(160)
+  runtimeVersion  String                    @db.VarChar(80)
+  sourceDigest    String                    @db.Char(64)
+  nodeIdentifier  String                    @db.VarChar(160)
+  normalizedJson  Json
+  rawSchemaRef    String                    @db.VarChar(160)
+  status          CapabilityDiscoveryStatus @default(DISCOVERED)
+  statusReason    String?                   @db.VarChar(160)
+  discoveredAt    DateTime                  @default(now())
+  statusUpdatedAt DateTime                  @default(now())
+
+  @@unique([candidateKey, version])
+  @@unique([runtimeKey, runtimeVersion, sourceDigest, nodeIdentifier])
+  @@index([status, discoveredAt(sort: Desc)])
+}
+
+model CapabilityRegistryPublication {
+  id                      String   @id @default(uuid()) @db.Uuid
+  publicationKey          String   @db.VarChar(160)
+  version                 String   @db.VarChar(80)
+  candidateKey            String   @db.VarChar(160)
+  candidateVersion        String   @db.VarChar(80)
+  sourceDigest            String   @db.Char(64)
+  implementationKey       String   @db.VarChar(160)
+  implementationVersion   String   @db.VarChar(80)
+  reviewedCompositionJson Json
+  publicationHash         String   @db.Char(64)
+  reviewerRef             String   @db.VarChar(160)
+  reviewedAt              DateTime
+  createdAt               DateTime @default(now())
+
+  @@unique([publicationKey, version])
+  @@unique([candidateKey, candidateVersion])
+  @@index([implementationKey, implementationVersion])
+}
+
+model CapabilityImplementationEvidence {
+  id                    String                    @id @default(uuid()) @db.Uuid
+  implementationKey     String                    @db.VarChar(160)
+  implementationVersion String                    @db.VarChar(80)
+  compilerKey           String                    @db.VarChar(160)
+  compilerVersion       String                    @db.VarChar(80)
+  kind                  CapabilityEvidenceKind
+  outcome               CapabilityEvidenceOutcome
+  evidenceJson          Json
+  evidenceHash          String                    @db.Char(64)
+  callCount             Int                       @default(0)
+  costDigest            String?                   @db.Char(64)
+  reviewerRef           String?                   @db.VarChar(160)
+  recordedAt            DateTime                  @default(now())
+
+  @@unique([implementationKey, implementationVersion, kind, evidenceHash])
+  @@index([implementationKey, implementationVersion, recordedAt(sort: Desc)])
+}
+
+model ShotRequirementSpecV3Record {
+  id                  String   @id @default(uuid()) @db.Uuid
+  projectId           String   @db.Uuid
+  storyboardVersionId String   @db.Uuid
+  storyboardShotId    String   @db.Uuid
+  shotId              String   @db.Uuid
+  version             String   @db.VarChar(80)
+  payloadJson         Json
+  requirementHash     String   @db.Char(64)
+  createdAt           DateTime @default(now())
+
+  @@unique([shotId, version])
+  @@unique([storyboardShotId, requirementHash])
+  @@index([projectId, storyboardVersionId])
+}
+
+model PlanningInputSnapshotV3Record {
+  id                    String   @id @default(uuid()) @db.Uuid
+  projectId             String   @db.Uuid
+  requirementSpecId     String   @db.Uuid
+  version               String   @db.VarChar(80)
+  implementationKey     String   @db.VarChar(160)
+  implementationVersion String   @db.VarChar(80)
+  compilerKey           String   @db.VarChar(160)
+  compilerVersion       String   @db.VarChar(80)
+  payloadJson           Json
+  sourceDigest          String   @db.Char(64)
+  capabilityDigest      String   @db.Char(64)
+  snapshotHash          String   @db.Char(64)
+  createdAt             DateTime @default(now())
+
+  @@unique([requirementSpecId, version])
+  @@unique([projectId, snapshotHash])
+}
+
+model GenerationSpecV3Record {
+  id                      String                          @id @default(uuid()) @db.Uuid
+  projectId               String                          @db.Uuid
+  shotId                  String                          @db.Uuid
+  storyboardVersionId     String                          @db.Uuid
+  requirementSpecId       String                          @db.Uuid
+  planningInputSnapshotId String                          @db.Uuid
+  implementationKey       String                          @db.VarChar(160)
+  implementationVersion   String                          @db.VarChar(80)
+  runtimeKey              String                          @db.VarChar(160)
+  runtimeVersion          String                          @db.VarChar(80)
+  providerKey             String                          @db.VarChar(160)
+  providerVersion         String                          @db.VarChar(80)
+  modelKey                String                          @db.VarChar(160)
+  modelVersion            String                          @db.VarChar(80)
+  adapterKey              String                          @db.VarChar(160)
+  adapterVersion          String                          @db.VarChar(80)
+  compilerKey             String                          @db.VarChar(160)
+  compilerVersion         String                          @db.VarChar(80)
+  version                 String                          @db.VarChar(80)
+  payloadJson             Json
+  compiledRequestDigest   String                          @db.Char(64)
+  inputHash               String                          @db.Char(64)
+  dependencyHash          String                          @db.Char(64)
+  outputHash              String                          @db.Char(64)
+  createdAt               DateTime                        @default(now())
+  batchTargets            GenerationBatchTargetV3Record[]
+  trialScopeItems         TrialScopeApprovalItem[]
+
+  @@unique([shotId, version])
+  @@unique([projectId, outputHash])
+  @@index([planningInputSnapshotId])
+}
+
+model GenerationPlanV3Record {
+  id                  String                            @id @default(uuid()) @db.Uuid
+  projectId           String                            @db.Uuid
+  version             String                            @db.VarChar(80)
+  payloadJson         Json
+  planDigest          String                            @db.Char(64)
+  state               GenerationPlanV3State             @default(DRAFT)
+  stateReasonCode     String?                           @db.VarChar(160)
+  stateUpdatedAt      DateTime                          @default(now())
+  createdAt           DateTime                          @default(now())
+  authorizations      GenerationAuthorizationV3Record[]
+  batches             GenerationBatchV3Record[]
+  trialScopeApprovals TrialScopeApproval[]
+
+  @@unique([projectId, planDigest])
+  @@index([projectId, state, createdAt(sort: Desc)])
+}
+
+model GenerationAuthorizationV3Record {
+  id                String                         @id @default(uuid()) @db.Uuid
+  projectId         String                         @db.Uuid
+  generationPlanId  String                         @db.Uuid
+  planDigest        String                         @db.Char(64)
+  scopeJson         Json
+  scopeHash         String                         @db.Char(64)
+  expectedCalls     Int
+  maximumCalls      Int
+  consumedCalls     Int                            @default(0)
+  maximumCostMicros BigInt?
+  expiresAt         DateTime
+  noRetry           Boolean                        @default(true)
+  noFallback        Boolean                        @default(true)
+  state             GenerationAuthorizationV3State @default(ACTIVE)
+  stateUpdatedAt    DateTime                       @default(now())
+  createdAt         DateTime                       @default(now())
+  generationPlan    GenerationPlanV3Record         @relation(fields: [generationPlanId], references: [id], onDelete: Restrict)
+  batch             GenerationBatchV3Record?
+
+  @@unique([generationPlanId, scopeHash])
+  @@index([projectId, state, expiresAt])
+}
+
+model GenerationBatchV3Record {
+  id                        String                          @id @default(uuid()) @db.Uuid
+  projectId                 String                          @db.Uuid
+  generationPlanId          String                          @db.Uuid
+  generationAuthorizationId String                          @unique @db.Uuid
+  planDigest                String                          @db.Char(64)
+  previewHash               String                          @db.Char(64)
+  scopeHash                 String                          @db.Char(64)
+  selectedShotIdsJson       Json
+  expectedCalls             Int
+  maximumCalls              Int
+  maximumAiQaCalls          Int
+  costPolicyDigest          String                          @db.Char(64)
+  maximumCostMicros         BigInt?
+  currency                  String?                         @db.Char(3)
+  idempotencyKey            String                          @unique @db.VarChar(160)
+  state                     GenerationBatchV3State          @default(QUEUED)
+  safeResultCode            String                          @default("QUEUED") @db.VarChar(160)
+  createdAt                 DateTime                        @default(now())
+  updatedAt                 DateTime                        @updatedAt
+  generationPlan            GenerationPlanV3Record          @relation(fields: [generationPlanId], references: [id], onDelete: Restrict)
+  authorization             GenerationAuthorizationV3Record @relation(fields: [generationAuthorizationId], references: [id], onDelete: Restrict)
+  targets                   GenerationBatchTargetV3Record[]
+
+  @@unique([generationPlanId, scopeHash])
+  @@index([projectId, state, createdAt(sort: Desc)])
+}
+
+model GenerationBatchTargetV3Record {
+  id                    String                       @id @default(uuid()) @db.Uuid
+  projectId             String                       @db.Uuid
+  generationBatchId     String                       @db.Uuid
+  shotId                String                       @db.Uuid
+  generationSpecId      String                       @db.Uuid
+  ordinal               Int
+  targetDigest          String                       @db.Char(64)
+  implementationKey     String                       @db.VarChar(160)
+  implementationVersion String                       @db.VarChar(80)
+  adapterKey            String                       @db.VarChar(160)
+  adapterVersion        String                       @db.VarChar(80)
+  compilerKey           String                       @db.VarChar(160)
+  compilerVersion       String                       @db.VarChar(80)
+  state                 GenerationBatchTargetV3State @default(QUEUED)
+  safeResultCode        String                       @default("QUEUED") @db.VarChar(160)
+  providerTaskId        String?                      @unique @db.VarChar(255)
+  providerCallCount     Int                          @default(0)
+  callConsumedAt        DateTime?
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
+  generationBatch       GenerationBatchV3Record      @relation(fields: [generationBatchId], references: [id], onDelete: Restrict)
+  generationSpec        GenerationSpecV3Record       @relation(fields: [generationSpecId], references: [id], onDelete: Restrict)
+
+  @@unique([generationBatchId, shotId])
+  @@unique([generationBatchId, ordinal])
+  @@index([projectId, state, createdAt])
+}
+
+model TrialScopeApproval {
+  id                    String                   @id @default(uuid()) @db.Uuid
+  projectId             String                   @db.Uuid
+  storyboardId          String                   @db.Uuid
+  storyboardVersionId   String                   @db.Uuid
+  storyboardVersionHash String                   @db.Char(64)
+  generationPlanId      String                   @db.Uuid
+  generationPlanVersion String                   @db.VarChar(80)
+  planDigest            String                   @db.Char(64)
+  requestHash           String                   @db.Char(64)
+  scopeDigest           String                   @db.Char(64)
+  idempotencyKey        String                   @db.VarChar(160)
+  actorRef              String                   @db.VarChar(160)
+  expiresAt             DateTime
+  createdAt             DateTime                 @default(now())
+  project               Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  storyboard            Storyboard               @relation(fields: [storyboardId], references: [id], onDelete: Restrict)
+  storyboardVersion     StoryboardVersion        @relation(fields: [storyboardVersionId], references: [id], onDelete: Restrict)
+  generationPlan        GenerationPlanV3Record   @relation(fields: [generationPlanId], references: [id], onDelete: Restrict)
+  items                 TrialScopeApprovalItem[]
+  revocation            TrialScopeRevocation?
+
+  @@unique([storyboardVersionId, idempotencyKey])
+  @@index([projectId, storyboardId, createdAt(sort: Desc)])
+  @@index([storyboardVersionId, expiresAt])
+}
+
+model TrialScopeApprovalItem {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  approvalId            String                 @db.Uuid
+  shotId                String                 @db.Uuid
+  generationSpecId      String                 @db.Uuid
+  generationSpecVersion String                 @db.VarChar(80)
+  implementationKey     String                 @db.VarChar(160)
+  implementationVersion String                 @db.VarChar(80)
+  runtimeKey            String                 @db.VarChar(160)
+  runtimeVersion        String                 @db.VarChar(80)
+  providerKey           String                 @db.VarChar(160)
+  providerVersion       String                 @db.VarChar(80)
+  modelKey              String                 @db.VarChar(160)
+  modelVersion          String                 @db.VarChar(80)
+  adapterKey            String                 @db.VarChar(160)
+  adapterVersion        String                 @db.VarChar(80)
+  compilerKey           String                 @db.VarChar(160)
+  compilerVersion       String                 @db.VarChar(80)
+  compiledRequestDigest String                 @db.Char(64)
+  costPolicyDigest      String                 @db.Char(64)
+  compositionDigest     String                 @db.Char(64)
+  createdAt             DateTime               @default(now())
+  approval              TrialScopeApproval     @relation(fields: [approvalId], references: [id], onDelete: Restrict)
+  generationSpec        GenerationSpecV3Record @relation(fields: [generationSpecId], references: [id], onDelete: Restrict)
+
+  @@unique([approvalId, shotId])
+  @@index([shotId, implementationKey, implementationVersion])
+}
+
+model TrialScopeRevocation {
+  id             String             @id @default(uuid()) @db.Uuid
+  approvalId     String             @unique @db.Uuid
+  reasonCode     String             @db.VarChar(80)
+  actorRef       String             @db.VarChar(160)
+  idempotencyKey String             @unique @db.VarChar(160)
+  createdAt      DateTime           @default(now())
+  approval       TrialScopeApproval @relation(fields: [approvalId], references: [id], onDelete: Restrict)
+
+  @@index([createdAt(sort: Desc)])
 }

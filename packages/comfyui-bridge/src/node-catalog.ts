@@ -1,4 +1,4 @@
-import { hashCanonical, sha256Bytes } from "@comfyuiflow/spike-core";
+import { hashCanonical } from "@comfyuiflow/spike-core";
 import type { ComfyUiClient } from "./comfyui-client.js";
 
 export interface NormalizedNodeInput {
@@ -108,11 +108,12 @@ export function normalizeNodeCatalog(
   const nodes = requested
     .filter((className) => Object.hasOwn(source, className))
     .map((className) => normalizeNode(className, source[className]));
+  const sourceCore = { requestedNodeClasses: requested, nodes };
   const core = {
     schemaVersion: "comfyui-node-catalog-v1" as const,
     requestedNodeClasses: requested,
     nodes,
-    sourceSha256: sha256Bytes(Buffer.from(JSON.stringify(source))),
+    sourceSha256: hashCanonical(sourceCore),
   };
   return { ...core, catalogSha256: hashCanonical(core) };
 }

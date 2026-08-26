@@ -19,6 +19,18 @@ export const createDirectorRunSchema = directorPreviewInputSchema.extend({
   idempotencyKey: z.string().trim().min(8).max(160),
 });
 
+export const directorCreatePreviewInputSchema = z
+  .object({
+    title: z.string().trim().min(1).max(120),
+    creativeBrief: z.string().trim().min(1).max(4_000),
+  })
+  .strict();
+
+export const createStoryboardDirectorRunSchema = directorCreatePreviewInputSchema.extend({
+  previewHash: z.string().regex(/^[a-f0-9]{64}$/),
+  idempotencyKey: z.string().trim().min(8).max(160),
+});
+
 export const repairDirectorActionSchema = z.enum(["REWRITE_SHOT", "SPLIT_SHOT"]);
 
 export const repairDirectorPreviewInputSchema = z
@@ -78,6 +90,8 @@ export const adoptWorkflowRepairProposalSchema = adoptDirectorProposalSchema.ext
 
 export type DirectorPreviewInput = z.infer<typeof directorPreviewInputSchema>;
 export type CreateDirectorRunInput = z.infer<typeof createDirectorRunSchema>;
+export type DirectorCreatePreviewInput = z.infer<typeof directorCreatePreviewInputSchema>;
+export type CreateStoryboardDirectorRunInput = z.infer<typeof createStoryboardDirectorRunSchema>;
 export type AdoptDirectorProposalInput = z.infer<typeof adoptDirectorProposalSchema>;
 export type RepairDirectorPreviewInput = z.infer<typeof repairDirectorPreviewInputSchema>;
 export type CreateRepairDirectorRunInput = z.infer<typeof createRepairDirectorRunSchema>;

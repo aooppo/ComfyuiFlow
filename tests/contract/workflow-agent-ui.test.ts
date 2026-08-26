@@ -9,8 +9,8 @@ describe("Workflow Agent owner UI", () => {
       readFile("apps/project-web/components/storyboards/final-owner-review-panel.tsx", "utf8"),
     ]);
     expect(planning).toContain("AUTO");
-    expect(planning).toContain("PREFERRED");
-    expect(planning).toContain("LOCKED");
+    expect(planning).toContain("selectedForExecution");
+    expect(planning).toContain('engineVersion: "CAPABILITY_V3"');
     expect(planning).toContain("repair-preview");
     expect(planning).toContain("confirmBatch");
     expect(planning).toContain("I confirm this exact scope and cost ceiling");

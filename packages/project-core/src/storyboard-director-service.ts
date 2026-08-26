@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { ProjectAssetError } from "./contracts.js";
 import { canonicalSha256 } from "./canonical-json.js";
 import { LocalContentStorage, type StorageProvider } from "./local-storage.js";
@@ -7,12 +7,16 @@ import {
   adoptWorkflowRepairProposalSchema,
   createRepairDirectorRunSchema,
   createDirectorRunSchema,
+  createStoryboardDirectorRunSchema,
+  directorCreatePreviewInputSchema,
   directorPreviewInputSchema,
   repairDirectorPreviewInputSchema,
   rejectDirectorProposalSchema,
   adoptDirectorProposalSchema,
   type AdoptWorkflowRepairProposalInput,
   type CreateRepairDirectorRunInput,
+  type CreateStoryboardDirectorRunInput,
+  type DirectorCreatePreviewInput,
   type DirectorPreviewInput,
   type CreateDirectorRunInput,
   type RepairDirectorPreviewInput,
@@ -37,21 +41,189 @@ export class StoryboardDirectorService {
     private readonly client: ProjectPrisma = prisma,
     private readonly storage: StorageProvider = new LocalContentStorage(),
     private readonly environment: NodeJS.ProcessEnv = process.env,
+    private readonly options: { allowTestFixtures?: boolean } = {},
   ) {}
 
-  async preview(storyboardId: string, rawInput: DirectorPreviewInput) {
-    const input = directorPreviewInputSchema.parse(rawInput);
-    const storyboard = await this.client.storyboard.findUnique({
-      where: { id: storyboardId },
-      include: { headVersion: { select: { id: true, versionNumber: true, contentHash: true } } },
+  async previewCreate(projectId: string, rawInput: DirectorCreatePreviewInput) {
+    const input = directorCreatePreviewInputSchema.parse(rawInput);
+    const project = await this.client.project.findUnique({ where: { id: projectId } });
+    if (!project || project.status !== "ACTIVE") throw error("PROJECT_NOT_ACTIVE", 409);
+    const profile = directorProfile("codexmanager-terra", this.environment);
+    if (profile.maxCostUsd > 5) throw error("DIRECTOR_COST_EXCEEDS_OWNER_CEILING", 409);
+    const { eligible, rejected } = await this.referenceCandidates(projectId);
+    const references = eligible.slice(0, 9).map((item, index) => ({
+      ...item,
+      ordinal: index + 1,
+      alias: `ref_${String(index + 1).padStart(2, "0")}`,
+    }));
+    const scope = {
+      contractVersion: "storyboard-generation-v2" as const,
+      promptTemplateVersion: "storyboard-director-v2" as const,
+      projectId,
+      title: input.title,
+      creativeBrief: input.creativeBrief,
+      profileId: profile.id,
+      providerId: profile.providerId,
+      modelId: profile.modelId,
+      maxShotCount: 3 as const,
+      references,
+      priceSnapshotHash: profile.priceSnapshotHash,
+    };
+    const scopeHash = canonicalSha256(scope);
+    const requestHash = canonicalSha256({ ...scope, scopeHash });
+    return {
+      ...scope,
+      scopeHash,
+      requestHash,
+      previewHash: canonicalSha256({ ...scope, scopeHash, kind: "DIRECTOR_CREATE_PREVIEW" }),
+      billingChannel: profile.billingChannel,
+      maxCostUsd: profile.maxCostUsd,
+      priceEffectiveAt: profile.priceEffectiveAt.toISOString(),
+      priceExpiresAt: profile.priceExpiresAt.toISOString(),
+      maxExternalCalls: 1 as const,
+      externalCalls: 0 as const,
+      canConfirm: references.length > 0,
+      retryPolicy: "NO_RETRY_NO_FALLBACK" as const,
+      rejected,
+    };
+  }
+
+  async createAndConfirm(projectId: string, rawInput: CreateStoryboardDirectorRunInput) {
+    const input = createStoryboardDirectorRunSchema.parse(rawInput);
+    const preview = await this.previewCreate(projectId, {
+      title: input.title,
+      creativeBrief: input.creativeBrief,
     });
-    if (!storyboard || storyboard.status !== "ACTIVE" || !storyboard.headVersion)
-      throw error("STORYBOARD_NOT_READY", 409);
-    const profile = directorProfile(input.profileId, this.environment);
-    const rows = await this.client.assetVersionFile.findMany({
-      where: {
-        projectId: storyboard.projectId,
+    if (preview.previewHash !== input.previewHash)
+      throw error("DIRECTOR_CREATE_PREVIEW_STALE", 409);
+    if (!preview.canConfirm) throw error("DIRECTOR_REFERENCE_SELECTION_INVALID", 409);
+    const storyboardId = stableCreateUuid(`storyboard:${projectId}:${input.idempotencyKey}`);
+    const versionId = stableCreateUuid(`storyboard-version:${projectId}:${input.idempotencyKey}`);
+    const runId = stableCreateUuid(`storyboard-run:${projectId}:${input.idempotencyKey}`);
+    const authorizationId = stableCreateUuid(
+      `storyboard-authorization:${projectId}:${input.idempotencyKey}`,
+    );
+    const contentHash = canonicalSha256({
+      creativeBrief: preview.creativeBrief,
+      shots: [],
+    });
+    try {
+      await this.client.$transaction(
+        async (tx) => {
+          const existing = await tx.storyboardDirectorRun.findUnique({ where: { id: runId } });
+          if (existing) {
+            if (existing.requestHash !== preview.requestHash)
+              throw error("IDEMPOTENCY_CONFLICT", 409);
+            return;
+          }
+          const project = await tx.project.findUnique({ where: { id: projectId } });
+          if (!project || project.status !== "ACTIVE") throw error("PROJECT_NOT_ACTIVE", 409);
+          await tx.storyboard.create({
+            data: {
+              id: storyboardId,
+              projectId,
+              title: preview.title,
+              creativeBrief: preview.creativeBrief,
+            },
+          });
+          await tx.storyboardVersion.create({
+            data: {
+              id: versionId,
+              projectId,
+              storyboardId,
+              versionNumber: 1,
+              source: "OWNER",
+              creativeBrief: preview.creativeBrief,
+              contractVersion: "storyboard-version-v1",
+              contentHash,
+            },
+          });
+          await tx.storyboard.update({
+            where: { id: storyboardId },
+            data: { headVersionId: versionId, rowVersion: 1 },
+          });
+          await tx.storyboardDirectorRun.create({
+            data: {
+              id: runId,
+              projectId,
+              storyboardId,
+              providerId: preview.providerId,
+              requestedModelId: preview.modelId,
+              contractVersion: preview.contractVersion,
+              promptTemplateVersion: preview.promptTemplateVersion,
+              requestHash: preview.requestHash,
+              status: "QUEUED",
+              safeResultCode: "DIRECTOR_QUEUED",
+              providerCallCount: 0,
+              maxShotCount: preview.maxShotCount,
+              headVersionId: versionId,
+              headContentHash: contentHash,
+              scopeHash: preview.scopeHash,
+              priceSnapshotHash: preview.priceSnapshotHash,
+              billingChannel: preview.billingChannel,
+              maxCostUsd: preview.maxCostUsd,
+              priceEffectiveAt: new Date(preview.priceEffectiveAt),
+              priceExpiresAt: new Date(preview.priceExpiresAt),
+              idempotencyKey: input.idempotencyKey,
+            },
+          });
+          await tx.storyboardDirectorInputReference.createMany({
+            data: preview.references.map((reference) => ({
+              id: randomUUID(),
+              projectId,
+              runId,
+              ordinal: reference.ordinal,
+              alias: reference.alias,
+              kind: reference.kind,
+              displayName: reference.displayName,
+              productionAssetId: reference.productionAssetId,
+              productionAssetVersionId: reference.productionAssetVersionId,
+              assetVersionFileId: reference.assetVersionFileId,
+              projectAssetId: reference.projectAssetId,
+              semanticFactsJson: reference.semanticFacts as never,
+              sha256: reference.sha256,
+              byteSize: BigInt(reference.byteSize),
+            })),
+          });
+          await tx.storyboardDirectorAuthorization.create({
+            data: {
+              id: authorizationId,
+              projectId,
+              runId,
+              maxCalls: 1,
+              expiresAt: new Date(preview.priceExpiresAt),
+            },
+          });
+        },
+        { isolationLevel: "Serializable" },
+      );
+    } catch (cause) {
+      if (cause instanceof ProjectAssetError) throw cause;
+      const existing = await this.client.storyboardDirectorRun.findUnique({ where: { id: runId } });
+      if (!existing || existing.requestHash !== preview.requestHash) throw cause;
+    }
+    const storyboard = await this.client.storyboard.findUnique({ where: { id: storyboardId } });
+    const directorRun = await this.client.storyboardDirectorRun.findUnique({
+      where: { id: runId },
+      include: { authorization: true, inputReferences: true },
+    });
+    if (!storyboard || !directorRun) throw error("DIRECTOR_CREATE_FAILED", 500);
+    return {
+      ...storyboard,
+      directorRun: {
+        ...directorRun,
+        maxCostUsd: directorRun.maxCostUsd === null ? null : Number(directorRun.maxCostUsd),
+        inputReferences: directorRun.inputReferences.map((reference) => ({
+          ...reference,
+          byteSize: Number(reference.byteSize),
+        })),
       },
+    };
+  }
+
+  private async referenceCandidates(projectId: string) {
+    const rows = await this.client.assetVersionFile.findMany({
+      where: { projectId },
       include: {
         productionAssetVersion: { include: { productionAsset: true } },
         projectAsset: { include: { storedObject: true } },
@@ -100,6 +272,20 @@ export class StoryboardDirectorService {
         rejected.push({ assetVersionFileId: row.id, reason: "文件哈希复验失败" });
       }
     }
+    return { eligible, rejected };
+  }
+
+  async preview(storyboardId: string, rawInput: DirectorPreviewInput) {
+    const input = directorPreviewInputSchema.parse(rawInput);
+    this.assertProfileCallable(input.profileId);
+    const storyboard = await this.client.storyboard.findUnique({
+      where: { id: storyboardId },
+      include: { headVersion: { select: { id: true, versionNumber: true, contentHash: true } } },
+    });
+    if (!storyboard || storyboard.status !== "ACTIVE" || !storyboard.headVersion)
+      throw error("STORYBOARD_NOT_READY", 409);
+    const profile = directorProfile(input.profileId, this.environment);
+    const { eligible, rejected } = await this.referenceCandidates(storyboard.projectId);
     const selectedIds =
       input.selectedAssetVersionFileIds ??
       eligible.slice(0, 9).map((item) => item.assetVersionFileId);
@@ -394,12 +580,46 @@ export class StoryboardDirectorService {
     if (!run) throw error("DIRECTOR_RUN_NOT_FOUND", 404);
     return run;
   }
-  async listProposals(storyboardId: string) {
-    return this.client.storyboardDirectorProposal.findMany({
+  async listRuns(storyboardId: string) {
+    const runs = await this.client.storyboardDirectorRun.findMany({
       where: { storyboardId },
-      include: { decisions: true },
+      select: {
+        id: true,
+        providerId: true,
+        requestedModelId: true,
+        resolvedModelId: true,
+        status: true,
+        safeResultCode: true,
+        providerCallCount: true,
+        maxShotCount: true,
+        maxCostUsd: true,
+        priceExpiresAt: true,
+        createdAt: true,
+        finishedAt: true,
+        proposal: { select: { id: true, outputHash: true } },
+        authorization: { select: { maxCalls: true, consumedAt: true, expiresAt: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+    return runs.map((run) => ({
+      ...run,
+      maxCostUsd: run.maxCostUsd === null ? null : Number(run.maxCostUsd),
+      historical: run.providerId === "fake",
+      historicalLabel: run.providerId === "fake" ? "HISTORICAL_FAKE_READ_ONLY" : null,
+    }));
+  }
+  async listProposals(storyboardId: string) {
+    const proposals = await this.client.storyboardDirectorProposal.findMany({
+      where: { storyboardId },
+      include: { decisions: true, run: { select: { providerId: true } } },
       orderBy: { createdAt: "desc" },
     });
+    return proposals.map((proposal) => ({
+      ...proposal,
+      historical: proposal.run.providerId === "fake",
+      historicalLabel: proposal.run.providerId === "fake" ? "HISTORICAL_FAKE_READ_ONLY" : null,
+    }));
   }
   async getProposal(proposalId: string) {
     const value = await this.loadProposal(proposalId);
@@ -410,6 +630,8 @@ export class StoryboardDirectorService {
       outputHash: value.outputHash,
       createdAt: value.createdAt,
       decisions: value.decisions,
+      historical: value.run.providerId === "fake",
+      historicalLabel: value.run.providerId === "fake" ? "HISTORICAL_FAKE_READ_ONLY" : null,
       references: value.run.inputReferences.map((reference) => ({
         alias: reference.alias,
         kind: reference.kind,
@@ -478,6 +700,7 @@ export class StoryboardDirectorService {
   async reject(proposalId: string, raw: unknown) {
     const input = rejectDirectorProposalSchema.parse(raw);
     const proposal = await this.loadProposal(proposalId);
+    this.assertHistoricalProposalWritable(proposal.run.providerId);
     const existing = await this.client.storyboardDirectorProposalDecision.findUnique({
       where: { idempotencyKey: input.idempotencyKey },
     });
@@ -501,6 +724,7 @@ export class StoryboardDirectorService {
   async adopt(proposalId: string, expectedRowVersion: number, raw: AdoptDirectorProposalInput) {
     const input = adoptDirectorProposalSchema.parse(raw);
     const proposal = await this.loadProposal(proposalId);
+    this.assertHistoricalProposalWritable(proposal.run.providerId);
     if (proposal.proposalKind === "SHOT_REPAIR")
       throw error("WORKFLOW_REPAIR_ADOPT_ROUTE_REQUIRED", 409);
     const prior = await this.client.storyboardDirectorProposalDecision.findUnique({
@@ -611,6 +835,24 @@ export class StoryboardDirectorService {
     });
   }
 
+  private assertProfileCallable(profileId: string) {
+    if (profileId === "fake-storyboard-v2" && !this.options.allowTestFixtures)
+      throw new ProjectAssetError(
+        "FAKE_PRODUCT_RETIRED",
+        "Fake Director is retained for tests and historical reads only.",
+        410,
+      );
+  }
+
+  private assertHistoricalProposalWritable(providerId: string) {
+    if (providerId === "fake" && !this.options.allowTestFixtures)
+      throw new ProjectAssetError(
+        "FAKE_PRODUCT_RETIRED",
+        "Historical Fake proposals are read-only.",
+        410,
+      );
+  }
+
   async adoptRepair(
     proposalId: string,
     expectedStoryboardRowVersion: number,
@@ -618,6 +860,7 @@ export class StoryboardDirectorService {
   ) {
     const input = adoptWorkflowRepairProposalSchema.parse(raw);
     const proposal = await this.loadProposal(proposalId);
+    this.assertHistoricalProposalWritable(proposal.run.providerId);
     if (
       proposal.proposalKind !== "SHOT_REPAIR" ||
       proposal.run.runKind !== "SHOT_REPAIR" ||
@@ -1056,6 +1299,14 @@ function safeReference(row: any, ordinal: number) {
     sha256: row.projectAsset.storedObject.sha256,
     byteSize: Number(row.projectAsset.storedObject.byteSize),
   };
+}
+
+function stableCreateUuid(input: string) {
+  const bytes = Buffer.from(createHash("sha256").update(input).digest("hex").slice(0, 32), "hex");
+  bytes[6] = (bytes[6]! & 0x0f) | 0x50;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 function error(code: string, status = 400) {
   return new ProjectAssetError(code, code, status);

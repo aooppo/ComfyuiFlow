@@ -4,10 +4,12 @@ import {
   CreateGenerationBatchV1Schema,
   CreateGenerationExecutionPreviewV1Schema,
   HumanQaDecisionV1Schema,
+  GenerationExecutionPreviewRequestV3Schema,
   QaContinuationPolicySchema,
 } from "@comfyuiflow/contracts";
 
 export const generationExecutionPreviewInputSchema = CreateGenerationExecutionPreviewV1Schema;
+export const generationExecutionPreviewV3InputSchema = GenerationExecutionPreviewRequestV3Schema;
 const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
 
 export const createWorkflowAgentGenerationBatchSchema = z
@@ -54,7 +56,30 @@ export const createWorkflowAgentGenerationBatchSchema = z
       });
   });
 
+export const createCapabilityGenerationBatchSchema = z
+  .object({
+    engineVersion: z.literal("CAPABILITY_V3"),
+    generationPlanId: z.string().uuid(),
+    shotIds: z.array(z.string().uuid()).min(1).max(20),
+    planDigest: Sha256Schema,
+    previewHash: Sha256Schema,
+    costPolicyDigest: Sha256Schema,
+    maximumCalls: z.number().int().positive().max(20),
+    maximumAiQaCalls: z.number().int().nonnegative().max(20),
+    maximumCostMicros: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+    confirmed: z.literal(true),
+    noRetry: z.literal(true),
+    noFallback: z.literal(true),
+    expiresInSeconds: z.number().int().min(30).max(900).default(300),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (new Set(value.shotIds).size !== value.shotIds.length)
+      context.addIssue({ code: "custom", path: ["shotIds"], message: "shotIds must be unique" });
+  });
+
 export const createGenerationBatchInputSchema = z.union([
+  createCapabilityGenerationBatchSchema,
   createWorkflowAgentGenerationBatchSchema,
   CreateGenerationBatchV1Schema,
 ]);
@@ -99,4 +124,7 @@ export const generationExecutionErrorCodes = [
 export const cancelGenerationJobInputSchema = z.object({ expectedRowVersion: z.number().int() });
 
 export type GenerationExecutionPreviewInput = z.infer<typeof generationExecutionPreviewInputSchema>;
+export type GenerationExecutionPreviewV3Input = z.infer<
+  typeof generationExecutionPreviewV3InputSchema
+>;
 export type CreateGenerationBatchInput = z.infer<typeof createGenerationBatchInputSchema>;

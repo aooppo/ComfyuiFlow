@@ -1,382 +1,214 @@
 "use client";
-import { useState } from "react";
 
-interface DirectorPreview {
-  previewHash: string;
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLanguage } from "../i18n/language-provider";
+
+interface DirectorRunView {
+  id: string;
   providerId: string;
-  modelId: string;
-  scopeHash: string;
-  maxShotCount: number;
-  maxExternalCalls: number;
-  externalCalls: number;
-  maxCostUsd: number;
-  priceExpiresAt: string;
-  references: Array<{ assetVersionFileId: string; displayName: string }>;
-  recommended: Array<{ assetVersionFileId: string; displayName: string }>;
-  unselected: Array<{ assetVersionFileId: string; displayName: string }>;
-  rejected: Array<{ assetVersionFileId: string; reason: string }>;
+  requestedModelId: string;
+  resolvedModelId: string | null;
+  status: "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED" | "AMBIGUOUS";
+  safeResultCode: string;
+  providerCallCount: number;
+  maxShotCount: number | null;
+  maxCostUsd: number | null;
+  historical: boolean;
+  proposal: { id: string; outputHash: string } | null;
+  authorization: { maxCalls: number; consumedAt: string | null; expiresAt: string } | null;
 }
-interface ProposalShot {
-  shotKey: string;
-  ordinal: number;
-  title: string;
-  creativeDescription: string;
-  startState: string;
-  action: string;
-  endState: string;
-  camera: string;
-  composition: string;
-  continuityRequirements: string[];
-  durationSeconds: number;
-  referenceAliases: string[];
-}
-interface DirectorProposal {
+
+interface DirectorProposalView {
   id: string;
   narrativeSummary: string;
-  normalizedProposalJson: { narrativeSummary: string; shots: ProposalShot[] };
-  references: Array<{ alias: string; displayName: string }>;
+  normalizedProposalJson: {
+    narrativeSummary: string;
+    shots: Array<{
+      shotKey: string;
+      ordinal: number;
+      title: string;
+      creativeDescription: string;
+      startState: string;
+      action: string;
+      endState: string;
+      camera: string;
+      composition: string;
+      continuityRequirements: string[];
+      durationSeconds: number;
+      referenceAliases: string[];
+    }>;
+  };
+  decisions: Array<{ id: string; type: "ADOPTED" | "REJECTED" }>;
+  historical: boolean;
 }
 
 export function StoryboardDirectorPanel({
   storyboardId,
-  etag,
-  disabled,
-  onAdopted,
+  rowVersion,
+  onChanged,
 }: {
   storyboardId: string;
-  etag: string;
-  disabled: boolean;
-  onAdopted: () => Promise<void>;
+  rowVersion: number;
+  onChanged: () => Promise<void>;
 }) {
-  const [profileId, setProfileId] = useState("fake-storyboard-v2");
-  const [maxShotCount, setMaxShotCount] = useState(3);
-  const [preview, setPreview] = useState<DirectorPreview | null>(null);
-  const [proposal, setProposal] = useState<DirectorProposal | null>(null);
-  const [confirmed, setConfirmed] = useState(false);
-  const [selectedReferenceIds, setSelectedReferenceIds] = useState<string[]>([]);
-  const [message, setMessage] = useState("");
+  const { locale } = useLanguage();
+  const isChinese = locale === "zh-CN";
+  const [runs, setRuns] = useState<DirectorRunView[]>([]);
+  const [proposals, setProposals] = useState<DirectorProposalView[]>([]);
   const [busy, setBusy] = useState(false);
-  const selectionMatchesPreview =
-    Boolean(preview) &&
-    selectedReferenceIds.join(",") ===
-      preview!.references.map((reference) => reference.assetVersionFileId).join(",");
-  async function call<T>(url: string, options?: RequestInit): Promise<T> {
-    const response = await fetch(url, options);
-    const body = await response.json();
-    if (!response.ok)
-      throw new Error((body as { error?: { message?: string } }).error?.message ?? "操作失败");
-    return body as T;
-  }
-  async function doPreview() {
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    const [runResponse, proposalResponse] = await Promise.all([
+      fetch(`/api/storyboards/${storyboardId}/director-runs`, { cache: "no-store" }),
+      fetch(`/api/storyboards/${storyboardId}/director-proposals`, { cache: "no-store" }),
+    ]);
+    if (!runResponse.ok || !proposalResponse.ok)
+      throw new Error(
+        isChinese ? "AI 分镜状态暂时无法读取" : "AI Storyboard status is unavailable",
+      );
+    setRuns((await runResponse.json()) as DirectorRunView[]);
+    setProposals((await proposalResponse.json()) as DirectorProposalView[]);
+  }, [isChinese, storyboardId]);
+
+  useEffect(() => {
+    void load().catch((reason: unknown) =>
+      setError(reason instanceof Error ? reason.message : "AI Storyboard status is unavailable"),
+    );
+  }, [load]);
+
+  const active = useMemo(
+    () => runs.some((run) => run.status === "QUEUED" || run.status === "RUNNING"),
+    [runs],
+  );
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setInterval(() => void load().catch(() => undefined), 2_000);
+    return () => window.clearInterval(timer);
+  }, [active, load]);
+
+  async function decide(proposal: DirectorProposalView, decision: "ADOPT" | "REJECT") {
     setBusy(true);
-    setMessage("");
-    setConfirmed(false);
+    setError("");
     try {
-      const value = await call<DirectorPreview>(
-        `/api/storyboards/${storyboardId}/director-preview`,
+      const response = await fetch(
+        `/api/storyboard-director-proposals/${proposal.id}/${decision === "ADOPT" ? "adopt" : "decisions"}`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            profileId,
-            maxShotCount,
-            ...(selectedReferenceIds.length
-              ? { selectedAssetVersionFileIds: selectedReferenceIds }
-              : {}),
-          }),
+          headers: {
+            "Content-Type": "application/json",
+            ...(decision === "ADOPT" ? { "If-Match": `"storyboard-${rowVersion}"` } : {}),
+          },
+          body: JSON.stringify(
+            decision === "ADOPT"
+              ? {
+                  idempotencyKey: crypto.randomUUID(),
+                  narrativeSummary: proposal.normalizedProposalJson.narrativeSummary,
+                  shots: proposal.normalizedProposalJson.shots,
+                }
+              : { idempotencyKey: crypto.randomUUID(), note: "Owner rejected the AI proposal." },
+          ),
         },
       );
-      setPreview(value);
-      setSelectedReferenceIds(value.references.map((reference) => reference.assetVersionFileId));
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "预览失败");
+      const body = (await response.json()) as { error?: { message: string } };
+      if (!response.ok) throw new Error(body.error?.message ?? "AI proposal decision failed");
+      await Promise.all([load(), onChanged()]);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "AI proposal decision failed");
     } finally {
       setBusy(false);
     }
   }
-  async function queue() {
-    if (!preview) return;
-    setBusy(true);
-    try {
-      const run = await call<{ id: string }>(`/api/storyboards/${storyboardId}/director-runs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "If-Match": etag },
-        body: JSON.stringify({
-          profileId,
-          maxShotCount,
-          selectedAssetVersionFileIds: preview.references.map(
-            (reference) => reference.assetVersionFileId,
-          ),
-          previewHash: preview.previewHash,
-          idempotencyKey: crypto.randomUUID(),
-        }),
-      });
-      setMessage(`已排队：${run.id}。Worker 将只尝试一次。`);
-      await pollRun(run.id);
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "排队失败");
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function pollRun(runId: string) {
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const run = await call<{ status: string; proposal?: { id: string } }>(
-        `/api/storyboard-director-runs/${runId}`,
-      );
-      if (run.status === "COMPLETED" && run.proposal) {
-        setProposal(
-          await call<DirectorProposal>(`/api/storyboard-director-proposals/${run.proposal.id}`),
-        );
-        setMessage("提案已完成；当前分镜和审批尚未改变。");
-        return;
-      }
-      if (["FAILED", "AMBIGUOUS"].includes(run.status)) {
-        setMessage(
-          run.status === "AMBIGUOUS"
-            ? "结果状态不确定，授权已消费且不会重试。"
-            : "提案失败，授权已消费且不会重试。",
-        );
-        return;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-    setMessage("提案仍在排队，可稍后刷新；系统不会自动重试。");
-  }
-  function toggleSelectedReference(id: string, checked: boolean) {
-    setSelectedReferenceIds((current) =>
-      checked
-        ? [...new Set([...current, id])].slice(0, 9)
-        : current.filter((value) => value !== id),
-    );
-    setConfirmed(false);
-  }
-  async function loadProposals() {
-    setBusy(true);
-    try {
-      const list = await call<Array<{ id: string }>>(
-        `/api/storyboards/${storyboardId}/director-proposals`,
-      );
-      if (!list[0]) throw new Error("尚无已完成提案，请等待 Worker");
-      setProposal(await call<DirectorProposal>(`/api/storyboard-director-proposals/${list[0].id}`));
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "读取失败");
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function reject() {
-    if (!proposal) return;
-    await call(`/api/storyboard-director-proposals/${proposal.id}/decisions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idempotencyKey: crypto.randomUUID(), note: "用户拒绝此提案" }),
-    });
-    setMessage("已拒绝；当前分镜未改变。");
-  }
-  async function adopt() {
-    if (!proposal) return;
-    const value = proposal.normalizedProposalJson;
-    await call(`/api/storyboard-director-proposals/${proposal.id}/adopt`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "If-Match": etag },
-      body: JSON.stringify({
-        idempotencyKey: crypto.randomUUID(),
-        narrativeSummary: value.narrativeSummary,
-        shots: value.shots,
-      }),
-    });
-    setMessage("已采用为新版本；原有历史已保留。");
-    await onAdopted();
-  }
-  function editShot(index: number, field: "title" | "creativeDescription", value: string) {
-    setProposal((current) =>
-      current
-        ? {
-            ...current,
-            normalizedProposalJson: {
-              ...current.normalizedProposalJson,
-              shots: current.normalizedProposalJson.shots.map((shot, shotIndex) =>
-                shotIndex === index ? { ...shot, [field]: value } : shot,
-              ),
-            },
-          }
-        : current,
-    );
-  }
-  function toggleReference(index: number, alias: string, checked: boolean) {
-    setProposal((current) =>
-      current
-        ? {
-            ...current,
-            normalizedProposalJson: {
-              ...current.normalizedProposalJson,
-              shots: current.normalizedProposalJson.shots.map((shot, shotIndex) =>
-                shotIndex === index
-                  ? {
-                      ...shot,
-                      referenceAliases: checked
-                        ? [...new Set([...shot.referenceAliases, alias])]
-                        : shot.referenceAliases.filter((value) => value !== alias),
-                    }
-                  : shot,
-              ),
-            },
-          }
-        : current,
-    );
-  }
+
+  const currentRuns = runs.filter((run) => !run.historical);
+  const currentProposals = proposals.filter((proposal) => !proposal.historical);
+  const historicalCount = runs.length - currentRuns.length;
+  if (runs.length === 0 && proposals.length === 0) return null;
+
   return (
-    <section className="storyboardSection">
-      <h2>AI 导演提案</h2>
-      <p>先生成独立提案，只有明确采用后才会创建新分镜版本。</p>
-      <div className="storyboardActions">
-        <label>
-          Provider{" "}
-          <select
-            value={profileId}
-            onChange={(e) => {
-              setProfileId(e.target.value);
-              setPreview(null);
-            }}
-          >
-            <option value="fake-storyboard-v2">Fake（零调用）</option>
-            <option value="codexmanager-terra">CodexManager Local · gpt-5.6-terra</option>
-            <option value="openai-terra">OpenAI · gpt-5.6-terra</option>
-          </select>
-        </label>
-        <label>
-          最多镜头{" "}
-          <input
-            type="number"
-            min={1}
-            max={20}
-            value={maxShotCount}
-            onChange={(e) => setMaxShotCount(Number(e.target.value))}
-          />
-        </label>
-        <button disabled={busy || disabled} onClick={() => void doPreview()}>
-          零调用预览
-        </button>
-      </div>
-      {preview && (
-        <div className="noticePanel">
+    <section className="storyboardPanel" aria-live="polite">
+      <h2>{isChinese ? "AI 分镜脚本" : "AI Storyboard script"}</h2>
+      {error && <p className="formError">{error}</p>}
+      {currentRuns.map((run) => (
+        <article className="noticePanel" key={run.id}>
           <p>
-            已确认参考图 {preview.references.length} 张；最多 {preview.maxShotCount}{" "}
-            镜；最多外部调用 {preview.maxExternalCalls} 次；自动重试 0；当前预览外部调用{" "}
-            {preview.externalCalls}。
+            <strong>CodexManager Local · {run.resolvedModelId ?? run.requestedModelId}</strong>
           </p>
           <p>
-            单次成本上限 USD {preview.maxCostUsd}；价格有效至{" "}
-            {new Date(preview.priceExpiresAt).toLocaleString("zh-CN")}。
+            {isChinese ? "状态" : "Status"}: {run.status} · {isChinese ? "调用" : "calls"}{" "}
+            {run.providerCallCount}/{run.authorization?.maxCalls ?? 1} ·{" "}
+            {isChinese ? "最多镜头" : "max shots"} {run.maxShotCount ?? 3}
           </p>
-          <fieldset>
-            <legend>确认本次参考图（1–9 张）</legend>
-            {[...preview.recommended, ...preview.unselected]
-              .filter(
-                (reference, index, values) =>
-                  values.findIndex(
-                    (item) => item.assetVersionFileId === reference.assetVersionFileId,
-                  ) === index,
-              )
-              .map((reference) => (
-                <label key={reference.assetVersionFileId}>
-                  <input
-                    type="checkbox"
-                    checked={selectedReferenceIds.includes(reference.assetVersionFileId)}
-                    onChange={(event) =>
-                      toggleSelectedReference(reference.assetVersionFileId, event.target.checked)
-                    }
-                  />
-                  {reference.displayName}
-                </label>
-              ))}
-            {!selectionMatchesPreview && (
-              <button onClick={() => void doPreview()}>按选择更新预览</button>
-            )}
-          </fieldset>
-          {preview.rejected.length > 0 && (
-            <details>
-              <summary>查看未采用素材及原因（{preview.rejected.length}）</summary>
-              <ul>
-                {preview.rejected.map((reference) => (
-                  <li key={reference.assetVersionFileId}>{reference.reason}</li>
-                ))}
-              </ul>
-            </details>
+          {run.maxCostUsd !== null && (
+            <p>
+              {isChinese ? "费用上限" : "Cost ceiling"}: US${run.maxCostUsd.toFixed(2)} ·{" "}
+              {isChinese ? "失败不重试" : "no retry on failure"}
+            </p>
           )}
-          <details>
-            <summary>技术与上传范围</summary>
-            <code>
-              {preview.providerId} / {preview.modelId} / {preview.scopeHash}
-            </code>
-          </details>
-          <label>
-            <input
-              type="checkbox"
-              checked={confirmed}
-              disabled={!selectionMatchesPreview}
-              onChange={(event) => setConfirmed(event.target.checked)}
-            />{" "}
-            我确认素材将上传给所选 Provider，且授权最多一次调用。
-          </label>
-          <button
-            disabled={busy || !confirmed || !selectionMatchesPreview}
-            onClick={() => void queue()}
-          >
-            确认并排队
-          </button>
-        </div>
+          {(run.status === "QUEUED" || run.status === "RUNNING") && (
+            <p>
+              {isChinese
+                ? "常驻 Worker 正在生成提案，请稍候。"
+                : "The resident Worker is generating the proposal."}
+            </p>
+          )}
+          {(run.status === "FAILED" || run.status === "AMBIGUOUS") && (
+            <p className="formError">
+              {run.safeResultCode} ·{" "}
+              {isChinese
+                ? "不会自动重试，请重新明确授权。"
+                : "No automatic retry; a new explicit authorization is required."}
+            </p>
+          )}
+        </article>
+      ))}
+      {currentProposals.map((proposal) => (
+        <article className="executionShot" key={proposal.id}>
+          <h3>{isChinese ? "AI 提案" : "AI proposal"}</h3>
+          <p>{proposal.narrativeSummary}</p>
+          <ol>
+            {proposal.normalizedProposalJson.shots.map((shot) => (
+              <li key={shot.shotKey}>
+                <strong>{shot.title}</strong> — {shot.action}
+              </li>
+            ))}
+          </ol>
+          {proposal.decisions.length === 0 ? (
+            <div className="storyboardActions">
+              <button
+                className="primaryButton"
+                disabled={busy}
+                onClick={() => void decide(proposal, "ADOPT")}
+              >
+                {isChinese ? "采用为新版本" : "Adopt as new version"}
+              </button>
+              <button
+                className="dangerTextButton"
+                disabled={busy}
+                onClick={() => void decide(proposal, "REJECT")}
+              >
+                {isChinese ? "拒绝提案" : "Reject proposal"}
+              </button>
+            </div>
+          ) : (
+            <p>{isChinese ? "负责人已处理此提案。" : "The Owner has decided this proposal."}</p>
+          )}
+        </article>
+      ))}
+      {historicalCount > 0 && (
+        <details>
+          <summary>
+            {isChinese
+              ? `历史 Fake 记录（只读 · ${historicalCount}）`
+              : `Historical Fake records (read-only · ${historicalCount})`}
+          </summary>
+          <p>
+            {isChinese
+              ? "这些记录仅作为审计证据，不能采用、拒绝或再次运行。"
+              : "These records remain audit evidence and cannot be adopted, rejected, or rerun."}
+          </p>
+        </details>
       )}
-      <button disabled={busy} onClick={() => void loadProposals()}>
-        刷新已完成提案
-      </button>
-      {proposal && (
-        <div className="shotCard">
-          <h3>{proposal.narrativeSummary}</h3>
-          <p>下方是可编辑提案；页面后半部分保留当前版本，便于并排核对内容。</p>
-          {proposal.normalizedProposalJson.shots.map((shot, index) => (
-            <article key={shot.shotKey}>
-              <label>
-                镜头 {shot.ordinal} 标题
-                <input
-                  value={shot.title}
-                  onChange={(event) => editShot(index, "title", event.target.value)}
-                />
-              </label>
-              <label>
-                创意描述
-                <textarea
-                  value={shot.creativeDescription}
-                  onChange={(event) => editShot(index, "creativeDescription", event.target.value)}
-                />
-              </label>
-              <fieldset>
-                <legend>本镜使用的确认参考（至少一张）</legend>
-                {proposal.references.map((reference) => (
-                  <label key={reference.alias}>
-                    <input
-                      type="checkbox"
-                      checked={shot.referenceAliases.includes(reference.alias)}
-                      onChange={(event) =>
-                        toggleReference(index, reference.alias, event.target.checked)
-                      }
-                    />
-                    {reference.displayName}
-                  </label>
-                ))}
-              </fieldset>
-            </article>
-          ))}
-          <div className="storyboardActions">
-            <button onClick={() => void reject()}>拒绝提案</button>
-            <button className="primaryButton" onClick={() => void adopt()}>
-              采用为新版本
-            </button>
-          </div>
-        </div>
-      )}
-      {message && <p className="noticePanel">{message}</p>}
     </section>
   );
 }

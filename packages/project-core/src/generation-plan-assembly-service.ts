@@ -150,7 +150,7 @@ export function computeAssemblySelection(
         return (
           artifact.status === "TECHNICALLY_VALID" &&
           artifact.detectedMimeType === "video/mp4" &&
-          latestDecision?.decision === "PASS" &&
+          (latestDecision?.decision === "PASS" || latestDecision?.decision === "RISK_ACCEPTED") &&
           (!spec.frozenReuseArtifactId || artifact.id === spec.frozenReuseArtifactId)
         );
       })

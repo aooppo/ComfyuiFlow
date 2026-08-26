@@ -1,15 +1,36 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLanguage } from "../i18n/language-provider";
 import type { StoryboardListItem } from "./types";
 
+interface CreateDirectorPreview {
+  previewHash: string;
+  providerId: "codexmanager-local";
+  modelId: "gpt-5.6-terra";
+  maxShotCount: 3;
+  billingChannel: string;
+  maxCostUsd: number;
+  priceExpiresAt: string;
+  maxExternalCalls: 1;
+  externalCalls: 0;
+  canConfirm: boolean;
+  retryPolicy: "NO_RETRY_NO_FALLBACK";
+  references: Array<{ alias: string; displayName: string }>;
+}
+
 export function StoryboardLibrary({ projectId }: { projectId: string }) {
+  const { locale } = useLanguage();
+  const isChinese = locale === "zh-CN";
   const [items, setItems] = useState<StoryboardListItem[]>([]);
   const [title, setTitle] = useState("");
   const [creativeBrief, setCreativeBrief] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [createPreview, setCreatePreview] = useState<CreateDirectorPreview | null>(null);
   const [status, setStatus] = useState<"ACTIVE" | "ARCHIVED">("ACTIVE");
+  const createIdempotencyKey = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     const response = await fetch(`/api/projects/${projectId}/storyboards?status=${status}`);
@@ -27,14 +48,59 @@ export function StoryboardLibrary({ projectId }: { projectId: string }) {
     );
   }, [load]);
 
-  async function create() {
-    setBusy(true);
-    setError("");
-    try {
-      const response = await fetch(`/api/projects/${projectId}/storyboards`, {
+  useEffect(() => {
+    setCreatePreview(null);
+    createIdempotencyKey.current = null;
+    if (!title.trim() || !creativeBrief.trim()) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setPreviewBusy(true);
+      void fetch(`/api/projects/${projectId}/storyboards/director-preview`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, creativeBrief }),
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          const body = (await response.json()) as CreateDirectorPreview & {
+            error?: { message: string };
+          };
+          if (!response.ok)
+            throw new Error(body.error?.message ?? "AI Director preview is unavailable");
+          setCreatePreview(body);
+          setError("");
+        })
+        .catch((reason: unknown) => {
+          if (!controller.signal.aborted)
+            setError(
+              reason instanceof Error ? reason.message : "AI Director preview is unavailable",
+            );
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setPreviewBusy(false);
+        });
+    }, 400);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [creativeBrief, projectId, title]);
+
+  async function create() {
+    if (!createPreview?.canConfirm) return;
+    setBusy(true);
+    setError("");
+    try {
+      createIdempotencyKey.current ??= crypto.randomUUID();
+      const response = await fetch(`/api/projects/${projectId}/storyboards`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          creativeBrief,
+          previewHash: createPreview.previewHash,
+          idempotencyKey: createIdempotencyKey.current,
+        }),
       });
       const body = (await response.json()) as { id?: string; error?: { message: string } };
       if (!response.ok || !body.id)
@@ -85,7 +151,7 @@ export function StoryboardLibrary({ projectId }: { projectId: string }) {
       </a>
       <header className="storyboardHero">
         <div>
-          <p className="eyebrow">Creative planning · zero external calls</p>
+          <p className="eyebrow">AI storyboard creation · one disclosed call</p>
           <h1>Storyboards</h1>
           <p>
             Start with three shots, then add, remove, and reorder up to twenty while preserving
@@ -107,13 +173,49 @@ export function StoryboardLibrary({ projectId }: { projectId: string }) {
             onChange={(event) => setCreativeBrief(event.target.value)}
           />
         </label>
+        {previewBusy && <p className="noticePanel">Checking exact AI scope and current price…</p>}
+        {createPreview && (
+          <div className="noticePanel" aria-label="Exact AI Director authorization">
+            <p>
+              <strong>CodexManager Local · {createPreview.modelId}</strong>
+            </p>
+            <p>
+              {isChinese ? "最多" : "Maximum"} {createPreview.maxShotCount}{" "}
+              {isChinese ? "个镜头" : "shots"} · {isChinese ? "费用上限" : "maximum"} US$
+              {createPreview.maxCostUsd.toFixed(2)} · {createPreview.maxExternalCalls}{" "}
+              {isChinese ? "次 AI 调用" : "AI call"}
+            </p>
+            <p>
+              {createPreview.retryPolicy === "NO_RETRY_NO_FALLBACK"
+                ? "One authorization only. Failure or ambiguity consumes the call; no retry or Provider fallback."
+                : createPreview.retryPolicy}
+            </p>
+            <p>
+              {isChinese ? "费用有效期至" : "Price valid until"}{" "}
+              {new Date(createPreview.priceExpiresAt).toLocaleString()} ·{" "}
+              {isChinese ? "精确参考" : "exact references"} {createPreview.references.length}
+            </p>
+            {!createPreview.canConfirm && (
+              <p className="formError">
+                Add and approve at least one READY image reference before creating this AI
+                Storyboard.
+              </p>
+            )}
+          </div>
+        )}
         {error && <p className="formError">{error}</p>}
         <button
           className="primaryButton"
-          disabled={busy || !title.trim() || !creativeBrief.trim()}
+          disabled={
+            busy ||
+            previewBusy ||
+            !title.trim() ||
+            !creativeBrief.trim() ||
+            !createPreview?.canConfirm
+          }
           onClick={() => void create()}
         >
-          {busy ? "Creating…" : "Create storyboard"}
+          {busy ? "Creating and queueing AI…" : "Create and call AI"}
         </button>
       </section>
       <div className="storyboardListTabs" role="tablist" aria-label="Storyboard status">

@@ -1,21 +1,11 @@
-import { StoryboardService } from "@comfyuiflow/project-core";
-import { apiError } from "../../../../../lib/api";
-import {
-  requiredStoryboardRowVersion,
-  storyboardResponse,
-} from "../../../../../lib/storyboard-http";
-
-const service = new StoryboardService();
-type Context = { params: Promise<{ storyboardId: string }> };
-
-export async function POST(request: Request, context: Context) {
-  try {
-    const storyboard = await service.generate(
-      (await context.params).storyboardId,
-      requiredStoryboardRowVersion(request),
-    );
-    return storyboardResponse(storyboard, storyboard.rowVersion, 201);
-  } catch (error) {
-    return apiError(error);
-  }
+export async function POST() {
+  return Response.json(
+    {
+      error: {
+        code: "FAKE_PRODUCT_RETIRED",
+        message: "The deterministic Fake storyboard generator is retired from the product.",
+      },
+    },
+    { status: 410, headers: { "Cache-Control": "no-store" } },
+  );
 }

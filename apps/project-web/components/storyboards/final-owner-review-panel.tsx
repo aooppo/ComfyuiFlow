@@ -23,7 +23,11 @@ export function FinalOwnerReviewPanel({
 }: {
   batch: OwnerReviewBatch;
   isChinese: boolean;
-  onDecision: (artifactId: string, decision: "PASS" | "FAIL", notes: string) => Promise<void>;
+  onDecision: (
+    artifactId: string,
+    decision: "PASS" | "FAIL" | "RISK_ACCEPTED",
+    notes: string,
+  ) => Promise<void>;
 }) {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const review = batch.finalOwnerReview;
@@ -113,6 +117,19 @@ export function FinalOwnerReviewPanel({
                   }
                 >
                   {isChinese ? "负责人不通过" : "Owner FAIL"}
+                </button>
+                <button
+                  className="panelButton"
+                  disabled={!notes[item.artifactId ?? ""]?.trim()}
+                  onClick={() =>
+                    void onDecision(
+                      item.artifactId ?? "",
+                      "RISK_ACCEPTED",
+                      notes[item.artifactId ?? ""] ?? "",
+                    )
+                  }
+                >
+                  {isChinese ? "负责人接受风险" : "Owner RISK_ACCEPTED"}
                 </button>
               </div>
             </div>

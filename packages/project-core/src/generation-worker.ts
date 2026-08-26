@@ -38,7 +38,9 @@ export class GenerationWorker {
     }),
     private readonly adapters = new GenerationAdapterRegistry(),
   ) {
-    this.execution = new GenerationExecutionService(client, sourceStorage);
+    this.execution = new GenerationExecutionService(client, sourceStorage, process.env, {
+      allowTestFixtures: provider.profileId === "fake-video-v1",
+    });
     this.artifacts = new GeneratedArtifactService(client, generatedStorage);
     this.qa = new GenerationQaService(
       qaProvider,

@@ -9,17 +9,23 @@ const enabled = process.env.RUN_PROJECT_DB_TESTS === "1";
 describe.runIf(enabled)("Storyboard Director V2 PostgreSQL", () => {
   let client: ProjectPrisma;
   let root: string;
+  let storage: any;
   let service: any;
   let worker: any;
   beforeAll(async () => {
     const url = new URL(process.env.DATABASE_URL ?? "");
     if (!url.pathname.endsWith("_test")) throw new Error("isolated *_test database required");
     const core = await import("@comfyuiflow/project-core");
+    const { FakeStoryboardProvider } = await import("@comfyuiflow/ai-providers");
     client = core.prisma;
     root = await mkdtemp(path.join(tmpdir(), "director-v2-"));
-    const storage = new core.LocalContentStorage({ root });
-    service = new core.StoryboardDirectorService(client, storage, {});
-    worker = new core.StoryboardDirectorWorker(client, undefined, storage);
+    storage = new core.LocalContentStorage({ root });
+    service = new core.StoryboardDirectorService(client, storage, {}, { allowTestFixtures: true });
+    worker = new core.StoryboardDirectorWorker(
+      client,
+      { fake: new FakeStoryboardProvider() },
+      storage,
+    );
     await client.$executeRawUnsafe(
       'TRUNCATE TABLE "GenerationImplementationEvidence", "ShotExecutionPlan", "GenerationImplementation", "StoryboardDirectorProposalDecision", "StoryboardDirectorProposal", "StoryboardDirectorAttempt", "StoryboardDirectorAuthorization", "StoryboardDirectorInputReference", "StoryboardDecision", "ShotAssetBinding", "AssetResolutionManifest", "ShotAssetRequirement", "StoryboardShot", "StoryboardDirectorRun", "StoryboardVersion", "Storyboard", "AssetVersionFile", "ProductionAssetVersion", "ProductionAsset", "Asset", "StoredObject", "Project" CASCADE',
     );
@@ -126,6 +132,107 @@ describe.runIf(enabled)("Storyboard Director V2 PostgreSQL", () => {
   afterAll(async () => {
     await client.$disconnect();
     await rm(root, { recursive: true, force: true });
+  });
+  it("atomically creates one Storyboard and one bounded real Director Run idempotently", async () => {
+    const core = await import("@comfyuiflow/project-core");
+    const project = await client.project.findFirstOrThrow();
+    const createService = new core.StoryboardDirectorService(client, storage, {
+      PROJECT_STORYBOARD_DIRECTOR_LIVE_ENABLED: "true",
+      STORYBOARD_DIRECTOR_CODEXMANAGER_BILLING_CHANNEL: "LOCAL_TEST_BILLING",
+      STORYBOARD_DIRECTOR_CODEXMANAGER_MAX_COST_USD: "5.00",
+      STORYBOARD_DIRECTOR_CODEXMANAGER_PRICE_EFFECTIVE_AT: "2026-08-25T00:00:00.000Z",
+      STORYBOARD_DIRECTOR_CODEXMANAGER_PRICE_EXPIRES_AT: "2099-12-31T23:59:59.000Z",
+    });
+    const input = {
+      title: "Create with AI",
+      creativeBrief: "Generate a coherent three-shot scene proposal.",
+    };
+    const before = await Promise.all([
+      client.storyboard.count(),
+      client.storyboardDirectorRun.count(),
+      client.storyboardDirectorAuthorization.count(),
+      client.storyboardDirectorAttempt.count(),
+    ]);
+    const preview = await createService.previewCreate(project.id, input);
+    expect(preview).toMatchObject({
+      providerId: "codexmanager-local",
+      modelId: "gpt-5.6-terra",
+      maxShotCount: 3,
+      maxCostUsd: 5,
+      maxExternalCalls: 1,
+      externalCalls: 0,
+      canConfirm: true,
+      retryPolicy: "NO_RETRY_NO_FALLBACK",
+    });
+    const request = {
+      ...input,
+      previewHash: preview.previewHash,
+      idempotencyKey: randomUUID(),
+    };
+    const created = await createService.createAndConfirm(project.id, request);
+    const repeated = await createService.createAndConfirm(project.id, request);
+    expect(() => JSON.stringify(created)).not.toThrow();
+    expect(() => JSON.stringify(repeated)).not.toThrow();
+    expect(repeated.id).toBe(created.id);
+    const exact = await client.storyboard.findUniqueOrThrow({
+      where: { id: created.id },
+      include: {
+        headVersion: { include: { shots: true } },
+        runs: { include: { authorization: true, inputReferences: true, attempts: true } },
+      },
+    });
+    expect(exact).toMatchObject({ rowVersion: 1, headVersion: { source: "OWNER" } });
+    expect(exact.headVersion?.shots).toHaveLength(0);
+    expect(exact.runs).toHaveLength(1);
+    expect(exact.runs[0]).toMatchObject({
+      providerId: "codexmanager-local",
+      requestedModelId: "gpt-5.6-terra",
+      maxShotCount: 3,
+      providerCallCount: 0,
+      status: "QUEUED",
+      authorization: { maxCalls: 1, consumedAt: null },
+      attempts: [],
+    });
+    expect(exact.runs[0]!.inputReferences.length).toBeGreaterThan(0);
+    await expect(
+      createService.createAndConfirm(project.id, {
+        ...request,
+        creativeBrief: "A changed scope must not reuse the preview.",
+      }),
+    ).rejects.toMatchObject({ code: "DIRECTOR_CREATE_PREVIEW_STALE" });
+    await expect(
+      Promise.all([
+        client.storyboard.count(),
+        client.storyboardDirectorRun.count(),
+        client.storyboardDirectorAuthorization.count(),
+        client.storyboardDirectorAttempt.count(),
+      ]),
+    ).resolves.toEqual([before[0] + 1, before[1] + 1, before[2] + 1, before[3]]);
+
+    const emptyProject = await client.project.create({
+      data: { name: "No eligible Director references", targetAspectRatio: "PORTRAIT_9_16" },
+    });
+    const emptyPreview = await createService.previewCreate(emptyProject.id, input);
+    expect(emptyPreview.canConfirm).toBe(false);
+    const beforeEmpty = await client.storyboard.count({ where: { projectId: emptyProject.id } });
+    await expect(
+      createService.createAndConfirm(emptyProject.id, {
+        ...input,
+        previewHash: emptyPreview.previewHash,
+        idempotencyKey: randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: "DIRECTOR_REFERENCE_SELECTION_INVALID" });
+    await expect(client.storyboard.count({ where: { projectId: emptyProject.id } })).resolves.toBe(
+      beforeEmpty,
+    );
+    await client.storyboardDirectorRun.update({
+      where: { id: created.directorRun.id },
+      data: {
+        status: "FAILED",
+        safeResultCode: "TEST_ZERO_CALL_CANCELLED",
+        finishedAt: new Date(),
+      },
+    });
   });
   it("previews without writes, consumes once, preserves approval until explicit adoption", async () => {
     const board = await client.storyboard.findFirstOrThrow();

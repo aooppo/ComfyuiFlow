@@ -1,16 +1,45 @@
 import {
+  GenerationPlanV3Schema,
+  GenerationSpecV3Schema,
   ShotRequirementSpecV2Schema,
+  WorkflowPlanningRequestV3Schema,
   WorkflowPlanningRequestSchema,
+  type GenerationImplementationV2,
+  type GenerationSpecV3,
+  type RequirementPurposeV3Schema,
   type ShotRequirementSpecV2,
+  type VersionRefV2,
 } from "@comfyuiflow/contracts";
+import type { z } from "zod";
+import { AssetCandidateService } from "../asset-candidate-service.js";
+import { assetCandidateRequirementSchema } from "../asset-candidate-contracts.js";
 import { GenerationAdapterRegistry } from "../generation-adapter.js";
 import { canonicalSha256 } from "../canonical-json.js";
 import { ProjectAssetError } from "../contracts.js";
 import { prisma, type ProjectPrisma } from "../prisma.js";
 import { computeShotRequirementHash } from "./requirement-analyzer.js";
-import { ExecutionPlanService } from "./execution-plan-service.js";
+import {
+  CapabilityPlanRepository,
+  evaluateGenerationSpecDependenciesV3,
+  ExecutionPlanService,
+} from "./execution-plan-service.js";
+import { CapabilityRegistryLoader } from "./capability-registry.js";
+import { resolveCapabilityCandidatesV2 } from "./capability-resolver-v2.js";
+import { CapabilityCompilerRegistry } from "./compiler-registry.js";
+import { selectCapabilityImplementationV2 } from "./implementation-selector-v2.js";
+import { gatherPlanningInputCandidates } from "./planning-input-service.js";
+import { createPlanningInputSnapshotV3 } from "./planning-snapshot-service.js";
+import {
+  analyzeShotRequirementsV3,
+  type NormalizedShotSemanticsV3,
+} from "./requirement-analyzer-v3.js";
 import { GenerationRegistryLoader } from "./registry.js";
 import { WorkflowAgentService } from "./workflow-agent-service.js";
+import { validateGenerationSpecV3Handoff } from "./validator.js";
+import {
+  TrialScopeApprovalService,
+  type ActiveTrialScopeItem,
+} from "./trial-scope-approval-service.js";
 
 type PlanningPreference = ReturnType<
   typeof WorkflowPlanningRequestSchema.parse
@@ -351,5 +380,621 @@ export class WorkflowPlanningApplicationService {
       return "character_rear";
     if (type === "CHARACTER" && usage === "FULL_BODY") return "character_full_body";
     return String(usage).toLowerCase();
+  }
+}
+
+type RequirementPurposeV3 = z.infer<typeof RequirementPurposeV3Schema>;
+
+interface UnorderedPlanningBindingV3 {
+  id: string;
+  purpose: RequirementPurposeV3;
+  sourceKind: "SEMANTIC_ASSET_VERSION" | "CHARACTER_STATE_VERSION";
+  sourceRef: VersionRefV2;
+  sha256: string;
+  modality: "IMAGE" | "VIDEO" | "AUDIO";
+  roleLabel: string;
+  necessity: "REQUIRED" | "OPTIONAL";
+}
+
+const capabilityVersionInclude = {
+  project: true,
+  storyboard: true,
+  shots: {
+    include: {
+      requirements: {
+        include: {
+          bindings: {
+            include: {
+              productionAssetVersion: { include: { productionAsset: true } },
+              characterStateVersion: true,
+              assetVersionFile: {
+                include: { projectAsset: { include: { storedObject: true } } },
+              },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { ordinal: "asc" as const },
+  },
+} as const;
+
+const capabilityRefKey = (reference: VersionRefV2) => `${reference.id}@${reference.version}`;
+
+function deterministicUuid(value: unknown) {
+  const hash = canonicalSha256(value);
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(
+    17,
+    20,
+  )}-${hash.slice(20, 32)}`;
+}
+
+function requirementPurpose(requirement: any): RequirementPurposeV3 {
+  const assetType = String(
+    requirement.inputJson && typeof requirement.inputJson === "object"
+      ? (requirement.inputJson.assetType ?? "")
+      : "",
+  ).toUpperCase();
+  if (assetType === "CHARACTER") return "CHARACTER";
+  if (assetType === "PROP" || assetType === "PRODUCT") return "PRODUCT";
+  if (assetType === "SCENE" || assetType === "ENVIRONMENT") return "ENVIRONMENT";
+  if (assetType === "STYLE") return "STYLE";
+  if (assetType === "CONTINUITY") return "CONTINUITY";
+  if (assetType === "MOTION") return "MOTION";
+  if (assetType === "AUDIO") return "AUDIO";
+  return "OTHER";
+}
+
+function normalizedSemantics(shot: any): NormalizedShotSemanticsV3 {
+  const purposes = new Set<RequirementPurposeV3>(shot.requirements.map(requirementPurpose));
+  const hasCharacterState = shot.requirements.some((requirement: any) =>
+    requirement.bindings.some((binding: any) => Boolean(binding.characterStateVersionId)),
+  );
+  const hasAudioBinding = shot.requirements.some((requirement: any) =>
+    requirement.bindings.some(
+      (binding: any) => binding.assetVersionFile.projectAsset.mediaType === "AUDIO",
+    ),
+  );
+  return {
+    personPresent: purposes.has("CHARACTER"),
+    explicitCharacterIdentityRequired: purposes.has("CHARACTER"),
+    appearanceContinuityRequired: hasCharacterState,
+    productIdentityRequired: purposes.has("PRODUCT"),
+    environmentIdentityRequired: purposes.has("ENVIRONMENT"),
+    styleReferenceDesired: purposes.has("STYLE"),
+    previousFinalFrameRequired: purposes.has("CONTINUITY"),
+    motionReferenceRequired: purposes.has("MOTION"),
+    audioReferenceRequired: purposes.has("AUDIO") || hasAudioBinding,
+  };
+}
+
+function outputDimensions(aspectRatio: string) {
+  if (aspectRatio === "LANDSCAPE_16_9") return { width: 1920, height: 1080 };
+  if (aspectRatio === "SQUARE_1_1") return { width: 1080, height: 1080 };
+  if (aspectRatio === "PORTRAIT_4_5") return { width: 1080, height: 1350 };
+  return { width: 1080, height: 1920 };
+}
+
+/**
+ * Feature 016 planning path. It starts from a saved current Storyboard head and creates immutable
+ * per-Shot lineage. It deliberately has no Storyboard/Shot-Plan approval or execution authority.
+ */
+export class CapabilityWorkflowPlanningApplicationService {
+  constructor(
+    private readonly client: ProjectPrisma = prisma,
+    private readonly registryLoader = new CapabilityRegistryLoader(),
+    private readonly compilerRegistry = new CapabilityCompilerRegistry(),
+  ) {}
+
+  private async automaticPlanningBindings(
+    storedRequirement: any,
+    purpose: RequirementPurposeV3,
+    necessity: "REQUIRED" | "OPTIONAL",
+  ): Promise<UnorderedPlanningBindingV3[]> {
+    const parsed = assetCandidateRequirementSchema.safeParse(storedRequirement.inputJson);
+    if (!parsed.success) return [];
+    let preview: Awaited<ReturnType<AssetCandidateService["preview"]>>;
+    try {
+      preview = await new AssetCandidateService(this.client).preview(parsed.data);
+    } catch {
+      return [];
+    }
+    if (preview.gaps.length > 0 || preview.eligible.length === 0) return [];
+    const eligibleOrder = new Map(
+      preview.eligible.map((candidate, index) => [candidate.bindingId, index]),
+    );
+    const rows = await this.client.assetVersionFile.findMany({
+      where: { id: { in: preview.eligible.map((candidate) => candidate.bindingId) } },
+      include: {
+        productionAssetVersion: true,
+        projectAsset: { include: { storedObject: true } },
+      },
+    });
+    rows.sort(
+      (left, right) =>
+        (eligibleOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+        (eligibleOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER),
+    );
+    const selectedRows = parsed.data.referenceUsages.flatMap((usage) => {
+      const selected = rows.find((row) => row.referenceUsage === usage);
+      return selected ? [selected] : [];
+    });
+    if (selectedRows.length !== parsed.data.referenceUsages.length) return [];
+    const characterState = parsed.data.characterStateVersionId
+      ? await this.client.characterStateVersion.findUnique({
+          where: { id: parsed.data.characterStateVersionId },
+        })
+      : null;
+    if (parsed.data.characterStateVersionId && !characterState) return [];
+    const candidates = selectedRows.map((row) => {
+      const sourceKind = characterState
+        ? ("CHARACTER_STATE_VERSION" as const)
+        : ("SEMANTIC_ASSET_VERSION" as const);
+      const sourceRef = characterState
+        ? { id: characterState.id, version: String(characterState.versionNumber) }
+        : {
+            id: row.productionAssetVersion.id,
+            version: String(row.productionAssetVersion.versionNumber),
+          };
+      return {
+        id: deterministicUuid({
+          kind: "automatic-planning-binding-v3",
+          requirementId: storedRequirement.id,
+          assetVersionFileId: row.id,
+          characterStateVersionId: characterState?.id ?? null,
+        }),
+        semanticIdentityRef: sourceRef,
+        purpose,
+        sourceKind,
+        sourceRef,
+        sha256: row.projectAsset.storedObject.sha256,
+        modality: row.projectAsset.mediaType as "IMAGE" | "VIDEO" | "AUDIO",
+        displayFilename: row.projectAsset.displayName,
+        approved: row.approvalStatus === "ACCEPTED",
+        ready: row.status === "ACTIVE" && row.projectAsset.status === "READY",
+        hashVerified:
+          row.projectAsset.storedObject.verificationStatus === "VERIFIED" &&
+          /^[a-f0-9]{64}$/.test(row.projectAsset.storedObject.sha256),
+        roleLabel: `${storedRequirement.requirementKey}:${row.referenceUsage.toLowerCase()}`,
+        necessity,
+      };
+    });
+    const eligible = gatherPlanningInputCandidates({ requiredPurposes: [purpose], candidates });
+    const completeById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+    return eligible.map((candidate) => {
+      const complete = completeById.get(candidate.id)!;
+      return {
+        id: complete.id,
+        purpose: complete.purpose,
+        sourceKind: complete.sourceKind,
+        sourceRef: complete.sourceRef,
+        sha256: complete.sha256,
+        modality: complete.modality,
+        roleLabel: complete.roleLabel,
+        necessity: complete.necessity,
+      };
+    });
+  }
+
+  async previewAndPersistStoryboard(versionId: string, rawRequest: unknown) {
+    const request = WorkflowPlanningRequestV3Schema.parse(rawRequest);
+    const version = await this.client.storyboardVersion.findUnique({
+      where: { id: versionId },
+      include: capabilityVersionInclude,
+    });
+    if (!version)
+      throw new ProjectAssetError(
+        "STORYBOARD_VERSION_NOT_FOUND",
+        "Storyboard version was not found",
+        404,
+      );
+    if (version.projectId !== request.projectId)
+      throw new ProjectAssetError(
+        "CROSS_PROJECT",
+        "Storyboard version belongs to another project",
+        409,
+      );
+    if (version.project.status !== "ACTIVE")
+      throw new ProjectAssetError("PROJECT_ARCHIVED", "Restore this project before planning", 409);
+    if (version.storyboard.status !== "ACTIVE")
+      throw new ProjectAssetError(
+        "STORYBOARD_ARCHIVED",
+        "Restore this storyboard before planning",
+        409,
+      );
+    if (version.storyboard.headVersionId !== version.id)
+      throw new ProjectAssetError(
+        "STORYBOARD_VERSION_STALE",
+        "Workflow planning requires the current saved Storyboard head",
+        409,
+      );
+    const expectedRevisionRef = { id: version.id, version: version.contentHash };
+    if (
+      request.storyboardRevisionRefs.length !== 1 ||
+      capabilityRefKey(request.storyboardRevisionRefs[0]!) !== capabilityRefKey(expectedRevisionRef)
+    )
+      throw new ProjectAssetError(
+        "STORYBOARD_REVISION_MISMATCH",
+        "Planning requires the exact current Storyboard revision",
+        409,
+      );
+
+    const selectedShotIds = new Set(request.shotIds);
+    const shots = version.shots.filter((shot) => selectedShotIds.has(shot.id));
+    if (shots.length !== request.shotIds.length)
+      throw new ProjectAssetError(
+        "GENERATION_TARGET_INVALID",
+        "A selected Shot does not belong to this Storyboard revision",
+        422,
+      );
+    const constraints = new Map<string, RequirementPurposeV3[]>();
+    for (const constraint of request.optionalOwnerConstraints) {
+      const current = constraints.get(constraint.shotId) ?? [];
+      current.push(constraint.purpose);
+      constraints.set(constraint.shotId, current);
+    }
+
+    const registry = await this.registryLoader.load();
+    const activeTrialItemsByShot = await new TrialScopeApprovalService(
+      this.client,
+      this.registryLoader,
+    ).activeItemsByShot(version.id, registry);
+    const repository = new CapabilityPlanRepository(this.client);
+    const results: Array<{
+      shot: (typeof shots)[number];
+      implementation: GenerationImplementationV2;
+      generationSpec: GenerationSpecV3;
+      planningOutcome: "READY" | "TRIAL" | "BLOCKED";
+      blockerCodes: string[];
+      requirement: ReturnType<typeof analyzeShotRequirementsV3>;
+      snapshot: ReturnType<typeof createPlanningInputSnapshotV3>;
+    }> = [];
+
+    for (const shot of shots) {
+      const semantics = normalizedSemantics(shot);
+      const selectedEvidencePurposes = constraints.get(shot.id) ?? [];
+      const requirementVersion = canonicalSha256({
+        shotId: shot.id,
+        storyboardRevisionRef: expectedRevisionRef,
+        semantics,
+        selectedEvidencePurposes: [...selectedEvidencePurposes].sort(),
+      });
+      const requirement = analyzeShotRequirementsV3({
+        specId: deterministicUuid({ kind: "requirement-v3", shotId: shot.id, requirementVersion }),
+        version: requirementVersion,
+        shotId: shot.id,
+        storyboardRevisionRef: expectedRevisionRef,
+        semantics,
+        selectedEvidencePurposes,
+      });
+
+      const rawBindings: UnorderedPlanningBindingV3[] = [];
+      for (const storedRequirement of shot.requirements) {
+        const purpose = requirementPurpose(storedRequirement);
+        const necessity =
+          requirement.purposes.find((item) => item.purpose === purpose)?.necessity === "REQUIRED"
+            ? ("REQUIRED" as const)
+            : ("OPTIONAL" as const);
+        const explicitBindings = storedRequirement.bindings.flatMap((binding) => {
+          const mediaType = binding.assetVersionFile.projectAsset.mediaType;
+          if (!(["IMAGE", "VIDEO", "AUDIO"] as const).includes(mediaType as any)) return [];
+          const semanticVersion = String(binding.productionAssetVersion.versionNumber);
+          const sourceKind = binding.characterStateVersion
+            ? ("CHARACTER_STATE_VERSION" as const)
+            : ("SEMANTIC_ASSET_VERSION" as const);
+          const sourceRef = binding.characterStateVersion
+            ? {
+                id: binding.characterStateVersion.id,
+                version: String(binding.characterStateVersion.versionNumber),
+              }
+            : { id: binding.productionAssetVersion.id, version: semanticVersion };
+          return [
+            {
+              id: binding.id,
+              purpose,
+              sourceKind,
+              sourceRef,
+              sha256: binding.assetVersionFile.projectAsset.storedObject.sha256,
+              modality: mediaType as "IMAGE" | "VIDEO" | "AUDIO",
+              roleLabel: storedRequirement.requirementKey,
+              necessity,
+            },
+          ];
+        });
+        if (explicitBindings.length > 0) rawBindings.push(...explicitBindings);
+        else
+          rawBindings.push(
+            ...(await this.automaticPlanningBindings(storedRequirement, purpose, necessity)),
+          );
+      }
+      const requiredCapability = semantics.previousFinalFrameRequired
+        ? ("PREVIOUS_FINAL_FRAME_TO_VIDEO" as const)
+        : requirement.purposes.some((item) => item.necessity === "REQUIRED") ||
+            rawBindings.length > 0
+          ? ("ORDERED_REFERENCE_TO_VIDEO" as const)
+          : ("TEXT_TO_VIDEO" as const);
+      const shotTrialItems =
+        activeTrialItemsByShot.get(shot.id) ?? new Map<string, ActiveTrialScopeItem[]>();
+      const resolution = resolveCapabilityCandidatesV2(registry, {
+        bindings: rawBindings.map((binding, order) => ({ ...binding, order })),
+        requiredCapability,
+        allowedTrialRefs: new Set(shotTrialItems.keys()),
+      });
+      const fallback = registry.document.implementations
+        .filter(
+          (candidate) =>
+            !candidate.testOnly &&
+            !["DISCOVERED", "DEPRECATED", "DISABLED"].includes(candidate.lifecycle) &&
+            candidate.capabilityCodes.includes(requiredCapability),
+        )
+        .sort((left, right) =>
+          `${left.id}@${left.version}`.localeCompare(`${right.id}@${right.version}`),
+        )[0];
+      const implementation = selectCapabilityImplementationV2(resolution.compatible) ?? fallback;
+      if (!implementation)
+        throw new ProjectAssetError(
+          "CAPABILITY_IMPLEMENTATION_NOT_FOUND",
+          "No reviewed implementation can represent this Shot",
+          422,
+        );
+      const boundPurposes = new Set(rawBindings.map((binding) => binding.purpose));
+      const unresolvedRequirementCodes = requirement.purposes
+        .filter((item) => item.necessity === "REQUIRED" && !boundPurposes.has(item.purpose))
+        .map((item) => `UNRESOLVED_${item.purpose}`)
+        .sort();
+      const omittedRequirementCodes = requirement.purposes
+        .filter((item) => item.necessity === "OMITTED")
+        .map((item) => item.reasonCode)
+        .sort();
+      const snapshotVersion = canonicalSha256({
+        requirementHash: requirement.requirementHash,
+        implementationRef: { id: implementation.id, version: implementation.version },
+        compilerRef: implementation.compilerRef,
+        bindings: rawBindings,
+      });
+      const snapshot = createPlanningInputSnapshotV3({
+        snapshotId: deterministicUuid({ kind: "snapshot-v3", shotId: shot.id, snapshotVersion }),
+        version: snapshotVersion,
+        requirementSpecRef: { id: requirement.id, version: requirement.version },
+        implementationRef: { id: implementation.id, version: implementation.version },
+        compilerRef: implementation.compilerRef,
+        bindings: rawBindings,
+        omittedRequirementCodes,
+        unresolvedRequirementCodes,
+      });
+      const generationIntent = {
+        prompt: [
+          `Start state: ${shot.startState.trim()}`,
+          `Action: ${shot.action.trim()}`,
+          `End state: ${shot.endState.trim()}`,
+          `Camera: ${shot.camera.trim()}`,
+          `Composition: ${shot.composition.trim()}`,
+        ].join("\n"),
+        durationSeconds: shot.durationSeconds,
+      };
+      const compilerProfile = registry.compilersByRef.get(
+        capabilityRefKey(implementation.compilerRef),
+      );
+      if (!compilerProfile)
+        throw new ProjectAssetError(
+          "COMPILER_VERSION_UNKNOWN",
+          "The exact compiler version is unavailable",
+          409,
+        );
+      const resolutionBlockers =
+        resolution.rejected.find(
+          (item) => capabilityRefKey(item.implementationRef) === capabilityRefKey(implementation),
+        )?.reasonCodes ?? [];
+      let compiledRequestDigest: string;
+      let compilerBlocker: string | null = null;
+      try {
+        compiledRequestDigest = this.compilerRegistry.compile(compilerProfile, {
+          compilerRef: implementation.compilerRef,
+          prompt: generationIntent.prompt,
+          durationSeconds: generationIntent.durationSeconds,
+          bindings: snapshot.bindings.map(
+            ({ sourceRef, sha256, modality, order, roleLabel, necessity }) => ({
+              sourceRef,
+              sha256,
+              modality,
+              order,
+              roleLabel,
+              necessity,
+            }),
+          ),
+        }).compiledRequestDigest;
+      } catch {
+        compilerBlocker = "INPUT_CONTRACT_UNSATISFIED";
+        compiledRequestDigest = canonicalSha256({
+          compilerRef: implementation.compilerRef,
+          generationIntent,
+          snapshotHash: snapshot.snapshotHash,
+          blockerCode: compilerBlocker,
+        });
+      }
+      const inputHash = canonicalSha256({
+        requirementHash: requirement.requirementHash,
+        snapshotHash: snapshot.snapshotHash,
+        generationIntent,
+      });
+      const dependencyHash = canonicalSha256({
+        storyboardRevisionRef: expectedRevisionRef,
+        continuityRequirements: shot.continuityRequirements,
+      });
+      const versionDigest = canonicalSha256({
+        inputHash,
+        dependencyHash,
+        implementationRef: { id: implementation.id, version: implementation.version },
+        compiledRequestDigest,
+      });
+      const withoutOutputHash = {
+        id: deterministicUuid({ kind: "generation-spec-v3", shotId: shot.id, versionDigest }),
+        version: versionDigest,
+        shotId: shot.id,
+        storyboardRevisionRef: expectedRevisionRef,
+        requirementSpecRef: { id: requirement.id, version: requirement.version },
+        planningInputSnapshotRef: { id: snapshot.id, version: snapshot.version },
+        implementationRef: { id: implementation.id, version: implementation.version },
+        runtimeRef: implementation.runtimeRef,
+        providerRef: implementation.providerRef,
+        modelRef: implementation.modelRef,
+        adapterRef: implementation.adapterRef,
+        compilerRef: implementation.compilerRef,
+        generationIntent,
+        compiledRequestDigest,
+        expectedOutput: {
+          mediaType: "video/mp4" as const,
+          ...outputDimensions(version.project.targetAspectRatio),
+          fps: 30,
+        },
+        inputHash,
+        dependencyHash,
+      };
+      const generationSpec = validateGenerationSpecV3Handoff(
+        GenerationSpecV3Schema.parse({
+          ...withoutOutputHash,
+          outputHash: canonicalSha256(withoutOutputHash),
+        }),
+      );
+      const matchingTrialScope =
+        implementation.lifecycle !== "TRIAL" ||
+        (shotTrialItems.get(capabilityRefKey(implementation)) ?? []).some(
+          (item) =>
+            item.generationSpecRef.id === generationSpec.id &&
+            item.generationSpecRef.version === generationSpec.version &&
+            item.compiledRequestDigest === generationSpec.compiledRequestDigest,
+        );
+      await repository.persistRequirement({
+        projectId: version.projectId,
+        storyboardVersionId: version.id,
+        storyboardShotId: shot.id,
+        spec: requirement,
+      });
+      await repository.persistSnapshot({ projectId: version.projectId, snapshot });
+      await repository.persistGenerationSpec({
+        projectId: version.projectId,
+        storyboardVersionId: version.id,
+        spec: generationSpec,
+      });
+      const blockerCodes = [
+        ...new Set([
+          ...unresolvedRequirementCodes,
+          ...evaluateGenerationSpecDependenciesV3({
+            continuityRequired: semantics.previousFinalFrameRequired,
+            bindings: snapshot.bindings,
+          }),
+          ...resolutionBlockers,
+          ...(!matchingTrialScope ? ["TRIAL_SCOPE_REQUIRED"] : []),
+          ...(compilerBlocker ? [compilerBlocker] : []),
+        ]),
+      ].sort();
+      const planningOutcome =
+        blockerCodes.length > 0
+          ? ("BLOCKED" as const)
+          : implementation.lifecycle === "READY"
+            ? ("READY" as const)
+            : ("TRIAL" as const);
+      results.push({
+        shot,
+        implementation,
+        generationSpec,
+        planningOutcome,
+        blockerCodes,
+        requirement,
+        snapshot,
+      });
+    }
+
+    const generationSpecRefs = results.map(({ generationSpec }) => ({
+      id: generationSpec.id,
+      version: generationSpec.version,
+    }));
+    const planCore = {
+      storyboardRevisionRefs: [expectedRevisionRef],
+      generationSpecRefs,
+      shotIds: results.map(({ shot }) => shot.id),
+      expectedCalls: results.filter(({ planningOutcome }) => planningOutcome !== "BLOCKED").length,
+      costPolicyDigest: canonicalSha256(
+        results.map(({ implementation }) => ({
+          implementationRef: { id: implementation.id, version: implementation.version },
+          costPolicy: implementation.costPolicy,
+        })),
+      ),
+      state: results.some(({ planningOutcome }) => planningOutcome === "BLOCKED")
+        ? ("BLOCKED" as const)
+        : ("VALID" as const),
+    };
+    const planDigest = canonicalSha256(planCore);
+    const plan = GenerationPlanV3Schema.parse({
+      id: deterministicUuid({
+        kind: "generation-plan-v3",
+        projectId: version.projectId,
+        planDigest,
+      }),
+      version: planDigest,
+      ...planCore,
+      planDigest,
+    });
+    const persistedPlan = await repository.persistPlan(version.projectId, plan);
+    return {
+      schemaVersion: "workflow-planning-preview-v3" as const,
+      projectId: version.projectId,
+      storyboardVersionId: version.id,
+      planId: persistedPlan.id,
+      planDigest: plan.planDigest,
+      state: plan.state,
+      registrySha256: registry.registrySha256,
+      counts: {
+        ready: results.filter(({ planningOutcome }) => planningOutcome === "READY").length,
+        trial: results.filter(({ planningOutcome }) => planningOutcome === "TRIAL").length,
+        blocked: results.filter(({ planningOutcome }) => planningOutcome === "BLOCKED").length,
+      },
+      shots: results.map(
+        ({
+          shot,
+          implementation,
+          generationSpec,
+          planningOutcome,
+          blockerCodes,
+          requirement,
+          snapshot,
+        }) => ({
+          shotId: shot.id,
+          shotKey: shot.shotKey,
+          ordinal: shot.ordinal,
+          planningOutcome,
+          blockerCodes,
+          requirements: requirement.purposes,
+          bindings: snapshot.bindings,
+          omittedRequirementCodes: snapshot.omittedRequirementCodes,
+          unresolvedRequirementCodes: snapshot.unresolvedRequirementCodes,
+          implementationRef: { id: implementation.id, version: implementation.version },
+          implementationLifecycle: implementation.lifecycle,
+          generationSpecRef: { id: generationSpec.id, version: generationSpec.version },
+          compiledRequestDigest: generationSpec.compiledRequestDigest,
+        }),
+      ),
+      externalCalls: 0 as const,
+      generationAuthorized: false as const,
+    };
+  }
+
+  async getPlan(planId: string) {
+    const record = await this.client.generationPlanV3Record.findUnique({ where: { id: planId } });
+    if (!record)
+      throw new ProjectAssetError(
+        "GENERATION_PLAN_NOT_FOUND",
+        "Generation plan was not found",
+        404,
+      );
+    return {
+      schemaVersion: "workflow-plan-detail-v3" as const,
+      ...GenerationPlanV3Schema.parse(record.payloadJson),
+      state: record.state,
+      stateReasonCode: record.stateReasonCode,
+      createdAt: record.createdAt.toISOString(),
+      externalCalls: 0 as const,
+      generationAuthorized: record.state === "AUTHORIZED",
+    };
   }
 }

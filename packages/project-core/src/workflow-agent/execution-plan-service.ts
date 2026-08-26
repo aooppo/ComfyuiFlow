@@ -1,6 +1,21 @@
 import { randomUUID } from "node:crypto";
-import type { GenerationImplementation, GenerationRegistry } from "@comfyuiflow/contracts";
-import { ExecutionInputSnapshotSchema } from "@comfyuiflow/contracts";
+import type {
+  GenerationAuthorizationV3,
+  GenerationImplementation,
+  GenerationPlanV3,
+  GenerationRegistry,
+  GenerationSpecV3,
+  PlanningInputSnapshotV3,
+  ShotRequirementSpecV3,
+} from "@comfyuiflow/contracts";
+import {
+  ExecutionInputSnapshotSchema,
+  GenerationAuthorizationV3Schema,
+  GenerationPlanV3Schema,
+  GenerationSpecV3Schema,
+  PlanningInputSnapshotV3Schema,
+  ShotRequirementSpecV3Schema,
+} from "@comfyuiflow/contracts";
 import type { Prisma } from "../generated/client/index.js";
 import { canonicalSha256 } from "../canonical-json.js";
 import { prisma, type ProjectPrisma } from "../prisma.js";
@@ -427,4 +442,186 @@ export class ExecutionPlanService {
 
 export function registryDocumentHash(document: GenerationRegistry) {
   return canonicalSha256(document);
+}
+
+export function evaluateGenerationSpecDependenciesV3(input: {
+  continuityRequired: boolean;
+  bindings: Array<{
+    sourceKind: string;
+    sourceRef: { id: string; version: string };
+    sha256: string;
+  }>;
+}) {
+  if (!input.continuityRequired) return [];
+  const upstream = input.bindings.find((binding) => binding.sourceKind === "UPSTREAM_FINAL_FRAME");
+  if (!upstream) return ["UPSTREAM_FINAL_FRAME_NOT_MATERIALIZED"];
+  if (!/^[a-f0-9]{64}$/.test(upstream.sourceRef.version) || !/^[a-f0-9]{64}$/.test(upstream.sha256))
+    return ["UPSTREAM_FINAL_FRAME_LINEAGE_INVALID"];
+  return [];
+}
+
+const capabilityJson = (value: unknown) => value as Prisma.InputJsonValue;
+
+export class CapabilityPlanRepository {
+  constructor(private readonly client: ProjectPrisma = prisma) {}
+
+  async persistRequirement(input: {
+    projectId: string;
+    storyboardVersionId: string;
+    storyboardShotId: string;
+    spec: ShotRequirementSpecV3;
+  }) {
+    const spec = ShotRequirementSpecV3Schema.parse(input.spec);
+    const existing = await this.client.shotRequirementSpecV3Record.findUnique({
+      where: { shotId_version: { shotId: spec.shotId, version: spec.version } },
+    });
+    if (existing) {
+      if (existing.requirementHash !== spec.requirementHash)
+        throw new Error("REQUIREMENT_SPEC_VERSION_CONFLICT");
+      return existing;
+    }
+    return this.client.shotRequirementSpecV3Record.create({
+      data: {
+        id: spec.id,
+        projectId: input.projectId,
+        storyboardVersionId: input.storyboardVersionId,
+        storyboardShotId: input.storyboardShotId,
+        shotId: spec.shotId,
+        version: spec.version,
+        payloadJson: capabilityJson(spec),
+        requirementHash: spec.requirementHash,
+      },
+    });
+  }
+
+  async persistSnapshot(input: { projectId: string; snapshot: PlanningInputSnapshotV3 }) {
+    const snapshot = PlanningInputSnapshotV3Schema.parse(input.snapshot);
+    const existing = await this.client.planningInputSnapshotV3Record.findUnique({
+      where: {
+        requirementSpecId_version: {
+          requirementSpecId: snapshot.requirementSpecRef.id,
+          version: snapshot.version,
+        },
+      },
+    });
+    if (existing) {
+      if (existing.snapshotHash !== snapshot.snapshotHash)
+        throw new Error("PLANNING_SNAPSHOT_VERSION_CONFLICT");
+      return existing;
+    }
+    return this.client.planningInputSnapshotV3Record.create({
+      data: {
+        id: snapshot.id,
+        projectId: input.projectId,
+        requirementSpecId: snapshot.requirementSpecRef.id,
+        version: snapshot.version,
+        implementationKey: snapshot.implementationRef.id,
+        implementationVersion: snapshot.implementationRef.version,
+        compilerKey: snapshot.compilerRef.id,
+        compilerVersion: snapshot.compilerRef.version,
+        payloadJson: capabilityJson(snapshot),
+        sourceDigest: snapshot.sourceDigest,
+        capabilityDigest: snapshot.capabilityDigest,
+        snapshotHash: snapshot.snapshotHash,
+      },
+    });
+  }
+
+  async persistGenerationSpec(input: {
+    projectId: string;
+    storyboardVersionId: string;
+    spec: GenerationSpecV3;
+  }) {
+    const spec = GenerationSpecV3Schema.parse(input.spec);
+    const existing = await this.client.generationSpecV3Record.findUnique({
+      where: { shotId_version: { shotId: spec.shotId, version: spec.version } },
+    });
+    if (existing) {
+      if (existing.outputHash !== spec.outputHash)
+        throw new Error("GENERATION_SPEC_VERSION_CONFLICT");
+      return existing;
+    }
+    return this.client.generationSpecV3Record.create({
+      data: {
+        id: spec.id,
+        projectId: input.projectId,
+        shotId: spec.shotId,
+        storyboardVersionId: input.storyboardVersionId,
+        requirementSpecId: spec.requirementSpecRef.id,
+        planningInputSnapshotId: spec.planningInputSnapshotRef.id,
+        implementationKey: spec.implementationRef.id,
+        implementationVersion: spec.implementationRef.version,
+        runtimeKey: spec.runtimeRef.id,
+        runtimeVersion: spec.runtimeRef.version,
+        providerKey: spec.providerRef.id,
+        providerVersion: spec.providerRef.version,
+        modelKey: spec.modelRef.id,
+        modelVersion: spec.modelRef.version,
+        adapterKey: spec.adapterRef.id,
+        adapterVersion: spec.adapterRef.version,
+        compilerKey: spec.compilerRef.id,
+        compilerVersion: spec.compilerRef.version,
+        version: spec.version,
+        payloadJson: capabilityJson(spec),
+        compiledRequestDigest: spec.compiledRequestDigest,
+        inputHash: spec.inputHash,
+        dependencyHash: spec.dependencyHash,
+        outputHash: spec.outputHash,
+      },
+    });
+  }
+
+  async persistPlan(projectId: string, raw: GenerationPlanV3) {
+    const plan = GenerationPlanV3Schema.parse(raw);
+    const existing = await this.client.generationPlanV3Record.findUnique({
+      where: { projectId_planDigest: { projectId, planDigest: plan.planDigest } },
+    });
+    if (existing) return existing;
+    return this.client.generationPlanV3Record.create({
+      data: {
+        id: plan.id,
+        projectId,
+        version: plan.version,
+        payloadJson: capabilityJson(plan),
+        planDigest: plan.planDigest,
+        state: plan.state,
+      },
+    });
+  }
+
+  async persistAuthorization(input: {
+    projectId: string;
+    generationPlanId: string;
+    authorization: GenerationAuthorizationV3;
+  }) {
+    const authorization = GenerationAuthorizationV3Schema.parse(input.authorization);
+    const scopeHash = canonicalSha256(authorization);
+    const existing = await this.client.generationAuthorizationV3Record.findUnique({
+      where: {
+        generationPlanId_scopeHash: {
+          generationPlanId: input.generationPlanId,
+          scopeHash,
+        },
+      },
+    });
+    if (existing) return existing;
+    return this.client.generationAuthorizationV3Record.create({
+      data: {
+        id: authorization.id,
+        projectId: input.projectId,
+        generationPlanId: input.generationPlanId,
+        planDigest: authorization.planDigest,
+        scopeJson: capabilityJson(authorization),
+        scopeHash,
+        expectedCalls: authorization.expectedCalls,
+        maximumCalls: authorization.maximumCalls,
+        consumedCalls: authorization.consumedCalls,
+        maximumCostMicros: authorization.maximumCostMicros,
+        expiresAt: new Date(authorization.expiresAt),
+        noRetry: authorization.noRetry,
+        noFallback: authorization.noFallback,
+        state: authorization.state,
+      },
+    });
+  }
 }

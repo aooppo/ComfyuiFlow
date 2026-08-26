@@ -1,4 +1,5 @@
 export * from "./comfyui-client.js";
+export * from "./capability-discovery.js";
 export * from "./execution.js";
 export * from "./execution-plan.js";
 export * from "./graph-validator.js";

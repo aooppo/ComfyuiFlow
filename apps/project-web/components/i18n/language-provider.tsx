@@ -13,6 +13,167 @@ import type { ReactNode } from "react";
 
 export type UiLocale = "en" | "zh-CN";
 
+type BilingualCopy = { en: string; "zh-CN": string };
+
+const capabilityRequirementReasonCopy: Record<string, BilingualCopy> = {
+  CHARACTER_APPEARANCE_CONTINUITY_REQUIRED: {
+    en: "The character's appearance must remain continuous in this Shot.",
+    "zh-CN": "这个镜头需要保持角色外观连续。",
+  },
+  EXPLICIT_CHARACTER_IDENTITY_REQUIRED: {
+    en: "This Shot must preserve an explicitly named character identity.",
+    "zh-CN": "这个镜头需要保持明确指定的角色身份。",
+  },
+  OWNER_SELECTED_OPTIONAL_EVIDENCE: {
+    en: "You selected this as optional supporting evidence; planning can continue without it.",
+    "zh-CN": "你已把它选作可选辅助素材；没有它也可以继续规划。",
+  },
+  PERSON_PRESENT_WITHOUT_IDENTITY_LOCK: {
+    en: "A person is present, but this Shot does not require a locked character identity.",
+    "zh-CN": "镜头中有人物，但不需要锁定特定角色身份。",
+  },
+  NO_EXPLICIT_CHARACTER_NEED: {
+    en: "This Shot has no explicit character identity or appearance-continuity need.",
+    "zh-CN": "这个镜头没有明确的角色身份或外观连续性需求。",
+  },
+  PRODUCT_IDENTITY_REQUIRED: {
+    en: "The product's identity and structure must remain stable in this Shot.",
+    "zh-CN": "这个镜头需要保持产品身份和结构稳定。",
+  },
+  ENVIRONMENT_IDENTITY_REQUIRED: {
+    en: "The environment must match a specific scene identity in this Shot.",
+    "zh-CN": "这个镜头需要匹配特定场景环境。",
+  },
+  STYLE_REFERENCE_DESIRED: {
+    en: "A style reference would help, but it is not required.",
+    "zh-CN": "风格参考会有帮助，但不是必需项。",
+  },
+  PREVIOUS_FINAL_FRAME_REQUIRED: {
+    en: "This Shot must continue from the exact final frame of its upstream Shot.",
+    "zh-CN": "这个镜头必须从上游镜头的确切尾帧继续。",
+  },
+  MOTION_REFERENCE_REQUIRED: {
+    en: "This Shot needs a motion reference.",
+    "zh-CN": "这个镜头需要动作参考。",
+  },
+  AUDIO_REFERENCE_REQUIRED: {
+    en: "This Shot needs an audio reference.",
+    "zh-CN": "这个镜头需要音频参考。",
+  },
+  PURPOSE_NOT_NEEDED_FOR_SHOT: {
+    en: "This input type is not needed for the current Shot.",
+    "zh-CN": "当前镜头不需要这类输入。",
+  },
+};
+
+const capabilityPurposeCopy: Record<string, BilingualCopy> = {
+  CHARACTER: { en: "Character", "zh-CN": "角色" },
+  PRODUCT: { en: "Product", "zh-CN": "产品" },
+  ENVIRONMENT: { en: "Environment", "zh-CN": "场景" },
+  STYLE: { en: "Style", "zh-CN": "风格" },
+  CONTINUITY: { en: "Continuity", "zh-CN": "连续性" },
+  MOTION: { en: "Motion", "zh-CN": "动作" },
+  AUDIO: { en: "Audio", "zh-CN": "音频" },
+  OTHER: { en: "Other", "zh-CN": "其他" },
+};
+
+const unresolvedPurposeGuidance: Record<string, BilingualCopy> = {
+  CHARACTER: {
+    en: "Bind a verified character or character-state asset to this Shot, then prepare it again.",
+    "zh-CN": "请为这个镜头绑定已验证的角色或角色状态素材，然后重新准备。",
+  },
+  PRODUCT: {
+    en: "Bind a verified product asset to this Shot, then prepare it again.",
+    "zh-CN": "请为这个镜头绑定已验证的产品素材，然后重新准备。",
+  },
+  ENVIRONMENT: {
+    en: "Bind a verified scene asset to this Shot, then prepare it again.",
+    "zh-CN": "请为这个镜头绑定已验证的场景素材，然后重新准备。",
+  },
+  CONTINUITY: {
+    en: "Finish and preserve the upstream Shot's final frame, then prepare this Shot again.",
+    "zh-CN": "请先完成并保存上游镜头的尾帧，再重新准备这个镜头。",
+  },
+  MOTION: {
+    en: "Bind a verified motion-reference video to this Shot, then prepare it again.",
+    "zh-CN": "请为这个镜头绑定已验证的动作参考视频，然后重新准备。",
+  },
+  AUDIO: {
+    en: "Bind a verified audio reference to this Shot, then prepare it again.",
+    "zh-CN": "请为这个镜头绑定已验证的音频参考，然后重新准备。",
+  },
+};
+
+const capabilityBlockerGuidanceCopy: Record<string, BilingualCopy> = {
+  INPUT_CONTRACT_UNSATISFIED: {
+    en: "The selected implementation cannot compile the current inputs. Resolve the missing required asset and prepare this Shot again.",
+    "zh-CN": "当前输入无法满足所选实现的编译要求。请先补齐必需素材，再重新准备这个镜头。",
+  },
+  INPUT_INVARIANT_FAILED: {
+    en: "This implementation needs at least one valid image or video reference. Add the required visual reference and prepare this Shot again.",
+    "zh-CN": "这个实现至少需要一项有效的图片或视频参考。请添加所需视觉素材后重新准备。",
+  },
+  INPUT_COUNT_MISMATCH: {
+    en: "The number of reference files is outside this implementation's supported range. Adjust the references and prepare again.",
+    "zh-CN": "参考素材数量超出这个实现的支持范围。请调整素材数量后重新准备。",
+  },
+  CAPABILITY_MISMATCH: {
+    en: "The available implementation does not support this Shot's needs. Choose a compatible reviewed implementation.",
+    "zh-CN": "当前可用实现不支持这个镜头的需求。请选择经过审核的兼容实现。",
+  },
+  UPSTREAM_FINAL_FRAME_NOT_MATERIALIZED: {
+    en: "The required upstream final frame is not ready. Finish the upstream Shot first, then prepare this Shot again.",
+    "zh-CN": "所需的上游尾帧尚未准备好。请先完成上游镜头，再重新准备这个镜头。",
+  },
+  UPSTREAM_FINAL_FRAME_LINEAGE_INVALID: {
+    en: "The upstream final-frame record cannot be verified. Recreate the exact final-frame binding before continuing.",
+    "zh-CN": "无法验证上游尾帧记录。请重新建立确切的尾帧绑定后再继续。",
+  },
+  MONETARY_PRICE_MISSING_OR_EXPIRED: {
+    en: "The current price cannot be verified. Refresh the reviewed pricing before asking for generation authorization.",
+    "zh-CN": "当前价格无法验证。请先更新经过审核的价格信息，再申请生成授权。",
+  },
+  TRIAL_SCOPE_REQUIRED: {
+    en: "This implementation is limited to an explicitly reviewed trial. Select a Ready implementation or obtain a separate trial scope.",
+    "zh-CN": "这个实现仅限明确审核过的试运行。请选择可用实现，或另行取得试运行范围。",
+  },
+  IMPLEMENTATION_LIFECYCLE_NOT_SELECTABLE: {
+    en: "This implementation is not selectable for new work. Choose a Ready implementation.",
+    "zh-CN": "这个实现不能用于新任务。请选择状态为可用的实现。",
+  },
+  TEST_ONLY_IMPLEMENTATION: {
+    en: "A test-only implementation cannot be used for production planning. Choose a reviewed production implementation.",
+    "zh-CN": "测试专用实现不能用于正式规划。请选择经过审核的正式实现。",
+  },
+};
+
+export function capabilityPurposeText(purpose: string, locale: UiLocale) {
+  return capabilityPurposeCopy[purpose]?.[locale] ?? (locale === "zh-CN" ? "其他" : "Other");
+}
+
+export function capabilityRequirementReasonText(reasonCode: string, locale: UiLocale) {
+  return (
+    capabilityRequirementReasonCopy[reasonCode]?.[locale] ??
+    (locale === "zh-CN"
+      ? "系统已记录这项输入决定；稳定代码可在技术记录中查看。"
+      : "The input decision is recorded; its stable code is available in the technical record.")
+  );
+}
+
+export function capabilityBlockerGuidanceText(blockerCode: string, locale: UiLocale) {
+  if (blockerCode.startsWith("UNRESOLVED_")) {
+    const purpose = blockerCode.slice("UNRESOLVED_".length);
+    const guidance = unresolvedPurposeGuidance[purpose];
+    if (guidance) return guidance[locale];
+  }
+  return (
+    capabilityBlockerGuidanceCopy[blockerCode]?.[locale] ??
+    (locale === "zh-CN"
+      ? "这个镜头仍有一项准备条件未满足。请查看技术记录，并在补齐相关输入后重新准备。"
+      : "One preparation condition is still unresolved. Check the technical record, resolve the related input, and prepare again.")
+  );
+}
+
 const STORAGE_KEY = "comfyuiflow.ui.locale";
 
 const zh: Record<string, string> = {
@@ -363,6 +524,17 @@ const zh: Record<string, string> = {
   "Draft file binding": "文件绑定草稿",
   "Choose a draft version": "选择草稿版本",
   "Creative planning · zero external calls": "创意规划 · 0 次外部调用",
+  "AI storyboard creation · one disclosed call": "AI 分镜创建 · 一次明确授权调用",
+  "Zero calls · no intermediate approval": "零调用 · 无中间审批",
+  "Prepare only what each Shot needs": "只准备每个镜头真正需要的内容",
+  "Select saved Shots to see required, optional, and omitted inputs independently. Planning automatically saves immutable generation specs but never authorizes or submits video.":
+    "选择已保存的镜头后，系统会分别说明必需、可选和已省略的输入。规划会自动保存不可变生成规格，但不会授权或提交视频。",
+  "Prepare selected Shots": "生成逐镜头准备说明",
+  "This plan made no external calls and granted no generation authority. A missing input on one Shot does not block another Shot.":
+    "这次规划没有外部调用，也没有生成授权。某个镜头缺少输入，不会阻止其他镜头继续准备。",
+  Required: "必需",
+  Optional: "可选",
+  Omitted: "已省略",
   Storyboards: "分镜",
   "Create a three-shot draft, preserve every version, and resolve approved assets later.":
     "创建三镜头草稿、保留每个版本，并在后续解析已批准素材。",
@@ -371,6 +543,14 @@ const zh: Record<string, string> = {
   "Start a storyboard": "创建分镜",
   Title: "标题",
   "Create storyboard": "创建分镜",
+  "Create and call AI": "创建并调用 AI",
+  "Creating and queueing AI…": "正在创建并排队 AI…",
+  "Checking exact AI scope and current price…": "正在检查精确 AI 范围和当前费用…",
+  "Exact AI Director authorization": "精确 AI 导演授权",
+  "One authorization only. Failure or ambiguity consumes the call; no retry or Provider fallback.":
+    "仅授权一次。失败或结果不确定都会消耗调用；不重试，也不切换供应商。",
+  "Add and approve at least one READY image reference before creating this AI Storyboard.":
+    "创建 AI 分镜前，请先添加并接受至少一张 READY 图片参考。",
   "Opening storyboard…": "正在打开分镜…",
   "Three-shot draft · Fake Director · 0 external calls":
     "三镜头草稿 · Fake Director · 0 次外部调用",

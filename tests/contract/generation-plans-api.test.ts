@@ -42,14 +42,15 @@ describe("Generation Plan HTTP contract", () => {
       await expect(access(path)).resolves.toBeUndefined();
   });
 
-  it("keeps existing Shot Plans reachable without creating another plan", async () => {
+  it("keeps existing Shot Plans reachable as read-only history without a legacy creation entry", async () => {
     const editor = await readFile(
       "apps/project-web/components/storyboards/storyboard-editor.tsx",
       "utf8",
     );
     expect(editor).toContain("/api/storyboards/${storyboardId}/generation-plans");
-    expect(editor).toContain("打开最新 Shot Plan");
     expect(editor).toContain("历史 Shot Plan");
-    expect(editor).toContain("新建 Shot Plan");
+    expect(editor).toContain("旧计划、批次、素材清单和审批记录继续保留");
+    expect(editor).not.toContain("打开最新 Shot Plan");
+    expect(editor).not.toContain("新建 Shot Plan");
   });
 });

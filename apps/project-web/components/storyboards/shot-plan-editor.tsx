@@ -301,9 +301,7 @@ export function ShotPlanEditor({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [selectedForGeneration, setSelectedForGeneration] = useState<string[]>([]);
-  const [providerProfile, setProviderProfile] = useState<"fake-video-v1" | "minimax-h3-4s-v1">(
-    "fake-video-v1",
-  );
+  const [providerProfile, setProviderProfile] = useState<"minimax-h3-4s-v1">("minimax-h3-4s-v1");
   const [executionPreview, setExecutionPreview] = useState<ExecutionPreview | null>(null);
   const [batch, setBatch] = useState<BatchView | null>(null);
   const [batchHistory, setBatchHistory] = useState<BatchView[]>([]);
@@ -371,7 +369,8 @@ export function ShotPlanEditor({
         setBatch(loaded.batch);
         setBatchHistory(loaded.batches ?? (loaded.batch ? [loaded.batch] : []));
         if (loaded.batch) {
-          if (loaded.batch.providerProfileId) setProviderProfile(loaded.batch.providerProfileId);
+          if (loaded.batch.providerProfileId === "minimax-h3-4s-v1")
+            setProviderProfile(loaded.batch.providerProfileId);
           if (batchBlocksNewConfirmation(loaded.batch)) {
             setSelectedForGeneration(
               loaded.batch.jobs.map((job) => job.generationBatchTarget.generationSpecId),
@@ -680,15 +679,15 @@ export function ShotPlanEditor({
 
   async function decideArtifact(
     artifactId: string,
-    decision: "PASS" | "FAIL",
+    decision: "PASS" | "FAIL" | "RISK_ACCEPTED",
     notesOverride?: string,
   ) {
     const notes = notesOverride?.trim() ?? reviewNotes[artifactId]?.trim() ?? "";
-    if (decision === "FAIL" && !notes) {
+    if (decision !== "PASS" && !notes) {
       setError(
         isChinese
-          ? "负责人不通过时，请填写失败原因与下一次重试要求。"
-          : "Owner FAIL requires a reason and requirements for the next attempt.",
+          ? "负责人不通过或接受风险时，请填写明确原因。"
+          : "Owner FAIL or RISK_ACCEPTED requires an explicit reason.",
       );
       return;
     }
@@ -798,7 +797,9 @@ export function ShotPlanEditor({
           {isChinese ? "执行配置：" : "Execution profile: "}
           {displayBatch.providerProfileId === "minimax-h3-4s-v1"
             ? "MiniMax H3 · LIVE"
-            : "Fake · $0"}
+            : isChinese
+              ? "历史测试批次（只读）"
+              : "Historical test batch (read-only)"}
         </p>
         {displayBatch.jobs.map((job) => (
           <article key={job.id} className="executionShot">
@@ -1149,9 +1150,6 @@ export function ShotPlanEditor({
                   setExecutionPreview(null);
                 }}
               >
-                <option value="fake-video-v1">
-                  {isChinese ? "Fake · 自动验收 · $0" : "Fake · automated acceptance · $0"}
-                </option>
                 <option value="minimax-h3-4s-v1">
                   {isChinese ? "MiniMax H3 · LIVE 有界执行" : "MiniMax H3 · bounded LIVE execution"}
                 </option>
@@ -1444,7 +1442,11 @@ export function ShotPlanEditor({
             </p>
             <p>
               {isChinese ? "执行配置：" : "Execution profile: "}
-              {batch.providerProfileId === "minimax-h3-4s-v1" ? "MiniMax H3 · LIVE" : "Fake · $0"}
+              {batch.providerProfileId === "minimax-h3-4s-v1"
+                ? "MiniMax H3 · LIVE"
+                : isChinese
+                  ? "历史测试批次（只读）"
+                  : "Historical test batch (read-only)"}
             </p>
             {batch.jobs.map((job) => (
               <article key={job.id} className="executionShot">

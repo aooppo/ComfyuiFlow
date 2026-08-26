@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { canonicalSha256 } from "./canonical-json.js";
 import { LocalContentStorage, type StorageProvider } from "./local-storage.js";
 
 const execute = promisify(execFile);
@@ -20,6 +21,41 @@ export interface ExtractedDependencyFrame {
   sha256: string;
   byteSize: number;
   mimeType: string;
+}
+
+export function createUpstreamFinalFrameBinding(input: {
+  bindingId: string;
+  upstreamPlanRef: { id: string; version: string };
+  artifactRef: { id: string; version: string };
+  frameIndex: number;
+  sha256: string;
+  ready: boolean;
+}) {
+  const lineage = {
+    upstreamPlanRef: input.upstreamPlanRef,
+    artifactRef: input.artifactRef,
+    frameIndex: input.frameIndex,
+    sha256: input.sha256,
+  };
+  const lineageHash = canonicalSha256(lineage);
+  return {
+    ready: input.ready,
+    blockerCode: input.ready ? null : ("UPSTREAM_FINAL_FRAME_NOT_MATERIALIZED" as const),
+    lineage,
+    lineageHash,
+    binding: input.ready
+      ? {
+          id: input.bindingId,
+          purpose: "CONTINUITY" as const,
+          sourceKind: "UPSTREAM_FINAL_FRAME" as const,
+          sourceRef: { id: input.artifactRef.id, version: lineageHash },
+          sha256: input.sha256,
+          modality: "IMAGE" as const,
+          roleLabel: "first-frame",
+          necessity: "REQUIRED" as const,
+        }
+      : null,
+  };
 }
 
 export class DependencyFrameExtractor {

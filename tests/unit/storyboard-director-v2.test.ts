@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { FakeStoryboardProvider, FAKE_STORYBOARD_V2_MODEL_ID } from "@comfyuiflow/ai-providers";
+import { StoryboardDirectorService } from "@comfyuiflow/project-core";
 import {
   StoryboardGenerationRequestV2Schema,
   validateStoryboardProposalV2,
@@ -64,5 +65,37 @@ describe("storyboard director v2", () => {
       StoryboardGenerationRequestV2Schema.parse({ ...request(), projectId: crypto.randomUUID() }),
     ).toThrow();
     expect(JSON.stringify(request())).not.toMatch(/storedPath|database|projectId|storyboardId/);
+  });
+  it("returns a non-confirmable zero-call preview when no reference is eligible", async () => {
+    const client = {
+      storyboard: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "storyboard-1",
+          projectId: "project-1",
+          status: "ACTIVE",
+          creativeBrief: "展示产品",
+          headVersion: { id: "version-1", versionNumber: 1, contentHash: hash },
+        }),
+      },
+      assetVersionFile: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+    const service = new StoryboardDirectorService(
+      client as any,
+      undefined,
+      {},
+      {
+        allowTestFixtures: true,
+      },
+    );
+
+    await expect(
+      service.preview("storyboard-1", { profileId: "fake-storyboard-v2", maxShotCount: 2 }),
+    ).resolves.toMatchObject({
+      externalCalls: 0,
+      references: [],
+      recommended: [],
+      rejected: [],
+      canConfirm: false,
+    });
   });
 });

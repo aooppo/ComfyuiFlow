@@ -1,4 +1,8 @@
-import type { GenerationImplementation } from "@comfyuiflow/contracts";
+import {
+  GenerationSpecV3Schema,
+  type GenerationImplementation,
+  type GenerationSpecV3,
+} from "@comfyuiflow/contracts";
 import type { GenerationAdapterRegistry } from "../generation-adapter.js";
 import type { PatternResolution } from "./pattern-resolver.js";
 
@@ -40,4 +44,23 @@ export function validatePlanningCandidate(input: {
           : "READY",
     blockerCodes,
   };
+}
+
+/** Validates the immutable Shot Planner handoff; approval rows are intentionally not inputs. */
+export function validateGenerationSpecV3Handoff(raw: unknown): GenerationSpecV3 {
+  const spec = GenerationSpecV3Schema.parse(raw);
+  const references = [
+    spec.storyboardRevisionRef,
+    spec.requirementSpecRef,
+    spec.planningInputSnapshotRef,
+    spec.implementationRef,
+    spec.runtimeRef,
+    spec.providerRef,
+    spec.modelRef,
+    spec.adapterRef,
+    spec.compilerRef,
+  ];
+  if (references.some((reference) => !reference.id || !reference.version))
+    throw new Error("GENERATION_SPEC_LINEAGE_INCOMPLETE");
+  return spec;
 }

@@ -1,0 +1,308 @@
+{
+  "schemaVersion": 2,
+  "registryVersion": "2026-08-26.1",
+  "runtimes": [
+    {
+      "id": "runtime.comfyui-local",
+      "version": "1.0.0",
+      "name": "Local ComfyUI runtime",
+      "kind": "COMFYUI_MCP",
+      "connectionRef": "runtime.comfyui-local",
+      "credentialRef": null,
+      "enabled": true
+    }
+  ],
+  "providers": [
+    {
+      "id": "provider.comfyui-partner",
+      "version": "1.0.0",
+      "name": "ComfyUI Partner",
+      "kind": "COMFYUI_PARTNER",
+      "authorityRef": "billing.comfyui-partner",
+      "credentialRef": "credential.comfyui-partner",
+      "regions": [],
+      "enabled": true
+    },
+    {
+      "id": "provider.local-compute",
+      "version": "1.0.0",
+      "name": "Local compute",
+      "kind": "LOCAL_COMPUTE",
+      "authorityRef": "owner.local-device",
+      "credentialRef": null,
+      "regions": [],
+      "enabled": true
+    },
+    {
+      "id": "provider.test-fixture",
+      "version": "1.0.0",
+      "name": "Test fixture only",
+      "kind": "LOCAL_COMPUTE",
+      "authorityRef": "test.fixture",
+      "credentialRef": null,
+      "regions": [],
+      "enabled": true
+    }
+  ],
+  "models": [
+    {
+      "id": "model.hailuo03-partner",
+      "version": "1.0.0",
+      "providerRef": { "id": "provider.comfyui-partner", "version": "1.0.0" },
+      "family": "minimax-hailuo03",
+      "displayName": "MiniMax Hailuo 03",
+      "modality": "VIDEO",
+      "capabilityCodes": [
+        "TEXT_TO_VIDEO",
+        "ORDERED_REFERENCE_TO_VIDEO",
+        "FIRST_FRAME_TO_VIDEO",
+        "FIRST_LAST_FRAME_TO_VIDEO"
+      ]
+    },
+    {
+      "id": "model.local-video",
+      "version": "1.0.0",
+      "providerRef": { "id": "provider.local-compute", "version": "1.0.0" },
+      "family": "local-video",
+      "displayName": "Reviewed local video model",
+      "modality": "VIDEO",
+      "capabilityCodes": ["TEXT_TO_VIDEO"]
+    },
+    {
+      "id": "model.test-fixture",
+      "version": "1.0.0",
+      "providerRef": { "id": "provider.test-fixture", "version": "1.0.0" },
+      "family": "test-fixture",
+      "displayName": "Zero-call fixture model",
+      "modality": "VIDEO",
+      "capabilityCodes": ["TEXT_TO_VIDEO"]
+    }
+  ],
+  "adapters": [
+    {
+      "id": "adapter.comfyui-mcp",
+      "version": "2.0.0",
+      "protocol": "comfyui-mcp-v2",
+      "factoryKey": "comfyui-mcp-v2",
+      "operations": ["READINESS", "SUBMIT", "STATUS", "CANCEL", "RECONCILE", "ARTIFACTS"]
+    }
+  ],
+  "compilers": [
+    {
+      "id": "compiler.hailuo03-text",
+      "version": "1.0.0",
+      "compilerKey": "hailuo03-text-v1",
+      "inputContract": {
+        "modalities": {
+          "text": { "min": 1, "max": 1 },
+          "image": { "min": 0, "max": 0 },
+          "video": { "min": 0, "max": 0 },
+          "audio": { "min": 0, "max": 0 }
+        },
+        "requiredNamedInputs": [],
+        "dynamicGroups": [],
+        "crossFieldInvariants": [],
+        "ordering": "MODALITY_CONNECTION_ORDER",
+        "promptLabels": "PROVIDER_NATIVE_ORDINALS",
+        "outputMediaType": "video/mp4"
+      },
+      "outputMappingKey": "comfyui-video-output-v1",
+      "sourceDigest": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    {
+      "id": "compiler.hailuo03-reference",
+      "version": "1.0.0",
+      "compilerKey": "hailuo03-reference-v1",
+      "inputContract": {
+        "modalities": {
+          "text": { "min": 1, "max": 1 },
+          "image": { "min": 0, "max": 9 },
+          "video": { "min": 0, "max": 3 },
+          "audio": { "min": 0, "max": 3 }
+        },
+        "requiredNamedInputs": [],
+        "dynamicGroups": [
+          { "modality": "IMAGE", "prefix": "reference-image", "min": 0, "max": 9 },
+          { "modality": "VIDEO", "prefix": "reference-video", "min": 0, "max": 3 },
+          { "modality": "AUDIO", "prefix": "reference-audio", "min": 0, "max": 3 }
+        ],
+        "crossFieldInvariants": ["IMAGE_OR_VIDEO_REQUIRED", "AUDIO_REQUIRES_IMAGE_OR_VIDEO"],
+        "ordering": "MODALITY_CONNECTION_ORDER",
+        "promptLabels": "PROVIDER_NATIVE_ORDINALS",
+        "outputMediaType": "video/mp4"
+      },
+      "outputMappingKey": "comfyui-video-output-v1",
+      "sourceDigest": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    {
+      "id": "compiler.hailuo03-first-last",
+      "version": "1.0.0",
+      "compilerKey": "hailuo03-first-last-v1",
+      "inputContract": {
+        "modalities": {
+          "text": { "min": 1, "max": 1 },
+          "image": { "min": 1, "max": 2 },
+          "video": { "min": 0, "max": 0 },
+          "audio": { "min": 0, "max": 0 }
+        },
+        "requiredNamedInputs": ["first-frame"],
+        "dynamicGroups": [],
+        "crossFieldInvariants": ["IMAGE_OR_VIDEO_REQUIRED"],
+        "ordering": "MODALITY_CONNECTION_ORDER",
+        "promptLabels": "PROVIDER_NATIVE_ORDINALS",
+        "outputMediaType": "video/mp4"
+      },
+      "outputMappingKey": "comfyui-video-output-v1",
+      "sourceDigest": "3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    {
+      "id": "compiler.legacy-h3-fixed-five",
+      "version": "1.0.0",
+      "compilerKey": "legacy-h3-fixed-five-v1",
+      "inputContract": {
+        "modalities": {
+          "text": { "min": 1, "max": 1 },
+          "image": { "min": 5, "max": 5 },
+          "video": { "min": 0, "max": 0 },
+          "audio": { "min": 0, "max": 0 }
+        },
+        "requiredNamedInputs": [
+          "scene",
+          "product",
+          "character",
+          "character-face",
+          "character-rear"
+        ],
+        "dynamicGroups": [],
+        "crossFieldInvariants": ["IMAGE_OR_VIDEO_REQUIRED"],
+        "ordering": "MODALITY_CONNECTION_ORDER",
+        "promptLabels": "PROVIDER_NATIVE_ORDINALS",
+        "outputMediaType": "video/mp4"
+      },
+      "outputMappingKey": "comfyui-video-output-v1",
+      "sourceDigest": "4444444444444444444444444444444444444444444444444444444444444444"
+    }
+  ],
+  "implementations": [
+    {
+      "id": "implementation.hailuo03-reference-partner",
+      "version": "1.0.0",
+      "runtimeRef": { "id": "runtime.comfyui-local", "version": "1.0.0" },
+      "providerRef": { "id": "provider.comfyui-partner", "version": "1.0.0" },
+      "modelRef": { "id": "model.hailuo03-partner", "version": "1.0.0" },
+      "adapterRef": { "id": "adapter.comfyui-mcp", "version": "2.0.0" },
+      "compilerRef": { "id": "compiler.hailuo03-reference", "version": "1.0.0" },
+      "capabilityCodes": ["ORDERED_REFERENCE_TO_VIDEO", "AUDIO_REFERENCE"],
+      "costPolicy": {
+        "kind": "MONETARY",
+        "currency": "USD",
+        "pricingVersion": "2026-08-26",
+        "estimatedCostMicros": 280000,
+        "maximumCostMicros": 280000,
+        "effectiveAt": "2026-08-26T00:00:00.000Z",
+        "expiresAt": "2026-09-01T00:00:00.000Z"
+      },
+      "lifecycle": "READY",
+      "evidencePolicy": "EXACT_VERSION_REAL_RESULT",
+      "testOnly": false
+    },
+    {
+      "id": "implementation.hailuo03-text-partner",
+      "version": "1.0.0",
+      "runtimeRef": { "id": "runtime.comfyui-local", "version": "1.0.0" },
+      "providerRef": { "id": "provider.comfyui-partner", "version": "1.0.0" },
+      "modelRef": { "id": "model.hailuo03-partner", "version": "1.0.0" },
+      "adapterRef": { "id": "adapter.comfyui-mcp", "version": "2.0.0" },
+      "compilerRef": { "id": "compiler.hailuo03-text", "version": "1.0.0" },
+      "capabilityCodes": ["TEXT_TO_VIDEO"],
+      "costPolicy": {
+        "kind": "MONETARY",
+        "currency": "USD",
+        "pricingVersion": "2026-08-26",
+        "estimatedCostMicros": 280000,
+        "maximumCostMicros": 280000,
+        "effectiveAt": "2026-08-26T00:00:00.000Z",
+        "expiresAt": "2026-09-01T00:00:00.000Z"
+      },
+      "lifecycle": "TRIAL",
+      "evidencePolicy": "EXACT_VERSION_REAL_RESULT",
+      "testOnly": false
+    },
+    {
+      "id": "implementation.hailuo03-first-last-partner",
+      "version": "1.0.0",
+      "runtimeRef": { "id": "runtime.comfyui-local", "version": "1.0.0" },
+      "providerRef": { "id": "provider.comfyui-partner", "version": "1.0.0" },
+      "modelRef": { "id": "model.hailuo03-partner", "version": "1.0.0" },
+      "adapterRef": { "id": "adapter.comfyui-mcp", "version": "2.0.0" },
+      "compilerRef": { "id": "compiler.hailuo03-first-last", "version": "1.0.0" },
+      "capabilityCodes": [
+        "FIRST_FRAME_TO_VIDEO",
+        "FIRST_LAST_FRAME_TO_VIDEO",
+        "PREVIOUS_FINAL_FRAME_TO_VIDEO"
+      ],
+      "costPolicy": {
+        "kind": "MONETARY",
+        "currency": "USD",
+        "pricingVersion": "2026-08-26",
+        "estimatedCostMicros": 280000,
+        "maximumCostMicros": 280000,
+        "effectiveAt": "2026-08-26T00:00:00.000Z",
+        "expiresAt": "2026-09-01T00:00:00.000Z"
+      },
+      "lifecycle": "TRIAL",
+      "evidencePolicy": "EXACT_VERSION_REAL_RESULT",
+      "testOnly": false
+    },
+    {
+      "id": "implementation.local-text",
+      "version": "1.0.0",
+      "runtimeRef": { "id": "runtime.comfyui-local", "version": "1.0.0" },
+      "providerRef": { "id": "provider.local-compute", "version": "1.0.0" },
+      "modelRef": { "id": "model.local-video", "version": "1.0.0" },
+      "adapterRef": { "id": "adapter.comfyui-mcp", "version": "2.0.0" },
+      "compilerRef": { "id": "compiler.hailuo03-text", "version": "1.0.0" },
+      "capabilityCodes": ["TEXT_TO_VIDEO"],
+      "costPolicy": { "kind": "LOCAL_COMPUTE", "resourceClass": "local-gpu" },
+      "lifecycle": "TRIAL",
+      "evidencePolicy": "EXACT_VERSION_REAL_RESULT",
+      "testOnly": false
+    },
+    {
+      "id": "implementation.legacy-h3-fixed-five",
+      "version": "1.0.0",
+      "runtimeRef": { "id": "runtime.comfyui-local", "version": "1.0.0" },
+      "providerRef": { "id": "provider.comfyui-partner", "version": "1.0.0" },
+      "modelRef": { "id": "model.hailuo03-partner", "version": "1.0.0" },
+      "adapterRef": { "id": "adapter.comfyui-mcp", "version": "2.0.0" },
+      "compilerRef": { "id": "compiler.legacy-h3-fixed-five", "version": "1.0.0" },
+      "capabilityCodes": ["ORDERED_REFERENCE_TO_VIDEO"],
+      "costPolicy": {
+        "kind": "MONETARY",
+        "currency": "USD",
+        "pricingVersion": "2026-08-26",
+        "estimatedCostMicros": 280000,
+        "maximumCostMicros": 280000,
+        "effectiveAt": "2026-08-26T00:00:00.000Z",
+        "expiresAt": "2026-09-01T00:00:00.000Z"
+      },
+      "lifecycle": "DEPRECATED",
+      "evidencePolicy": "EXACT_VERSION_REAL_RESULT",
+      "testOnly": false
+    },
+    {
+      "id": "implementation.test-zero-call",
+      "version": "1.0.0",
+      "runtimeRef": { "id": "runtime.comfyui-local", "version": "1.0.0" },
+      "providerRef": { "id": "provider.test-fixture", "version": "1.0.0" },
+      "modelRef": { "id": "model.test-fixture", "version": "1.0.0" },
+      "adapterRef": { "id": "adapter.comfyui-mcp", "version": "2.0.0" },
+      "compilerRef": { "id": "compiler.hailuo03-text", "version": "1.0.0" },
+      "capabilityCodes": ["TEXT_TO_VIDEO"],
+      "costPolicy": { "kind": "TEST_ZERO_CALL" },
+      "lifecycle": "READY",
+      "evidencePolicy": "FIXTURE_ONLY",
+      "testOnly": true
+    }
+  ]
+}

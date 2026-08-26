@@ -6,10 +6,20 @@ type Context = { params: Promise<{ versionId: string }> };
 
 export async function POST(request: Request, context: Context) {
   try {
-    return Response.json(
-      await service.preview((await context.params).versionId, await jsonBody(request)),
-      { headers: { "Cache-Control": "no-store" } },
-    );
+    const body = await jsonBody(request);
+    if (
+      typeof body === "object" &&
+      body !== null &&
+      "schemaVersion" in body &&
+      body.schemaVersion === "capability-generation-execution-preview-request-v3"
+    ) {
+      return Response.json(await service.previewV3((await context.params).versionId, body as any), {
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+    return Response.json(await service.preview((await context.params).versionId, body as any), {
+      headers: { "Cache-Control": "no-store" },
+    });
   } catch (error) {
     return apiError(error);
   }

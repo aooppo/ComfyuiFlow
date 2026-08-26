@@ -1,7 +1,6 @@
 import { fileURLToPath } from "node:url";
 import {
   FakeAssetUnderstandingProvider,
-  FakeVideoQaProvider,
   CodexManagerLocalVideoQaProvider,
   OpenAiAssetUnderstandingProvider,
   type AiModelProvider,
@@ -15,13 +14,13 @@ import {
   AnalysisWorker,
   ComfyUiMcpGenerationProvider,
   ComfyUiExecutionPlanAdapter,
-  FakeGenerationProvider,
   GenerationAdapterRegistry,
   GenerationWorker,
   LegacyGenerationProviderAdapter,
   StoryboardDirectorWorker,
   prisma,
   type ComfyUiMcpToolClient,
+  type GenerationProvider,
 } from "@comfyuiflow/project-core";
 import { loadProjectEnvFile } from "@comfyuiflow/spike-core";
 import { runWorkerLoop, workerPollInterval } from "./worker-loop.js";
@@ -58,14 +57,39 @@ function providerFromEnvironment(): AiModelProvider {
   throw new Error("ASSET_UNDERSTANDING_PROVIDER is not registered");
 }
 
+class DisabledGenerationProvider implements GenerationProvider {
+  readonly profileId = "minimax-h3-4s-v1" as const;
+
+  async preflight() {
+    return { ready: false, blockers: ["LIVE_DISABLED"] };
+  }
+
+  async submit(): Promise<never> {
+    throw new Error("LIVE_DISABLED");
+  }
+
+  async status() {
+    return "UNKNOWN" as const;
+  }
+
+  async retainArtifacts() {
+    return [];
+  }
+
+  async cancel() {
+    return { cancelled: false, remoteTerminationConfirmed: false };
+  }
+}
+
 async function main() {
   const analysisWorker = new AnalysisWorker(providerFromEnvironment());
-  const generationProfile = process.env.GENERATION_PROVIDER_PROFILE ?? "fake-video-v1";
+  const generationProfile = process.env.GENERATION_PROVIDER_PROFILE ?? "disabled";
   let closeMcp: (() => Promise<void>) | undefined;
   let executionPlanMcp: ComfyUiMcpToolClient | undefined;
   const generationProvider =
-    generationProfile === "fake-video-v1"
-      ? new FakeGenerationProvider()
+    generationProfile !== "minimax-h3-4s-v1" ||
+    process.env.PROJECT_GENERATION_LIVE_ENABLED !== "true"
+      ? new DisabledGenerationProvider()
       : await (async () => {
           if (
             generationProfile !== "minimax-h3-4s-v1" ||
@@ -91,10 +115,7 @@ async function main() {
           executionPlanMcp = mcp;
           return new ComfyUiMcpGenerationProvider(mcp);
         })();
-  const qaProvider =
-    generationProfile === "fake-video-v1"
-      ? new FakeVideoQaProvider()
-      : new CodexManagerLocalVideoQaProvider();
+  const qaProvider = new CodexManagerLocalVideoQaProvider();
   const adapters = new GenerationAdapterRegistry([
     new LegacyGenerationProviderAdapter(generationProvider),
     ...(generationProfile === "minimax-h3-4s-v1"
@@ -115,7 +136,10 @@ async function main() {
     undefined,
     adapters,
   );
-  const directorWorker = new StoryboardDirectorWorker();
+  const directorWorker =
+    process.env.PROJECT_STORYBOARD_DIRECTOR_LIVE_ENABLED === "true"
+      ? new StoryboardDirectorWorker()
+      : null;
   let stopping = false;
   const stop = () => {
     stopping = true;
@@ -129,7 +153,10 @@ async function main() {
       shouldStop: () => stopping,
       runAnalysis: () => analysisWorker.runOnce(`project-worker:${process.pid}`),
       runGeneration: () => generationWorker.runOnce(`generation-worker:${process.pid}`),
-      runDirector: () => directorWorker.processNext(`storyboard-director-worker:${process.pid}`),
+      runDirector: () =>
+        directorWorker
+          ? directorWorker.processNext(`storyboard-director-worker:${process.pid}`)
+          : Promise.resolve(null),
       onResult: (operation, result) =>
         process.stdout.write(
           `${JSON.stringify({ operation, result: result.status ?? "completed" })}\n`,

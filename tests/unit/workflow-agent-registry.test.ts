@@ -59,6 +59,9 @@ describe("workflow agent generation registry", () => {
       createHash("sha256")
         .update(await readFile(resolve(path)))
         .digest("hex");
+    await expect(sha("generation/registry.json")).resolves.toBe(
+      fixture.generationRegistrySha256,
+    );
     await expect(sha("workflows/registry.json")).resolves.toBe(fixture.workflowRegistrySha256);
     await expect(sha("workflows/minimax-h3-project-shot-4s-v1.api.json")).resolves.toBe(
       fixture.projectShotWorkflowSha256,

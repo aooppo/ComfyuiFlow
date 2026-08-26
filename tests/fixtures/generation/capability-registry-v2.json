@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 2,
+  "registryVersion": "fixture.1",
+  "runtimes": [
+    {
+      "id": "runtime.fixture",
+      "version": "1.0.0",
+      "name": "Fixture runtime",
+      "kind": "COMFYUI_MCP",
+      "connectionRef": "runtime.fixture",
+      "credentialRef": null,
+      "enabled": true
+    }
+  ],
+  "providers": [
+    {
+      "id": "provider.fixture",
+      "version": "1.0.0",
+      "name": "Fixture provider",
+      "kind": "LOCAL_COMPUTE",
+      "authorityRef": "test.fixture",
+      "credentialRef": null,
+      "regions": [],
+      "enabled": true
+    }
+  ],
+  "models": [
+    {
+      "id": "model.fixture",
+      "version": "1.0.0",
+      "providerRef": { "id": "provider.fixture", "version": "1.0.0" },
+      "family": "fixture",
+      "displayName": "Fixture model",
+      "modality": "VIDEO",
+      "capabilityCodes": ["TEXT_TO_VIDEO"]
+    }
+  ],
+  "adapters": [
+    {
+      "id": "adapter.fixture",
+      "version": "2.0.0",
+      "protocol": "comfyui-mcp-v2",
+      "factoryKey": "comfyui-mcp-v2",
+      "operations": ["READINESS", "SUBMIT", "STATUS", "CANCEL", "RECONCILE", "ARTIFACTS"]
+    }
+  ],
+  "compilers": [
+    {
+      "id": "compiler.fixture",
+      "version": "1.0.0",
+      "compilerKey": "fixture-text-v1",
+      "inputContract": {
+        "modalities": {
+          "text": { "min": 1, "max": 1 },
+          "image": { "min": 0, "max": 0 },
+          "video": { "min": 0, "max": 0 },
+          "audio": { "min": 0, "max": 0 }
+        },
+        "requiredNamedInputs": [],
+        "dynamicGroups": [],
+        "crossFieldInvariants": [],
+        "ordering": "MODALITY_CONNECTION_ORDER",
+        "promptLabels": "PROVIDER_NATIVE_ORDINALS",
+        "outputMediaType": "video/mp4"
+      },
+      "outputMappingKey": "fixture-output-v1",
+      "sourceDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ],
+  "implementations": [
+    {
+      "id": "implementation.fixture",
+      "version": "1.0.0",
+      "runtimeRef": { "id": "runtime.fixture", "version": "1.0.0" },
+      "providerRef": { "id": "provider.fixture", "version": "1.0.0" },
+      "modelRef": { "id": "model.fixture", "version": "1.0.0" },
+      "adapterRef": { "id": "adapter.fixture", "version": "2.0.0" },
+      "compilerRef": { "id": "compiler.fixture", "version": "1.0.0" },
+      "capabilityCodes": ["TEXT_TO_VIDEO"],
+      "costPolicy": { "kind": "TEST_ZERO_CALL" },
+      "lifecycle": "READY",
+      "evidencePolicy": "FIXTURE_ONLY",
+      "testOnly": true
+    }
+  ]
+}

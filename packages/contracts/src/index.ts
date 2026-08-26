@@ -664,6 +664,7 @@ export type StoryboardProposalShotV2 = z.infer<typeof StoryboardProposalShotV2Sc
 export type StoryboardProposalV2 = z.infer<typeof StoryboardProposalV2Schema>;
 
 export * from "./workflow-agent.js";
+export * from "./capability-workflow.js";
 
 export const GenerationSpecReferenceV1Schema = z
   .object({
@@ -885,13 +886,13 @@ export const GenerationJobStatusV1Schema = z.enum([
 
 export const HumanQaDecisionV1Schema = z
   .object({
-    decision: z.enum(["PASS", "FAIL"]),
+    decision: z.enum(["PASS", "FAIL", "RISK_ACCEPTED"]),
     notes: z.string().trim().max(8_000).optional(),
   })
   .strict()
-  .refine((value) => value.decision !== "FAIL" || Boolean(value.notes?.trim()), {
+  .refine((value) => value.decision === "PASS" || Boolean(value.notes?.trim()), {
     path: ["notes"],
-    message: "Owner FAIL requires a reason and retry requirements",
+    message: "Owner FAIL or RISK_ACCEPTED requires an explicit reason",
   });
 
 export const AiQaCriterionV1Schema = z

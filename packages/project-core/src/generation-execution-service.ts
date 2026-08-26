@@ -1,25 +1,37 @@
 import { randomUUID } from "node:crypto";
 import type {
+  GenerationAuthorizationV3,
   GenerationExecutionPreviewV1,
   GenerationExecutionSlotV1,
   HumanQaDecisionV1,
 } from "@comfyuiflow/contracts";
-import { GenerationExecutionPreviewV1Schema } from "@comfyuiflow/contracts";
+import {
+  GenerationAuthorizationV3Schema,
+  GenerationExecutionPreviewV1Schema,
+  GenerationExecutionPreviewV3Schema,
+  GenerationPlanV3Schema,
+  GenerationSpecV3Schema,
+  PlanningInputSnapshotV3Schema,
+} from "@comfyuiflow/contracts";
 import { canonicalSha256 } from "./canonical-json.js";
 import { ProjectAssetError } from "./contracts.js";
 import type { Prisma } from "./generated/client/index.js";
 import {
   createGenerationBatchInputSchema,
   generationExecutionPreviewInputSchema,
+  generationExecutionPreviewV3InputSchema,
   humanQaDecisionInputSchema,
   type CreateGenerationBatchInput,
   type GenerationExecutionPreviewInput,
+  type GenerationExecutionPreviewV3Input,
 } from "./generation-execution-contracts.js";
 import { generationProviderRegistry } from "./generation-provider.js";
 import { GenerationPlanService } from "./generation-plan-service.js";
 import { compileH3GenerationPrompt } from "./h3-generation-prompt.js";
 import { LocalContentStorage, type StorageProvider } from "./local-storage.js";
 import { prisma, type ProjectPrisma } from "./prisma.js";
+import { CapabilityRegistryLoader } from "./workflow-agent/capability-registry.js";
+import { CapabilityCompilerRegistry } from "./workflow-agent/compiler-registry.js";
 
 type PreviewShot = GenerationExecutionPreviewV1["shots"][number];
 
@@ -40,14 +52,249 @@ export class GenerationExecutionService {
     private readonly client: ProjectPrisma = prisma,
     private readonly storage: StorageProvider = new LocalContentStorage(),
     private readonly environment: NodeJS.ProcessEnv = process.env,
+    private readonly options: { allowTestFixtures?: boolean } = {},
   ) {}
 
   async preview(versionId: string, rawInput: GenerationExecutionPreviewInput) {
     return (await this.buildPreview(versionId, rawInput)).public;
   }
 
+  async previewV3(planId: string, rawInput: GenerationExecutionPreviewV3Input) {
+    return this.buildPreviewV3(planId, rawInput);
+  }
+
+  private async buildPreviewV3(planId: string, rawInput: GenerationExecutionPreviewV3Input) {
+    const input = generationExecutionPreviewV3InputSchema.parse(rawInput);
+    const record = await this.client.generationPlanV3Record.findUnique({ where: { id: planId } });
+    if (!record)
+      throw this.error("GENERATION_TARGET_INVALID", "Generation Plan V3 was not found", 404);
+    const plan = GenerationPlanV3Schema.parse(record.payloadJson);
+    if (plan.id !== record.id || plan.planDigest !== record.planDigest)
+      throw this.error("GENERATION_PLAN_STALE", "Generation Plan V3 identity changed", 409);
+    const selected = new Set(input.shotIds);
+    if (
+      selected.size !== input.shotIds.length ||
+      [...selected].some((id) => !plan.shotIds.includes(id))
+    )
+      throw this.error(
+        "GENERATION_TARGET_INVALID",
+        "Every selected Shot must belong to the exact Generation Plan V3",
+        422,
+      );
+
+    const refsByShot = new Map(
+      plan.shotIds.map((shotId, index) => [shotId, plan.generationSpecRefs[index]!]),
+    );
+    const selectedRefs = input.shotIds.map((shotId) => refsByShot.get(shotId)!);
+    const specRecords = await this.client.generationSpecV3Record.findMany({
+      where: { id: { in: selectedRefs.map((reference) => reference.id) } },
+    });
+    if (specRecords.length !== selectedRefs.length)
+      throw this.error("GENERATION_PLAN_STALE", "A frozen Generation Spec V3 is missing", 409);
+    const specById = new Map(specRecords.map((item) => [item.id, item]));
+    const snapshotRecords = await this.client.planningInputSnapshotV3Record.findMany({
+      where: {
+        id: { in: specRecords.map((item) => item.planningInputSnapshotId) },
+      },
+    });
+    const snapshotById = new Map(snapshotRecords.map((item) => [item.id, item]));
+    const storyboardShots = await this.client.storyboardShot.findMany({
+      where: { id: { in: input.shotIds } },
+      select: { id: true, ordinal: true, storyboardVersionId: true },
+    });
+    const shotById = new Map(storyboardShots.map((item) => [item.id, item]));
+    const storyboardVersionIds = [...new Set(specRecords.map((item) => item.storyboardVersionId))];
+    if (storyboardVersionIds.length !== 1)
+      throw this.error("GENERATION_PLAN_STALE", "Selected Shots span Storyboard versions", 409);
+    const storyboardVersionId = storyboardVersionIds[0];
+    if (!storyboardVersionId)
+      throw this.error("GENERATION_PLAN_STALE", "Storyboard version is missing", 409);
+    const storyboardVersion = await this.client.storyboardVersion.findUnique({
+      where: { id: storyboardVersionId },
+      include: { storyboard: true, project: true },
+    });
+    if (
+      !storyboardVersion ||
+      storyboardVersion.projectId !== record.projectId ||
+      storyboardVersion.project.status !== "ACTIVE" ||
+      storyboardVersion.storyboard.status !== "ACTIVE" ||
+      storyboardVersion.storyboard.headVersionId !== storyboardVersion.id
+    )
+      throw this.error(
+        "GENERATION_PLAN_STALE",
+        "The Storyboard head or active scope changed after planning",
+        409,
+      );
+
+    const registry = await new CapabilityRegistryLoader().load();
+    const compilerRegistry = new CapabilityCompilerRegistry();
+    const targets = input.shotIds
+      .map((shotId) => {
+        const reference = refsByShot.get(shotId)!;
+        const stored = specById.get(reference.id);
+        const shot = shotById.get(shotId);
+        if (!stored || !shot || shot.storyboardVersionId !== storyboardVersion.id)
+          throw this.error("GENERATION_PLAN_STALE", "A selected Shot changed after planning", 409);
+        const spec = GenerationSpecV3Schema.parse(stored.payloadJson);
+        const snapshotRecord = snapshotById.get(stored.planningInputSnapshotId);
+        if (
+          spec.version !== reference.version ||
+          !snapshotRecord ||
+          spec.storyboardRevisionRef.id !== storyboardVersion.id ||
+          spec.storyboardRevisionRef.version !== storyboardVersion.contentHash
+        )
+          throw this.error("GENERATION_PLAN_STALE", "Generation Spec V3 lineage changed", 409);
+        const snapshot = PlanningInputSnapshotV3Schema.parse(snapshotRecord.payloadJson);
+        const implementation = registry.resolveExact(spec.implementationRef);
+        const compiler = registry.compilersByRef.get(
+          `${spec.compilerRef.id}@${spec.compilerRef.version}`,
+        );
+        if (!compiler)
+          throw this.error("GENERATION_PLAN_STALE", "Compiler version is unavailable", 409);
+        const blockers = [...snapshot.unresolvedRequirementCodes];
+        if (!(["READY", "TRIAL"] as const).includes(implementation.lifecycle as any))
+          blockers.push("IMPLEMENTATION_NOT_SELECTABLE");
+        if (implementation.testOnly || implementation.costPolicy.kind === "TEST_ZERO_CALL")
+          blockers.push("TEST_ONLY_IMPLEMENTATION");
+        const exactComposition =
+          `${implementation.runtimeRef.id}@${implementation.runtimeRef.version}` ===
+            `${spec.runtimeRef.id}@${spec.runtimeRef.version}` &&
+          `${implementation.providerRef.id}@${implementation.providerRef.version}` ===
+            `${spec.providerRef.id}@${spec.providerRef.version}` &&
+          `${implementation.modelRef.id}@${implementation.modelRef.version}` ===
+            `${spec.modelRef.id}@${spec.modelRef.version}` &&
+          `${implementation.adapterRef.id}@${implementation.adapterRef.version}` ===
+            `${spec.adapterRef.id}@${spec.adapterRef.version}` &&
+          `${implementation.compilerRef.id}@${implementation.compilerRef.version}` ===
+            `${spec.compilerRef.id}@${spec.compilerRef.version}`;
+        if (!exactComposition) blockers.push("IMPLEMENTATION_VERSION_MISMATCH");
+        const compiled = compilerRegistry.compile(compiler, {
+          compilerRef: spec.compilerRef,
+          prompt: spec.generationIntent.prompt,
+          durationSeconds: spec.generationIntent.durationSeconds,
+          bindings: snapshot.bindings.map((binding) => ({
+            sourceRef: binding.sourceRef,
+            sha256: binding.sha256,
+            modality: binding.modality,
+            order: binding.order,
+            roleLabel: binding.roleLabel,
+            necessity: binding.necessity,
+          })),
+        });
+        if (compiled.compiledRequestDigest !== spec.compiledRequestDigest)
+          blockers.push("COMPILED_REQUEST_DIGEST_MISMATCH");
+        if (implementation.costPolicy.kind === "MONETARY") {
+          const now = Date.now();
+          if (
+            Date.parse(implementation.costPolicy.effectiveAt) > now ||
+            Date.parse(implementation.costPolicy.expiresAt) <= now
+          )
+            blockers.push("COST_POLICY_EXPIRED");
+        }
+        const targetCore = {
+          shotId,
+          generationSpecRef: { id: spec.id, version: spec.version },
+          implementationRef: spec.implementationRef,
+          runtimeRef: spec.runtimeRef,
+          providerRef: spec.providerRef,
+          modelRef: spec.modelRef,
+          adapterRef: spec.adapterRef,
+          compilerRef: spec.compilerRef,
+          compiledRequestDigest: spec.compiledRequestDigest,
+          inputHash: spec.inputHash,
+          dependencyHash: spec.dependencyHash,
+          outputHash: spec.outputHash,
+          costPolicy: implementation.costPolicy,
+        };
+        return {
+          ...targetCore,
+          ordinal: shot.ordinal,
+          lifecycle: implementation.lifecycle as "READY" | "TRIAL",
+          targetDigest: canonicalSha256(targetCore),
+          blockers: [...new Set(blockers)].sort(),
+        };
+      })
+      .sort(
+        (left, right) => left.ordinal - right.ordinal || left.shotId.localeCompare(right.shotId),
+      );
+
+    const monetary = targets.filter((target) => target.costPolicy.kind === "MONETARY");
+    const currencies = new Set(
+      monetary.map((target) =>
+        target.costPolicy.kind === "MONETARY" ? target.costPolicy.currency : "",
+      ),
+    );
+    if (currencies.size > 1)
+      for (const target of targets) target.blockers.push("COST_CURRENCY_MISMATCH");
+    const maximumCostMicros =
+      monetary.length === 0
+        ? null
+        : monetary.reduce(
+            (sum, target) =>
+              sum +
+              (target.costPolicy.kind === "MONETARY" ? target.costPolicy.maximumCostMicros : 0),
+            0,
+          );
+    const pricingExpiresAt =
+      monetary.length === 0
+        ? null
+        : monetary
+            .map((target) =>
+              target.costPolicy.kind === "MONETARY" ? target.costPolicy.expiresAt : "",
+            )
+            .sort()[0]!;
+    const costPolicyDigest = canonicalSha256(
+      targets.map((target) => ({
+        shotId: target.shotId,
+        implementationRef: target.implementationRef,
+        costPolicy: target.costPolicy,
+      })),
+    );
+    const core = {
+      schemaVersion: "capability-generation-execution-preview-v3" as const,
+      projectId: record.projectId,
+      generationPlanId: record.id,
+      planDigest: record.planDigest,
+      selectedShotIds: targets.map((target) => target.shotId),
+      targets,
+      ready: targets.every((target) => target.blockers.length === 0),
+      submissionBlockers:
+        this.environment.PROJECT_GENERATION_LIVE_ENABLED === "true" ? [] : ["LIVE_DISABLED"],
+      expectedCalls: targets.length,
+      maximumCalls: targets.length,
+      maximumAiQaCalls: targets.length,
+      costPolicyDigest,
+      maximumCostMicros,
+      currency: currencies.size === 1 ? [...currencies][0]! : null,
+      localComputeResources: [
+        ...new Set(
+          targets.flatMap((target) =>
+            target.costPolicy.kind === "LOCAL_COMPUTE" && target.costPolicy.resourceClass
+              ? [target.costPolicy.resourceClass]
+              : [],
+          ),
+        ),
+      ].sort(),
+      pricingExpiresAt,
+      noRetry: true as const,
+      noFallback: true as const,
+      externalCalls: 0 as const,
+      generationAuthorized: false as const,
+    };
+    return GenerationExecutionPreviewV3Schema.parse({
+      ...core,
+      previewHash: canonicalSha256(core),
+    });
+  }
+
   private async buildPreview(versionId: string, rawInput: GenerationExecutionPreviewInput) {
     const input = generationExecutionPreviewInputSchema.parse(rawInput);
+    if (input.providerProfileId === "fake-video-v1" && !this.options.allowTestFixtures)
+      throw this.error(
+        "FAKE_PRODUCT_RETIRED",
+        "Fake generation is retained for tests and historical reads only",
+        410,
+      );
     const provider = generationProviderRegistry[input.providerProfileId];
     const version = await this.client.generationPlanVersion.findUnique({
       where: { id: versionId },
@@ -464,6 +711,8 @@ export class GenerationExecutionService {
     if (!idempotencyKey.trim())
       throw this.error("PRECONDITION_REQUIRED", "Idempotency-Key is required", 428);
     const input = createGenerationBatchInputSchema.parse(rawInput);
+    if ("engineVersion" in input && input.engineVersion === "CAPABILITY_V3")
+      return this.createCapabilityBatch(input, idempotencyKey);
     const requestHash = canonicalSha256({ input, idempotencyKey });
     const existing = await this.client.generationBatch.findUnique({ where: { idempotencyKey } });
     if (existing) {
@@ -587,6 +836,229 @@ export class GenerationExecutionService {
     );
     void requestHash;
     return this.getBatch(batchId);
+  }
+
+  private async createCapabilityBatch(
+    input: Extract<CreateGenerationBatchInput, { engineVersion: "CAPABILITY_V3" }>,
+    idempotencyKey: string,
+  ) {
+    const existing = await this.client.generationBatchV3Record.findUnique({
+      where: { idempotencyKey },
+    });
+    if (existing) {
+      if (
+        existing.previewHash !== input.previewHash ||
+        existing.generationPlanId !== input.generationPlanId
+      )
+        throw this.error(
+          "IDEMPOTENCY_CONFLICT",
+          "This idempotency key was already used for another Generation Batch V3",
+          409,
+        );
+      return this.getBatchV3(existing.id);
+    }
+    const preview = await this.buildPreviewV3(input.generationPlanId, {
+      schemaVersion: "capability-generation-execution-preview-request-v3",
+      shotIds: input.shotIds,
+    });
+    if (
+      preview.previewHash !== input.previewHash ||
+      preview.planDigest !== input.planDigest ||
+      preview.costPolicyDigest !== input.costPolicyDigest ||
+      preview.maximumCalls !== input.maximumCalls ||
+      preview.maximumAiQaCalls !== input.maximumAiQaCalls ||
+      preview.maximumCostMicros !== input.maximumCostMicros
+    )
+      throw this.error(
+        "PREVIEW_STALE",
+        "The selected Shot scope, exact versions, or cost facts changed",
+        409,
+      );
+    if (!preview.ready)
+      throw this.error(
+        preview.targets.flatMap((target) => target.blockers)[0] ?? "PRE_DISPATCH_BLOCKED",
+        "One or more selected Shots are no longer executable",
+        409,
+      );
+    if (this.environment.PROJECT_GENERATION_LIVE_ENABLED !== "true")
+      throw this.error(
+        "LIVE_DISABLED",
+        "The server LIVE generation switch is disabled; no Batch was created",
+        409,
+      );
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + input.expiresInSeconds * 1_000);
+    if (preview.pricingExpiresAt && Date.parse(preview.pricingExpiresAt) <= expiresAt.getTime())
+      throw this.error(
+        "COST_UNAVAILABLE",
+        "Pricing expires before this exact authorization scope",
+        409,
+      );
+    const scopeCore = {
+      generationPlanId: preview.generationPlanId,
+      planDigest: preview.planDigest,
+      shotIds: preview.selectedShotIds,
+      generationSpecRefs: preview.targets.map((target) => target.generationSpecRef),
+      implementationRefs: preview.targets.map((target) => target.implementationRef),
+      providerRefs: preview.targets.map((target) => target.providerRef),
+      targetDigests: preview.targets.map((target) => target.targetDigest),
+      expectedCalls: preview.expectedCalls,
+      maximumCalls: preview.maximumCalls,
+      maximumAiQaCalls: preview.maximumAiQaCalls,
+      costPolicyDigest: preview.costPolicyDigest,
+      maximumCostMicros: preview.maximumCostMicros,
+      expiresAt: expiresAt.toISOString(),
+      noRetry: true as const,
+      noFallback: true as const,
+    };
+    const scopeHash = canonicalSha256(scopeCore);
+    const authorization = GenerationAuthorizationV3Schema.parse({
+      id: randomUUID(),
+      planDigest: preview.planDigest,
+      shotIds: preview.selectedShotIds,
+      generationSpecRefs: preview.targets.map((target) => target.generationSpecRef),
+      implementationRefs: preview.targets.map((target) => target.implementationRef),
+      providerRefs: preview.targets.map((target) => target.providerRef),
+      expectedCalls: preview.expectedCalls,
+      maximumCalls: preview.maximumCalls,
+      costPolicyDigest: preview.costPolicyDigest,
+      maximumCostMicros: preview.maximumCostMicros,
+      expiresAt: expiresAt.toISOString(),
+      noRetry: true,
+      noFallback: true,
+      consumedCalls: 0,
+      state: "ACTIVE",
+    } satisfies GenerationAuthorizationV3);
+    const batchId = randomUUID();
+    try {
+      await this.client.$transaction(
+        async (tx) => {
+          const currentPlan = await tx.generationPlanV3Record.findUnique({
+            where: { id: preview.generationPlanId },
+            select: { planDigest: true },
+          });
+          if (!currentPlan || currentPlan.planDigest !== preview.planDigest)
+            throw this.error("GENERATION_PLAN_STALE", "Generation Plan V3 changed", 409);
+          await tx.generationAuthorizationV3Record.create({
+            data: {
+              id: authorization.id,
+              projectId: preview.projectId,
+              generationPlanId: preview.generationPlanId,
+              planDigest: authorization.planDigest,
+              scopeJson: scopeCore as Prisma.InputJsonValue,
+              scopeHash,
+              expectedCalls: authorization.expectedCalls,
+              maximumCalls: authorization.maximumCalls,
+              maximumCostMicros: authorization.maximumCostMicros,
+              expiresAt,
+              noRetry: true,
+              noFallback: true,
+              state: "ACTIVE",
+            },
+          });
+          await tx.generationBatchV3Record.create({
+            data: {
+              id: batchId,
+              projectId: preview.projectId,
+              generationPlanId: preview.generationPlanId,
+              generationAuthorizationId: authorization.id,
+              planDigest: preview.planDigest,
+              previewHash: preview.previewHash,
+              scopeHash,
+              selectedShotIdsJson: preview.selectedShotIds as Prisma.InputJsonValue,
+              expectedCalls: preview.expectedCalls,
+              maximumCalls: preview.maximumCalls,
+              maximumAiQaCalls: preview.maximumAiQaCalls,
+              costPolicyDigest: preview.costPolicyDigest,
+              maximumCostMicros: preview.maximumCostMicros,
+              currency: preview.currency,
+              idempotencyKey,
+            },
+          });
+          await tx.generationBatchTargetV3Record.createMany({
+            data: preview.targets.map((target) => ({
+              id: randomUUID(),
+              projectId: preview.projectId,
+              generationBatchId: batchId,
+              shotId: target.shotId,
+              generationSpecId: target.generationSpecRef.id,
+              ordinal: target.ordinal,
+              targetDigest: target.targetDigest,
+              implementationKey: target.implementationRef.id,
+              implementationVersion: target.implementationRef.version,
+              adapterKey: target.adapterRef.id,
+              adapterVersion: target.adapterRef.version,
+              compilerKey: target.compilerRef.id,
+              compilerVersion: target.compilerRef.version,
+            })),
+          });
+        },
+        { isolationLevel: "Serializable" },
+      );
+    } catch (cause) {
+      if (cause instanceof ProjectAssetError) throw cause;
+      if (cause instanceof Error && /P2002|unique/i.test(cause.message))
+        throw this.error(
+          "GENERATION_BATCH_CONFLICT",
+          "This exact Generation Plan V3 scope was already confirmed",
+          409,
+        );
+      throw cause;
+    }
+    return this.getBatchV3(batchId);
+  }
+
+  async getBatchV3(batchId: string) {
+    const batch = await this.client.generationBatchV3Record.findUnique({
+      where: { id: batchId },
+      include: {
+        authorization: true,
+        targets: { orderBy: [{ ordinal: "asc" }, { id: "asc" }] },
+      },
+    });
+    if (!batch)
+      throw this.error("GENERATION_TARGET_INVALID", "Generation Batch V3 was not found", 404);
+    return {
+      schemaVersion: "capability-generation-batch-v3" as const,
+      id: batch.id,
+      projectId: batch.projectId,
+      generationPlanId: batch.generationPlanId,
+      planDigest: batch.planDigest,
+      previewHash: batch.previewHash,
+      scopeHash: batch.scopeHash,
+      state: batch.state,
+      safeResultCode: batch.safeResultCode,
+      expectedCalls: batch.expectedCalls,
+      maximumCalls: batch.maximumCalls,
+      maximumAiQaCalls: batch.maximumAiQaCalls,
+      maximumCostMicros: batch.maximumCostMicros === null ? null : Number(batch.maximumCostMicros),
+      currency: batch.currency,
+      authorization: {
+        id: batch.authorization.id,
+        state: batch.authorization.state,
+        consumedCalls: batch.authorization.consumedCalls,
+        expiresAt: batch.authorization.expiresAt.toISOString(),
+        noRetry: batch.authorization.noRetry,
+        noFallback: batch.authorization.noFallback,
+      },
+      targets: batch.targets.map((target) => ({
+        id: target.id,
+        shotId: target.shotId,
+        generationSpecId: target.generationSpecId,
+        ordinal: target.ordinal,
+        targetDigest: target.targetDigest,
+        implementationRef: {
+          id: target.implementationKey,
+          version: target.implementationVersion,
+        },
+        adapterRef: { id: target.adapterKey, version: target.adapterVersion },
+        compilerRef: { id: target.compilerKey, version: target.compilerVersion },
+        state: target.state,
+        safeResultCode: target.safeResultCode,
+        providerCallCount: target.providerCallCount,
+      })),
+      createdAt: batch.createdAt.toISOString(),
+    };
   }
 
   private async createWorkflowAgentBatch(
@@ -1246,8 +1718,13 @@ export class GenerationExecutionService {
     const job = await this.client.generationJob.update({
       where: { id: artifact.generationJobId },
       data: {
-        status: input.decision === "PASS" ? "QA_PASS" : "QA_FAIL",
-        safeResultCode: input.decision === "PASS" ? "OWNER_QA_PASS" : "OWNER_QA_FAIL",
+        status: input.decision === "FAIL" ? "QA_FAIL" : "QA_PASS",
+        safeResultCode:
+          input.decision === "PASS"
+            ? "OWNER_QA_PASS"
+            : input.decision === "RISK_ACCEPTED"
+              ? "OWNER_QA_RISK_ACCEPTED"
+              : "OWNER_QA_FAIL",
         finishedAt: new Date(),
       },
     });

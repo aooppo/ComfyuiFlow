@@ -1,4 +1,4 @@
-import type { GenerationExecutionSlotV1 } from "@comfyuiflow/contracts";
+import type { AdapterProfileV2, GenerationExecutionSlotV1 } from "@comfyuiflow/contracts";
 import type { GenerationProvider, RetainedProviderArtifact } from "./generation-provider.js";
 
 export type GenerationAdapterErrorCode =
@@ -117,6 +117,70 @@ export class GenerationAdapterRegistry {
   private key(adapterId: string, adapterVersion: string) {
     return `${adapterId}@${adapterVersion}`;
   }
+}
+
+export interface GenerationAdapterFactoryContext {
+  comfyUiMcp?: ExecutionPlanMcpClient;
+}
+
+export type GenerationAdapterFactory = (
+  profile: AdapterProfileV2,
+  context: GenerationAdapterFactoryContext,
+) => GenerationAdapter;
+
+export class GenerationAdapterFactoryRegistry {
+  private readonly factories = new Map<string, GenerationAdapterFactory>();
+
+  register(factoryKey: string, adapterVersion: string, factory: GenerationAdapterFactory) {
+    const key = this.key(factoryKey, adapterVersion);
+    if (this.factories.has(key)) throw new Error(`Duplicate generation adapter factory: ${key}`);
+    this.factories.set(key, factory);
+    return this;
+  }
+
+  create(
+    profile: AdapterProfileV2,
+    context: GenerationAdapterFactoryContext,
+    options: { production?: boolean; testOnly?: boolean } = {},
+  ) {
+    if ((options.production ?? true) && options.testOnly)
+      throw new GenerationAdapterError(
+        "PRE_DISPATCH_BLOCKED",
+        "Test-only adapter identities are forbidden in production",
+      );
+    const factory = this.factories.get(this.key(profile.factoryKey, profile.version));
+    if (!factory)
+      throw new GenerationAdapterError(
+        "ADAPTER_NOT_IMPLEMENTED",
+        `No registered adapter factory matches ${profile.factoryKey}@${profile.version}`,
+      );
+    const adapter = factory(profile, context);
+    if (adapter.adapterId !== profile.id || adapter.adapterVersion !== profile.version)
+      throw new GenerationAdapterError(
+        "PRE_DISPATCH_BLOCKED",
+        "Adapter factory returned a mismatched identity",
+      );
+    return adapter;
+  }
+
+  private key(factoryKey: string, adapterVersion: string) {
+    return `${factoryKey}@${adapterVersion}`;
+  }
+}
+
+export function createCapabilityAdapterFactoryRegistry(adapterVersion = "2.0.0") {
+  return new GenerationAdapterFactoryRegistry().register(
+    "comfyui-mcp-v2",
+    adapterVersion,
+    (profile, context) => {
+      if (!context.comfyUiMcp)
+        throw new GenerationAdapterError(
+          "PRE_DISPATCH_BLOCKED",
+          "ComfyUI MCP transport is not configured",
+        );
+      return new ComfyUiExecutionPlanAdapter(profile.id, profile.version, context.comfyUiMcp);
+    },
+  );
 }
 
 export class LegacyGenerationProviderAdapter implements GenerationAdapter {
@@ -377,6 +441,17 @@ export class ComfyUiExecutionPlanAdapter implements GenerationAdapter {
     if (["PENDING", "RUNNING", "COMPLETED", "FAILED", "CANCELLED", "UNKNOWN"].includes(status)) {
       return status as "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED" | "UNKNOWN";
     }
+    return "UNKNOWN" as const;
+  }
+
+  async reconcile(taskId: string) {
+    const result = await this.mcp.callTool("comfyui_reconcile_execution_plan", {
+      promptId: taskId,
+    });
+    const status = String(result?.status ?? "UNKNOWN");
+    if (status === "IN_PROGRESS") return "RUNNING" as const;
+    if (["PENDING", "RUNNING", "COMPLETED", "FAILED", "CANCELLED", "UNKNOWN"].includes(status))
+      return status as "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED" | "UNKNOWN";
     return "UNKNOWN" as const;
   }
 

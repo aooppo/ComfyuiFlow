@@ -47,6 +47,7 @@ export function directorProfile(
     maxCostUsd <= 0 ||
     Number.isNaN(effective.valueOf()) ||
     Number.isNaN(expires.valueOf()) ||
+    effective > now ||
     expires <= now
   ) {
     throw new Error("DIRECTOR_PRICE_UNAVAILABLE");

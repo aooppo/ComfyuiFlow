@@ -268,7 +268,13 @@ export class GenerationPlanService {
       },
     });
     if (!plan) throw this.error("GENERATION_PLAN_NOT_FOUND", "Generation plan was not found", 404);
-    return { ...plan, externalCalls: 0 as const, generationAuthorized: false as const };
+    return {
+      ...plan,
+      historical: true as const,
+      historicalLabel: "HISTORICAL_GENERATION_PLAN_READ_ONLY" as const,
+      externalCalls: 0 as const,
+      generationAuthorized: false as const,
+    };
   }
 
   async listForStoryboard(storyboardId: string) {
@@ -291,6 +297,8 @@ export class GenerationPlanService {
     });
     return plans.map(({ versions, ...plan }) => ({
       ...plan,
+      historical: true as const,
+      historicalLabel: "HISTORICAL_GENERATION_PLAN_READ_ONLY" as const,
       generationBatchCount: versions.reduce(
         (total, version) => total + version._count.generationBatches,
         0,
@@ -329,7 +337,11 @@ export class GenerationPlanService {
         "Generation plan version was not found",
         404,
       );
-    return version;
+    return {
+      ...version,
+      historical: true as const,
+      historicalLabel: "HISTORICAL_GENERATION_PLAN_READ_ONLY" as const,
+    };
   }
 
   async append(

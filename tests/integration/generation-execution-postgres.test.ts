@@ -25,7 +25,14 @@ describe.runIf(enabled)("Generation execution PostgreSQL ledger", () => {
       throw new Error("Generation execution tests require an isolated *_test database");
     const module = await import("@comfyuiflow/project-core");
     client = module.prisma;
-    execution = new module.GenerationExecutionService(client);
+    execution = new module.GenerationExecutionService(
+      client,
+      undefined,
+      {},
+      {
+        allowTestFixtures: true,
+      },
+    );
     await reset(client);
     const storyboards: StoryboardServiceType = new module.StoryboardService(client, {
       phase2BindingsEnabled: true,

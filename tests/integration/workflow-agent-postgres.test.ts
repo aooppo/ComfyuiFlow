@@ -167,7 +167,14 @@ describe.runIf(enabled)("Workflow Agent PostgreSQL foundation", () => {
     const module = await import("@comfyuiflow/project-core");
     const storyboards = new module.StoryboardService(client, { phase2BindingsEnabled: true });
     const plans = new module.GenerationPlanService(client);
-    const execution = new module.GenerationExecutionService(client);
+    const execution = new module.GenerationExecutionService(
+      client,
+      undefined,
+      {},
+      {
+        allowTestFixtures: true,
+      },
+    );
     const project = await client.project.create({
       data: {
         name: "Workflow mixed batch",
