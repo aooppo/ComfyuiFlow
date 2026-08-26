@@ -5,7 +5,9 @@ import type {
   GenerationPlanV3,
   GenerationRegistry,
   GenerationSpecV3,
+  MaterializedGraphSnapshotV3,
   PlanningInputSnapshotV3,
+  ReferencePlanV3,
   ShotRequirementSpecV3,
 } from "@comfyuiflow/contracts";
 import {
@@ -13,7 +15,9 @@ import {
   GenerationAuthorizationV3Schema,
   GenerationPlanV3Schema,
   GenerationSpecV3Schema,
+  MaterializedGraphSnapshotV3Schema,
   PlanningInputSnapshotV3Schema,
+  ReferencePlanV3Schema,
   ShotRequirementSpecV3Schema,
 } from "@comfyuiflow/contracts";
 import type { Prisma } from "../generated/client/index.js";
@@ -462,6 +466,14 @@ export function evaluateGenerationSpecDependenciesV3(input: {
 
 const capabilityJson = (value: unknown) => value as Prisma.InputJsonValue;
 
+function deterministicUuid(value: unknown) {
+  const hash = canonicalSha256(value);
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(
+    17,
+    20,
+  )}-${hash.slice(20, 32)}`;
+}
+
 export class CapabilityPlanRepository {
   constructor(private readonly client: ProjectPrisma = prisma) {}
 
@@ -569,6 +581,76 @@ export class CapabilityPlanRepository {
         outputHash: spec.outputHash,
       },
     });
+  }
+
+  async persistDynamicGraph(input: {
+    projectId: string;
+    storyboardVersionId: string;
+    referencePlan: ReferencePlanV3;
+    snapshot: MaterializedGraphSnapshotV3;
+  }) {
+    const referencePlan = ReferencePlanV3Schema.parse(input.referencePlan);
+    const snapshot = MaterializedGraphSnapshotV3Schema.parse(input.snapshot);
+    if (
+      referencePlan.generationSpecId !== snapshot.generationSpecRef.id ||
+      referencePlan.referencePlanDigest !== snapshot.referencePlanDigest
+    )
+      throw new Error("DYNAMIC_GRAPH_LINEAGE_MISMATCH");
+    const existingReference = await this.client.referencePlanV3Record.findUnique({
+      where: { generationSpecId: referencePlan.generationSpecId },
+    });
+    if (
+      existingReference &&
+      existingReference.referencePlanDigest !== referencePlan.referencePlanDigest
+    )
+      throw new Error("REFERENCE_PLAN_GENERATION_SPEC_CONFLICT");
+    const existingGraph = await this.client.materializedGraphSnapshotV3Record.findUnique({
+      where: { generationSpecId: referencePlan.generationSpecId },
+    });
+    if (existingGraph && existingGraph.materializedGraphSha256 !== snapshot.materializedGraphSha256)
+      throw new Error("MATERIALIZED_GRAPH_GENERATION_SPEC_CONFLICT");
+    if (!existingReference)
+      await this.client.referencePlanV3Record.create({
+        data: {
+          id: deterministicUuid({
+            kind: "reference-plan-record-v3",
+            referencePlanDigest: referencePlan.referencePlanDigest,
+          }),
+          projectId: input.projectId,
+          shotId: referencePlan.shotId,
+          storyboardVersionId: input.storyboardVersionId,
+          generationSpecId: referencePlan.generationSpecId,
+          implementationKey: referencePlan.implementationRef.id,
+          implementationVersion: referencePlan.implementationRef.version,
+          compilerKey: referencePlan.compilerRef.id,
+          compilerVersion: referencePlan.compilerRef.version,
+          referencePlanDigest: referencePlan.referencePlanDigest,
+          payloadJson: capabilityJson(referencePlan),
+        },
+      });
+    if (!existingGraph)
+      await this.client.materializedGraphSnapshotV3Record.create({
+        data: {
+          id: deterministicUuid({
+            kind: "materialized-graph-snapshot-record-v3",
+            materializedGraphSha256: snapshot.materializedGraphSha256,
+          }),
+          projectId: input.projectId,
+          generationSpecId: referencePlan.generationSpecId,
+          referencePlanDigest: snapshot.referencePlanDigest,
+          implementationKey: snapshot.implementationRef.id,
+          implementationVersion: snapshot.implementationRef.version,
+          compilerKey: snapshot.compilerRef.id,
+          compilerVersion: snapshot.compilerRef.version,
+          validatorKey: snapshot.validatorRef.id,
+          validatorVersion: snapshot.validatorRef.version,
+          materializedGraphSha256: snapshot.materializedGraphSha256,
+          capabilityEnvelopeDigest: snapshot.capabilityEnvelopeDigest,
+          runtimeContractDigest: snapshot.runtimeContractDigest,
+          payloadJson: capabilityJson(snapshot),
+        },
+      });
+    return { referencePlanDigest: referencePlan.referencePlanDigest, snapshot };
   }
 
   async persistPlan(projectId: string, raw: GenerationPlanV3) {

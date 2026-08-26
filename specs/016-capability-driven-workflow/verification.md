@@ -353,3 +353,114 @@ TRIAL` boundary, read-only discovery, deliberate TRIAL publication, and the expe
 - T071 and T073 through T077 remain the feature-wide security, deterministic performance,
   documentation, complete browser-convergence and final traceability work. No new untracked gap was
   found for the US6 approval flow; these remaining items already exist in `tasks.md`.
+
+## Future Dynamic Implementation Upgrade Baseline - 2026-08-26
+
+- The new isolated worktree is `/Users/tj/Documents/ChatGPT/ComfyuiFlow-dynamic-v3` on branch
+  `codex/016-dynamic-hailuo-v3`, created from clean Feature 016 commit `90df816`. The detached original
+  checkout's modified `apps/project-web/next-env.d.ts` and untracked `.playwright-mcp/` remain untouched.
+- Spec, plan, tasks, data model, verification, and a new dynamic Hailuo contract now define the formal
+  target as `AI Director/Shot Spec → Capability Planner → Reference Resolver → deterministic Dynamic
+Hailuo Compiler → Materialized Graph → Graph Validator → Frozen Execution Snapshot → Capability
+Generation Worker → ComfyUI MCP → Artifact/FFprobe/three frames → AI QA → Owner Review → Retry →
+Assembly`.
+- Read-only inspection proved the current `hailuo03` compiler implementation emits only
+  `compiled-request-preview-v3` metadata and `mediaInputs`; it does not emit an executable ComfyUI
+  Graph. Therefore prior compiler tests are not Graph/E2E evidence and do not make the dynamic
+  envelope READY.
+- The installed local ComfyUI source is commit `7a131a3afadc8200120f67f9236311a2c48b7445`.
+  A zero-call `/object_info/MinimaxHailuo03ReferenceNode` read confirmed 0–9 image, 0–3 video, 0–3
+  audio dynamic groups; duration 4–15; ratios `adaptive`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16`,
+  `21:9`; resolutions `768P`, `2K`; and the installed node's visual-reference/audio invariant.
+  `LoadVideo` accepts `file` and returns `VIDEO`; `LoadAudio` accepts `audio` and returns `AUDIO`.
+- Source inspection additionally recorded current reference-media constraints (image minimum 256×256
+  and aspect range, reference-video FPS/duration total, reference-audio duration total). These facts
+  belong to the runtime-contract digest and must be validated; they remain zero-call runtime metadata,
+  not authorized runtime/E2E generation evidence.
+- `workflows/minimax-h3-project-shot-4s-v1.api.json` remains immutable known-good regression/provider
+  evidence with expected SHA-256
+  `6eb380b17fd775ee15e45cc7a65b5fb80478954bc51c027faff67dcd5b0d1d7a`. It is not the formal dynamic
+  implementation identity and will not be generalized by mutating its bytes.
+- No implementation work in this baseline contacted CodexManager, AI QA, ComfyUI `/prompt`, Hailuo,
+  or another video Provider. External call counts: Director 0, AI QA 0, ComfyUI `/prompt` 0, video
+  Provider 0.
+- New work is dependency-ordered as T099–T127. The final authorized scope of this feature turn is to
+  prepare one precise one-shot LIVE preview and stop with confirmation unchecked; no authorization,
+  Attempt, or paid submission may be created.
+
+## Dynamic Hailuo 03 V3 Zero-Call Convergence - 2026-08-26
+
+- Work remained isolated in `/Users/tj/Documents/ChatGPT/ComfyuiFlow-dynamic-v3` on branch
+  `codex/016-dynamic-hailuo-v3`. The original checkout's modified `next-env.d.ts` and untracked
+  `.playwright-mcp/` were not changed. Migration `202608260045_dynamic_hailuo_v3` is additive and
+  preserves every V1/V2 table and historical record.
+- `minimax-h3-project-shot-4s-v1` remains fixture/provider evidence only. Its bytes still hash to
+  `6eb380b17fd775ee15e45cc7a65b5fb80478954bc51c027faff67dcd5b0d1d7a`; the legacy implementation is
+  `DEPRECATED` and is never selected as the formal dynamic implementation.
+- The formal identity is `implementation.hailuo03-reference-dynamic@3.0.0`, compiler
+  `compiler.hailuo03-reference-dynamic@3.0.0`, validator
+  `validator.hailuo03-reference-graph@3.0.0`, adapter `adapter.comfyui-mcp@2.0.0`, and runtime
+  `runtime.comfyui-local@1.0.0`. The implementation identity digest is
+  `5d6674062e783b3c5605acc5b6a45dcd9613f47d90857a3f4fd5a85362554915`; envelope digest is
+  `396920e77b69b81a4371542c40517dffc2d5cbf0b0ab7b31b81cbab18946822c`; runtime contract digest is
+  `f66762155747c86ee326ca4338de95223fb150dbb211f77b4e069e9c187f3baa`.
+- ReferencePlan construction is semantic-role based and deterministic. The compiler materializes
+  only allowlisted `LoadImage`, `LoadVideo`, `LoadAudio`, `MinimaxHailuo03ReferenceNode`, and
+  `SaveVideo` nodes with deterministic IDs and safe staged names/output prefixes. The independent
+  validator checks topology, cardinality, parameters, invariants, output mapping, Graph SHA,
+  capability envelope, and runtime contract. Planner/LLM inputs cannot supply raw Graphs, nodes,
+  paths, endpoints, credentials, or executable payloads.
+- The zero-call compiler matrix covers 1/5/9 images; 0–3 video/audio combinations; 4/5/10/15
+  seconds; all seven supported ratios; 768P/2K; and 100-run canonical-byte/SHA determinism. It blocks
+  10 images, 4 videos, 4 audios, empty visual input, audio-only input, duration above the envelope,
+  unsupported ratio/resolution, raw Graph input, and runtime-contract drift.
+- The new persistence layer freezes ReferencePlan and materialized Graph snapshots separately from
+  Attempt identity. Every Attempt records its own `materializedGraphSha256`; authorization
+  consumption, Attempt, Artifact/FFprobe/three frames, AI QA status, Owner decisions, retry previews,
+  and assembly lineage have additive records. The fresh-database rehearsal applied all 25 migrations;
+  PostgreSQL integration verified 28 Feature 016 foundation/dynamic tables and proved ReferencePlan
+  update and Graph-snapshot deletion are rejected as append-only mutations.
+- Fake-transport integration proved consume-before-attempt-before-submit ordering, one frozen Graph
+  identity submission, one Provider-call count, successful reconcile without resubmission, and
+  `AI_QA_UNAVAILABLE` as non-blocking metadata. A simulated ambiguous submission consumed exactly one
+  call, converged Attempt/Target/Batch to an auditable manual-review state, and a subsequent Worker
+  pass made no second submission. The MCP submit schema carries only database IDs and digests; it
+  cannot carry raw Graph JSON.
+- Artifact retention performs content hash/byte verification, FFprobe, 24fps/duration checks, and
+  first/middle/last frame extraction. Owner PASS/FAIL/RISK_ACCEPTED remains separate. FAIL can only
+  create a zero-call retry preview; confirmation creates a new one-call authorization and new Attempt,
+  after rechecking Storyboard head, frozen Graph, implementation and current pricing. Assembly uses
+  exact ordered Owner-approved artifacts and an immutable input digest.
+- In-app browser acceptance found and fixed two integration faults: a newly saved Storyboard version
+  retained stale selected Shot IDs in client state, and execution preview tried to recompile a dynamic
+  Graph from lossy legacy parameters. The UI now filters stale selections and preview reads the frozen
+  ReferencePlan/Graph snapshot, deterministically replays the compiler, and compares the exact SHA.
+
+### Exact one-shot LIVE preview (not authorized)
+
+- Storyboard: `红色陶瓷杯三镜头演示` (`eb0f3c32-a8cb-4ebb-9e0a-bbc619b28c8e`), saved V5
+  `4727adc0-af58-416a-9271-8db80c341e9e`, content hash
+  `9f4a635ca4b7d43fa15fd551cd331c08fe66701160cfec8f4361be231a5528ea`.
+- Shot 1 `Establish`: `7a33e020-347c-4bd4-a664-f7a17d966c85`; Generation Plan
+  `4d3e7519-7e87-4ee1-812c-603e9afdf27c`, plan digest
+  `e6cf56946a7149ed8f3b4f02b30fddb58e7fc7563dcb7881178c7c6860c01881`.
+- ReferencePlan digest: `9a936ec303e7022626db1de930edc04756884702148397bb37a9db748b2a30e4`.
+  Exact required input: one `SCENE` image SHA-256
+  `8edca81a57d2b1deaf2a79581557c8314baccf64c663485d627390272d5280a1`; no video or audio refs.
+- Parameters: 4 seconds, 16:9, 2K, seed `887034974`, watermark off. Materialized Graph SHA-256:
+  `3be9baa655c3c952602d7a096dc21d13313e8c2197b039da984cb68bb5aeffe5`; validator status `VALID`.
+- Provider/model: `provider.comfyui-partner@1.0.0` / `model.hailuo03-partner@1.0.0`.
+  Exact ceiling: one video call, one AI QA call, USD 280000 micros maximum, pricing version
+  `2026-08-26`, expires `2026-09-01T00:00:00.000Z`, no retry, no fallback, final explicit Owner QA.
+- The browser showed `LIVE_DISABLED`; its execution confirmation checkbox and Batch button were
+  disabled. Readback remained Batch 0, AuthorizationConsumption 0, Attempt 0 for this preview.
+  External calls: Director 0, AI QA 0, ComfyUI `/prompt` 0, Hailuo/video Provider 0.
+- The dynamic implementation deliberately remains `TRIAL`. Compiler/validator/fake-transport/browser
+  evidence does not satisfy the runtime/real-result evidence policy, so no envelope slice is promoted
+  to READY. T108/T111/T112/T117/T119/T121/T124/T126 remain open where their broader persistence,
+  retry/assembly concurrency, full historical, performance, or real-E2E evidence is not yet complete.
+- Final zero-call checks passed: 88 Vitest files / 327 tests, with 10 files / 41 tests skipped only by
+  their explicit environment gates; fresh PostgreSQL integration 1 file / 6 tests; full ESLint;
+  root/Web TypeScript; Prisma validation; all 25 migrations on a fresh temporary database; production
+  monorepo/Next build; secret scan; and `git diff --check`. The temporary database and local Web
+  process were removed/stopped after verification.

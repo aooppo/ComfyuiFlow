@@ -1,17 +1,17 @@
-# Feature Specification: Simplified Gates and Capability-Driven Workflow
+# Feature Specification: Dynamic Hailuo 03 Capability V3
 
-**Feature Branch**: `codex/016-capability-driven-workflow`
+**Feature Branch**: `codex/016-dynamic-hailuo-v3`
 
 **Created**: 2026-08-26
 
-**Status**: Approved for implementation; one exact create-time LIVE AI Director call is authorized
-only through the owner confirmation defined below; no automated acceptance call, ComfyUI call, or
-video call is authorized
+**Status**: Approved for zero-call implementation and verification. No Hailuo, ComfyUI `/prompt`,
+AI QA, or other paid/provider call is authorized. Delivery MUST stop at a new exact one-shot LIVE
+preview and fresh action-time authorization gate.
 
-**Input**: Replace project-wide preparation gates and fixed H3 slot assumptions with per-Shot
-requirements, capability-driven execution selection, controlled discovery, and a clear separation
-between runtime, provider, model, adapter, compiler profile, and executable implementation. Remove
-all owner-facing Fake proposal paths while preserving test and historical evidence.
+**Input**: Complete Feature 016 as the Future Dynamic Implementation. The fixed
+`minimax-h3-project-shot-4s-v1` five-image Graph is provider evidence and a known-good regression
+fixture only. New Hailuo 03 V3 work is planned as semantic `ReferencePlan` roles and deterministically
+compiled into a validated, frozen, executable ComfyUI API Graph for each Attempt.
 
 ## Clarifications
 
@@ -20,6 +20,12 @@ all owner-facing Fake proposal paths while preserving test and historical eviden
 - Q: Should creating a Storyboard immediately queue one CodexManager Local `gpt-5.6-terra` Director
   call with a visible US$5 ceiling, three-Shot maximum, and no retry? → A: Yes. The button is
   explicitly labeled “Create and call AI”; clicking it is the exact one-call authorization.
+- Q: Is the fixed five-image, 4-second, 9:16 Graph the formal Hailuo 03 V3 implementation? → A: No.
+  It remains immutable provider evidence and a known-good regression fixture. Formal V3 directly
+  implements deterministic dynamic Graph compilation for the validated capability envelope.
+- Q: May the Director or another LLM emit raw ComfyUI JSON? → A: No. AI may select capability,
+  bounded parameters, and semantic reference roles only. Server-owned compiler code exclusively
+  materializes node classes, node IDs, connections, filenames, and output mappings.
 
 ## User Scenarios & Testing
 
@@ -207,6 +213,49 @@ historical approval remains readable.
    **Then** the UI still requires a separate fresh action-time confirmation before any real Provider
    execution and the approval itself has made zero external calls.
 
+---
+
+### User Story 7 - Compile, Execute, Review, Retry, and Assemble Dynamic Hailuo 03 (Priority: P1)
+
+As the owner, each Shot can use the Hailuo 03 capability envelope that its requirements need rather
+than a fixed five-image Graph. I can see durable execution status, playable artifacts, technical
+facts, review frames, AI QA advice when available, my final decision, retry history, and an
+idempotently assembled downloadable result.
+
+**Independent Test**: Using only fake transports and local media fixtures, compile and validate a
+matrix covering image/video/audio reference counts, every duration boundary, every supported ratio,
+and both resolutions; freeze one exact plan, execute one Attempt, persist artifact/FFprobe/three-frame
+evidence, exercise unavailable AI QA, FAIL-to-retry preview with a new authorization and Attempt, and
+assemble the owner-approved artifacts exactly once.
+
+**Acceptance Scenarios**:
+
+1. **Given** a Shot Spec and eligible semantic inputs, **When** planning runs, **Then** a deterministic
+   `ReferencePlan` assigns exact assets to ordered scene, character, product, continuity-frame,
+   reference-video, reference-audio, or other reviewed roles without guessing from filenames.
+2. **Given** bounded capability parameters and a `ReferencePlan`, **When** the compiler runs, **Then**
+   it emits an executable API-format Graph using only allowlisted loader, Hailuo 03, and saver nodes;
+   identical input produces identical bytes and SHA-256.
+3. **Given** a materialized Graph, **When** validation runs, **Then** node classes, edges, dynamic input
+   cardinalities, duration, ratio, resolution, staged input names, output mapping, and forbidden fields
+   are checked before an execution snapshot can be frozen.
+4. **Given** a frozen execution snapshot and fresh exact authorization, **When** the Worker claims the
+   target, **Then** it appends AuthorizationConsumption and Attempt before the single MCP submission,
+   persists `materializedGraphSha256`, and never recompiles, retries, falls back, or substitutes a
+   Provider after the authority boundary.
+5. **Given** Provider completion, **When** the artifact pipeline runs, **Then** it stores the playable
+   artifact, content hash, FFprobe facts, and first/middle/last review frames before technical success
+   is displayed. `AI_QA_UNAVAILABLE` remains advisory and does not block Owner review.
+6. **Given** Owner `FAIL`, **When** retry is requested, **Then** the first step is a zero-call retry
+   preview. A new action-time authorization and a new Attempt are mandatory; the prior Attempt,
+   consumption, artifact, QA, and decision remain append-only.
+7. **Given** one Owner-approved artifact per required Shot, **When** assembly is requested repeatedly
+   with the same source digest, **Then** one identical assembly is returned, while a changed source
+   selection creates a new immutable assembly and never overwrites history.
+8. **Given** a Storyboard page refresh or Worker restart, **When** the owner returns, **Then** persisted
+   planning, Attempt, authorization, artifact, QA, retry, assembly, player, history, and download state
+   are restored by polling rather than browser-only memory.
+
 ### Edge Cases
 
 - A Shot mentions a person in prose but has no explicit identity requirement or selected character.
@@ -227,6 +276,16 @@ historical approval remains readable.
 - A repeated approval arrives after an ambiguous browser response, or an approval is revoked after
   it has already expired.
 - Historical V1/V2 plans still point to fixed H3 workflow and provider fields.
+- The same semantic role is satisfied by several eligible assets; deterministic policy must explain
+  the winner and preserve Owner overrides without filename guessing.
+- Two Requests contain the same references in different arrival orders; canonical role/modality order
+  must materialize identical Graph bytes.
+- A video or audio reference is individually valid but pushes the total duration over 15 seconds.
+- A Graph compiles but runtime `/object_info` no longer matches the frozen adapter/runtime contract.
+- Authorization is consumed and MCP response is lost before a Provider task ID is persisted.
+- Provider completes but artifact download, FFprobe, one review-frame extraction, or AI QA fails.
+- Owner requests retry after the previous authorization expired or after Shot inputs changed.
+- Assembly is requested twice concurrently or after one selected artifact is superseded.
 
 ## Requirements
 
@@ -338,6 +397,54 @@ historical approval remains readable.
   separate real-execution preview naming exact Shots and versions, monetary cost or local-compute
   policy, call cap, expiry, and no-retry/no-fallback rule, followed by a fresh action-time execution
   confirmation.
+- **FR-045**: Formal Hailuo 03 V3 MUST support the provider capability envelope of 0–9 ordered image
+  references, 0–3 ordered video references, 0–3 ordered audio references, integer duration 4–15
+  seconds, ratios `adaptive`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16`, `21:9`, and resolutions `768P`
+  and `2K`, subject to `imageCount + videoCount >= 1` and audio-not-alone invariants for the Reference
+  node. Per-reference media validation remains part of readiness.
+- **FR-046**: A capability tuple MAY be marked `READY` only when the exact compiler/version,
+  validator/version, adapter/runtime contract, and capability-envelope slice have passing compiler,
+  validator, runtime-readiness, and authorized runtime/E2E evidence. Provider-advertised capability
+  alone MUST remain `TRIAL` or `BLOCKED`.
+- **FR-047**: Implementation identity MUST be the immutable compiler/version plus validated capability
+  envelope digest and adapter/runtime contract digest. A single fixed Workflow SHA MUST NOT identify
+  the dynamic implementation.
+- **FR-048**: Every execution Attempt MUST persist the exact frozen materialized Graph or immutable
+  reference, `materializedGraphSha256`, compiler/validator versions, capability-envelope digest,
+  runtime-contract digest, ReferencePlan digest, Generation Spec, authorization, and staged-input
+  manifest. Recompilation after authorization is forbidden.
+- **FR-049**: `ReferencePlan` MUST be a first-class immutable provider-neutral record with ordered
+  image/video/audio bindings, semantic roles, exact source/version/hash, selection reason, necessity,
+  and upstream artifact/frame lineage when applicable.
+- **FR-050**: The deterministic compiler MUST own all executable Graph structure and use allowlisted
+  node classes only. LLM/Planner output is limited to capability choice, bounded parameters, and
+  semantic reference roles and MUST be rejected if it contains raw Graph, node, endpoint, credential,
+  path, upload target, output prefix, or command fields.
+- **FR-051**: Graph validation MUST fail closed on unsupported cardinality, duration, ratio,
+  resolution, loader type, connection, staged input, output mapping, node class, runtime-contract
+  drift, or secret/path leakage. `>9` images, `>3` videos, `>3` audios, duration outside 4–15, and
+  unsupported resolution are stable `BLOCKED` cases.
+- **FR-052**: V3 Worker execution MUST append one AuthorizationConsumption and one Attempt before a
+  network attempt, enforce call/cost/expiry/idempotency caps, submit the frozen Graph through the MCP
+  V3 boundary, and treat timeout or ambiguous submission as terminal without automatic retry.
+- **FR-053**: A completed Attempt MUST persist one or more immutable Artifacts with SHA-256, FFprobe
+  duration/dimensions/fps/codec/container facts, and exactly three deterministic first/middle/last
+  review frames or a stable technical failure. Provider success without this evidence is not technical
+  completion.
+- **FR-054**: AI QA is advisory. `AI_QA_UNAVAILABLE` MUST remain non-blocking for explicit Owner
+  `PASS`, `FAIL`, or `RISK_ACCEPTED`, and no system action may fabricate or infer the Owner decision.
+- **FR-055**: Owner `FAIL` MUST expose a zero-call retry preview. Retry requires a new authorization,
+  creates a new Attempt, consumes no prior grant, and preserves all previous lineage; no blind retry
+  or automatic resubmission is allowed.
+- **FR-056**: Assembly MUST be idempotent by exact ordered approved-artifact/source digest, require an
+  explicit terminal Owner decision for every source, persist immutable output/probe/hash lineage, and
+  expose playable and downloadable results without overwriting prior assemblies.
+- **FR-057**: Storyboard execution UI MUST restore persistent state after reload, poll boundedly while
+  work is active, stop polling in terminal states, and expose player, technical facts, review frames,
+  AI QA state, Owner decision, retry preview/history, Attempt history, assembly history, and download.
+- **FR-058**: The immutable fixed-five `minimax-h3-project-shot-4s-v1` Graph and SHA MUST remain
+  byte-for-byte preserved as known-good regression/provider evidence and MUST NOT be selectable as the
+  formal dynamic Hailuo 03 V3 implementation.
 
 ### Key Entities
 
@@ -361,6 +468,17 @@ historical approval remains readable.
 - **Generation Spec V3**: Immutable provider-neutral Shot Planner output that binds one Shot revision,
   requirement specification, planning input snapshot, selected implementation, bounded compiled
   request digest, and expected output without becoming an independent approval decision.
+- **Reference Plan V3**: Immutable ordered semantic-to-media plan that binds exact image, video,
+  audio, continuity-frame, character, scene, product, and other reviewed roles to source hashes.
+- **Materialized Graph Snapshot V3**: Canonical executable ComfyUI API Graph, safe staged-input
+  manifest, compiler/validator/runtime contract identities, and SHA-256 frozen before authorization.
+- **Generation Attempt V3**: Append-only single MCP submission boundary for one frozen Graph and one
+  AuthorizationConsumption, with provider task/reconcile facts and terminal result.
+- **Artifact/Review Evidence V3**: Append-only playable output, FFprobe facts, content hash, and three
+  review frames belonging to one Attempt.
+- **Owner Decision V3**: Explicit PASS, FAIL, or RISK_ACCEPTED for one exact Artifact; it never mutates
+  AI QA or technical evidence.
+- **Assembly V3**: Idempotent immutable output derived from an ordered set of Owner-approved artifacts.
 - **Trial Scope Approval**: Append-only owner decision allowing selected Shots in one exact
   Storyboard version to use specific immutable `TRIAL` implementation compositions until expiry.
 - **Trial Scope Revocation**: Append-only audit event that stops one approval from affecting future
@@ -402,11 +520,28 @@ historical approval remains readable.
 - **SC-015**: Repeating an identical trial approval at least 10 times with one idempotency key leaves
   exactly one approval and the original item count, while all historical approvals and revocations
   remain readable.
+- **SC-016**: The zero-call compiler matrix produces valid deterministic Graphs for image counts 1,
+  5, and 9; video/audio combinations up to 3 each; durations 4, 5, 10, and 15; every supported ratio;
+  and both resolutions. Repeating each case 100 times yields one Graph SHA per case.
+- **SC-017**: Every `>9` image, `>3` video, `>3` audio, sub-4/over-15 duration, unsupported ratio,
+  unsupported resolution, empty visual, and audio-only reference case is `BLOCKED` before authorization
+  with zero external calls and a stable reason.
+- **SC-018**: In 100% of fake-transport Worker tests, exactly one consumption and one Attempt precede
+  one submission; ambiguous/timeout failures make zero retries and preserve the frozen Graph SHA.
+- **SC-019**: In 100% of completed fake-transport runs, the persisted artifact SHA, FFprobe facts,
+  three review frames, QA status, Owner decision, and UI readback refer to the same Attempt.
+- **SC-020**: FAIL-to-retry creates zero Provider calls during preview, rejects reuse of the old
+  authorization, and creates exactly one new Attempt only after a new authorization.
+- **SC-021**: Ten identical concurrent/repeated assembly requests for one source digest return one
+  assembly record and identical download bytes; changed source digest preserves the first and creates
+  a new record.
+- **SC-022**: No capability-envelope slice is reported READY unless evidence storage contains PASS
+  compiler, validator, runtime-readiness, and runtime/E2E records for that exact identity.
 
 ## Assumptions
 
-- The first implementation family will cover text-to-video, ordered references, and frame-controlled
-  generation through currently installed H3 capabilities, but H3 receives no privileged core logic.
+- The first formal implementation family is dynamic Hailuo 03 Reference-to-Video. The architecture
+  remains provider-neutral and H3 receives no privileged Web/Worker bypass.
 - ComfyUI is treated as a Runtime; ComfyUI Partner is one Provider/billing channel among local compute
   and future direct providers.
 - Discovery observes capabilities but cannot independently establish price, trust, or real technical
@@ -415,7 +550,9 @@ historical approval remains readable.
   generic ComfyUI Adapter and use distinct Compiler Profiles.
 - Existing 015 Workflow Agent behavior remains available only for historical compatibility and
   controlled rollback while 016 becomes the new default flow.
-- No real discovery publication, TRIAL, Provider submission, or paid validation is authorized by this
-  specification work.
+- Current local `/object_info` and source inspection may be used as zero-call runtime-contract evidence;
+  it is not runtime/E2E generation evidence and cannot promote the full envelope to READY.
+- No real discovery publication, TRIAL, Provider submission, AI QA, or paid validation is authorized
+  by this implementation turn.
 - A trial scope approval defaults to 30 minutes, may be re-approved with a new idempotency key after
   expiry or revocation, and never substitutes for the later real-execution confirmation.

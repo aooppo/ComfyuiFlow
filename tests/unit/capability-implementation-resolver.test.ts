@@ -32,11 +32,13 @@ describe("capability implementation resolver V2", () => {
     });
     const reference = resolveCapabilityCandidatesV2(registry, {
       bindings: [binding("IMAGE")],
+      allowedTrialRefs: new Set(["implementation.hailuo03-reference-dynamic@3.0.0"]),
       now: new Date("2026-08-26T12:00:00.000Z"),
     });
     expect(selectCapabilityImplementationV2(reference.compatible)).toMatchObject({
-      id: "implementation.hailuo03-reference-partner",
-      lifecycle: "READY",
+      id: "implementation.hailuo03-reference-dynamic",
+      lifecycle: "TRIAL",
+      compilerRef: { id: "compiler.hailuo03-reference-dynamic", version: "3.0.0" },
     });
   });
 
@@ -78,7 +80,7 @@ describe("capability implementation resolver V2", () => {
     expect(result.compatible).toEqual([]);
     expect(
       result.rejected.find(
-        (item) => item.implementationRef.id === "implementation.hailuo03-reference-partner",
+        (item) => item.implementationRef.id === "implementation.hailuo03-reference-dynamic",
       )?.reasonCodes,
     ).toEqual(expect.arrayContaining(["INPUT_INVARIANT_FAILED"]));
     expect(

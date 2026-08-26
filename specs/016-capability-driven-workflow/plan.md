@@ -1,12 +1,17 @@
-# Implementation Plan: Simplified Gates and Capability-Driven Workflow
+# Implementation Plan: Dynamic Hailuo 03 Capability V3
 
-**Branch**: `codex/016-capability-driven-workflow` | **Date**: 2026-08-26 | **Spec**: [spec.md](./spec.md)
+**Branch**: `codex/016-dynamic-hailuo-v3` | **Date**: 2026-08-26 | **Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `/specs/016-capability-driven-workflow/spec.md`
 
 ## Summary
 
-Replace the fixed H3/five-slot planning path with a per-shot, capability-driven Workflow Agent. The implementation separates runtime, provider, model, transport adapter, compiler profile, and generation implementation; uses one generic ComfyUI MCP adapter; discovers node capabilities into non-selectable candidates; and requires reviewed publication plus exact-version evidence before selection. Project assets, semantic assets, character states, continuity, video, and audio references become conditional inputs inferred per shot. Intermediate owner approval gates and owner-facing Fake proposal paths are removed, while the server kill switch, exact paid-call authorization, no-retry policy, and final Owner QA remain.
+Complete the Future Dynamic Implementation directly. Per-Shot semantic requirements produce an
+immutable `ReferencePlan`; a deterministic Hailuo 03 compiler materializes a real API-format ComfyUI
+Graph; a validator freezes the Graph plus runtime/adapter contract before authorization; and a V3
+Worker executes exactly that snapshot through MCP. Artifact, FFprobe, review-frame, AI QA, Owner
+decision, retry, and assembly lineage are persisted and restored in the Storyboard UI. The fixed
+five-image Graph remains a byte-frozen fixture/provider-evidence artifact only.
 
 ## Technical Context
 
@@ -82,23 +87,37 @@ creative-to-execution handoff required by the constitution, but it is derived au
 no independent Owner approval state. Web and Storyboard services cannot submit raw prompts, workflow
 graphs, or adapter payloads directly.
 
-### 5. Initial Hailuo 03 compiler family
+### 5. Dynamic Hailuo 03 compiler and validator
 
-The initial reviewed compiler profiles cover three distinct official node behaviors:
+The first formal V3 slice uses `MinimaxHailuo03ReferenceNode`. Planner/LLM output stops at bounded
+duration/ratio/resolution/seed/watermark choices plus semantic reference roles. `ReferencePlanV3`
+canonicalizes exact source versions/hashes and orders image, video, and audio inputs. The compiler
+then creates `LoadImage × N`, `LoadVideo × N`, `LoadAudio × N`, one Hailuo Reference node, and one
+`SaveVideo` node with deterministic numeric node IDs and dynamic connection names.
 
-- **Text-to-video**: true zero-reference generation.
-- **Reference-to-video**: 0–9 ordered images, 0–3 ordered videos, and 0–3 ordered audio references, with the invariant `imageCount + videoCount >= 1`; audio cannot be the sole reference.
-- **First/last-frame**: required first frame and optional last frame.
+The Graph validator independently checks the allowlisted node classes and exact edge topology;
+0–9 image, 0–3 video, and 0–3 audio cardinalities; visual-reference and audio invariants; integer
+4–15-second duration; supported ratios and 768P/2K; safe staged input names and output prefix; and
+the frozen `/object_info` runtime-contract digest. It returns a canonical Graph SHA-256. The compiler
+preview and validator are pure and zero-call. The legacy fixed five-slot H3 Graph remains byte-for-byte
+readable as regression/provider evidence and is never the dynamic implementation identity.
 
-All three can share `comfyui-mcp-v2`. The compiler owns node selection, dynamic port expansion, ordered bindings, and prompt labels such as `Image 1`, `Image 2`, and `Video 1`. The legacy fixed five-slot H3 implementation remains readable for historical plans but is not offered for new planning after migration.
+### 6. Evidence-scoped implementation identity
 
-### 6. Gate and Fake-path simplification
+Dynamic implementation identity is `(compiler id/version, validator id/version, capability-envelope
+digest, adapter id/version, runtime-contract digest)`. Each Attempt additionally stores the unique
+`materializedGraphSha256`. Registry readiness is evaluated per exact envelope slice. PASS compiler
+and validator evidence plus zero-call runtime readiness are necessary but not enough for READY;
+authorized runtime/E2E evidence from the exact version is also required. Until then the implementation
+or unproven slice remains TRIAL/BLOCKED.
+
+### 7. Gate and Fake-path simplification
 
 New planning no longer requires project-wide READY states, Storyboard approval, Shot Plan approval, or a separate pre-generation approval. Users may generate any selected valid shot subset. The system blocks only for unresolved required inputs, unavailable implementation/runtime, server LIVE disabled, missing/expired/mismatched paid-call authorization, exhausted call/budget cap, or final Owner QA.
 
 Owner-facing Fake Director/provider/proposal controls and generation paths are removed. Test fixtures remain clearly labeled and unreachable from production selection. Historical Fake records remain readable and auditable.
 
-### 7. Append-only first-real-trial scope
+### 8. Append-only first-real-trial scope
 
 Add a separate `TrialScopeApproval` aggregate between blocked capability planning and zero-call
 execution preview. Approval creation resolves an already-persisted V3 plan back to the exact current
@@ -113,12 +132,28 @@ passes a one-Shot-local `allowedTrialRefs` set to the resolver. It never constru
 allowlist. Approval and revocation services have no Provider, Worker, adapter, AI QA, ComfyUI, or
 video execution dependency.
 
+### 9. Frozen execution, artifact, retry, and assembly pipeline
+
+One exact confirmation creates an immutable execution snapshot and authorization. The Worker claims
+one target, appends AuthorizationConsumption and Attempt, then submits the already-frozen Graph via
+the shared MCP V3 adapter. Submission time never recompiles. Ambiguous responses remain terminal and
+require explicit reconcile or a new Owner-authorized retry; no automatic fallback/resubmit exists.
+
+Completion downloads the artifact into managed storage, hashes it, runs FFprobe, extracts deterministic
+first/middle/last frames, and only then exposes technical completion. AI QA runs inside its own cap;
+`AI_QA_UNAVAILABLE` is advisory. Owner PASS/FAIL/RISK_ACCEPTED is a separate append-only decision.
+FAIL exposes a zero-call retry preview, then a new grant and Attempt. Assembly keys on the canonical
+ordered approved-artifact digest and is idempotent. The Storyboard UI reads this persisted aggregate,
+polls only while non-terminal, plays artifacts/assemblies, shows history, and exposes downloads.
+
 ## Public Contracts and APIs
 
 - Registry V2 schema and resolver contract: [contracts/generation-registry-v2.md](./contracts/generation-registry-v2.md)
 - Discovery and reviewed publication lifecycle: [contracts/discovery-publication.md](./contracts/discovery-publication.md)
 - Workflow planning and authorization contract: [contracts/workflow-planning-v3.md](./contracts/workflow-planning-v3.md)
 - First-real-trial scope contract: [contracts/trial-scope-approval.md](./contracts/trial-scope-approval.md)
+- Dynamic Hailuo 03 compiler, validator, execution, evidence, retry, and assembly contract:
+  [contracts/dynamic-hailuo03-v3.md](./contracts/dynamic-hailuo03-v3.md)
 
 Existing endpoints remain backward-readable where practical. New versions are additive; legacy plan reads are translated into a historical view and are never silently rewritten.
 
@@ -132,6 +167,10 @@ Existing endpoints remain backward-readable where practical. New versions are ad
 6. Remove owner-facing Fake and intermediate-gate UI/API paths after compatibility reads pass.
 7. Retire new writes to legacy fixed-slot plans; preserve historical read and audit support.
 8. Add approval, item, and revocation tables additively; never delete an expired or revoked scope.
+9. Add ReferencePlan, materialized Graph snapshot, V3 Attempt/consumption, artifact/probe/frame, QA,
+   Owner decision, retry preview, and assembly tables additively; preserve existing V1/V2 records.
+10. Seed a dynamic Hailuo 03 TRIAL implementation whose identity uses compiler/envelope/runtime
+    contracts; do not copy the fixed Graph SHA into its identity or mark the full envelope READY.
 
 Rollback disables V3 selection and restores the previous new-plan route without deleting V3 records or evidence.
 
@@ -147,6 +186,15 @@ Rollback disables V3 selection and restores the previous new-plan route without 
 - Verify partial trial approval, idempotent replay, version/composition drift, expiry, revocation,
   re-approval, audit history, and per-Shot `allowedTrialRefs` isolation with zero external calls.
 - Verify owner-facing Fake routes/options disappear while fixtures remain test-only and historical records remain readable.
+- Matrix-test real Graph bytes for image/video/audio counts, 4–15 seconds, every ratio, and 768P/2K;
+  assert invalid cardinality/duration/ratio/resolution cases block before authorization.
+- Contract-test runtime `/object_info` compatibility without `/prompt`, compiler/validator identity,
+  Graph SHA freezing, staged media mapping, MCP submission payload, and compile-after-auth rejection.
+- Fake-transport test consume-before-attempt, one submit, ambiguous terminal behavior, no retry/fallback,
+  artifact download/hash/FFprobe/three frames, non-blocking AI QA unavailable, Owner decisions, retry
+  preview/new grant/new Attempt, and idempotent assembly.
+- Browser-test persistence and polling across reload, player, QA, retry/history, assembly, and download,
+  stopping before the fresh one-shot LIVE confirmation.
 - Browser-test the simplified owner journey through final Owner QA.
 - Measure the zero-call 20-Shot planning fixture for 100 runs and require at least 95 runs to complete within 2 seconds.
 - Run real provider validation only with a fresh, explicit action-time authorization; no blind retry.
@@ -200,4 +248,8 @@ tests/
 
 ## Constitution Re-check
 
-The Phase 1 design still passes all gates. Dynamic behavior is bounded by reviewed compiler profiles rather than arbitrary AI-authored ComfyUI graphs. Removing readiness approvals does not permit paid execution: the short-lived TRIAL scope only affects exact-version planning, while the server kill switch, separate exact execution authorization, budget/call cap, expiry, and no-retry constraints remain independently enforced. No complexity exception is required.
+The revised design still passes all gates. Dynamic behavior is bounded by reviewed deterministic
+compiler and validator code, not AI-authored Graphs. The materialized Graph is frozen before the
+authorization boundary, every network attempt consumes authority first, and retry/assembly preserve
+append-only lineage and explicit Owner decisions. Runtime metadata inspection is zero-call evidence,
+not paid generation evidence. No complexity exception is required.

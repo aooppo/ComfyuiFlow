@@ -132,6 +132,9 @@ export const CompilerProfileV2Schema = z
     inputContract: InputContractV2Schema,
     outputMappingKey: CapabilityIdSchema,
     sourceDigest: CapabilitySha256Schema,
+    validatorRef: VersionRefV2Schema.optional(),
+    capabilityEnvelopeDigest: CapabilitySha256Schema.optional(),
+    runtimeContractDigest: CapabilitySha256Schema.optional(),
   })
   .strict();
 
@@ -194,6 +197,7 @@ export const GenerationImplementationV2Schema = z
     costPolicy: CostPolicyV2Schema,
     lifecycle: GenerationImplementationLifecycleV2Schema,
     evidencePolicy: z.enum(["FIXTURE_ONLY", "EXACT_VERSION_REAL_RESULT"]),
+    implementationIdentityDigest: CapabilitySha256Schema.optional(),
     testOnly: z.boolean(),
   })
   .strict()
@@ -329,6 +333,16 @@ export const RequirementPurposeV3Schema = z.enum([
   "OTHER",
 ]);
 export const RequirementNecessityV3Schema = z.enum(["REQUIRED", "OPTIONAL", "OMITTED"]);
+export const Hailuo03AspectRatioV3Schema = z.enum([
+  "adaptive",
+  "16:9",
+  "4:3",
+  "1:1",
+  "3:4",
+  "9:16",
+  "21:9",
+]);
+export const Hailuo03ResolutionV3Schema = z.enum(["768P", "2K"]);
 export const WorkflowPlanningRequestV3Schema = z
   .object({
     schemaVersion: z.literal("workflow-planning-request-v3"),
@@ -346,6 +360,20 @@ export const WorkflowPlanningRequestV3Schema = z
       )
       .max(160)
       .default([]),
+    hailuo03Parameters: z
+      .array(
+        z
+          .object({
+            shotId: CapabilityUuidSchema,
+            aspectRatio: Hailuo03AspectRatioV3Schema.optional(),
+            resolution: Hailuo03ResolutionV3Schema.default("768P"),
+            seed: z.number().int().min(0).max(4_294_967_295).optional(),
+            watermark: z.boolean().default(false),
+          })
+          .strict(),
+      )
+      .max(20)
+      .optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -369,6 +397,21 @@ export const WorkflowPlanningRequestV3Schema = z
         code: "custom",
         path: ["optionalOwnerConstraints"],
         message: "constraints must reference selected Shots",
+      });
+    if ((value.hailuo03Parameters ?? []).some((parameter) => !selected.has(parameter.shotId)))
+      context.addIssue({
+        code: "custom",
+        path: ["hailuo03Parameters"],
+        message: "parameters must reference selected Shots",
+      });
+    if (
+      new Set((value.hailuo03Parameters ?? []).map((parameter) => parameter.shotId)).size !==
+      (value.hailuo03Parameters ?? []).length
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["hailuo03Parameters"],
+        message: "every Shot may have only one parameter set",
       });
     if (new Set(constraintKeys).size !== constraintKeys.length)
       context.addIssue({
@@ -428,6 +471,113 @@ export const PlanningInputSnapshotV3Schema = z
     sourceDigest: CapabilitySha256Schema,
     capabilityDigest: CapabilitySha256Schema,
     snapshotHash: CapabilitySha256Schema,
+  })
+  .strict();
+
+export const ReferenceRoleV3Schema = z.enum([
+  "SCENE",
+  "CHARACTER_IDENTITY",
+  "CHARACTER_FACE",
+  "CHARACTER_BODY",
+  "CHARACTER_REAR",
+  "PRODUCT",
+  "STYLE",
+  "CONTINUITY_FRAME",
+  "REFERENCE_VIDEO",
+  "REFERENCE_AUDIO",
+  "OTHER",
+]);
+export const ReferencePlanBindingV3Schema = z
+  .object({
+    sourceRef: VersionRefV2Schema,
+    sha256: CapabilitySha256Schema,
+    modality: z.enum(["IMAGE", "VIDEO", "AUDIO"]),
+    role: ReferenceRoleV3Schema,
+    order: z.number().int().nonnegative().max(100),
+    necessity: z.enum(["REQUIRED", "OPTIONAL"]),
+    selectionReasonCode: CapabilityCodeSchema,
+    stagedInputName: z
+      .string()
+      .min(1)
+      .max(240)
+      .regex(/^comfyuiflow\/staged\/[a-f0-9]{64}\.(?:png|jpg|jpeg|webp|mp4|mov|wav|mp3|m4a)$/),
+    upstreamLineage: z
+      .object({
+        attemptId: CapabilityUuidSchema,
+        artifactId: CapabilityUuidSchema,
+        frameId: CapabilityUuidSchema,
+        frameSha256: CapabilitySha256Schema,
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+export const ReferencePlanV3Schema = z
+  .object({
+    schemaVersion: z.literal("reference-plan-v3"),
+    shotId: CapabilityUuidSchema,
+    storyboardVersionId: CapabilityUuidSchema,
+    generationSpecId: CapabilityUuidSchema,
+    implementationRef: VersionRefV2Schema,
+    compilerRef: VersionRefV2Schema,
+    durationSeconds: z.number().int().min(4).max(15),
+    aspectRatio: Hailuo03AspectRatioV3Schema,
+    resolution: Hailuo03ResolutionV3Schema,
+    seed: z.number().int().min(0).max(4_294_967_295),
+    watermark: z.boolean(),
+    prompt: z.string().trim().min(1).max(12_000),
+    bindings: z.array(ReferencePlanBindingV3Schema).max(15),
+    referencePlanDigest: CapabilitySha256Schema,
+  })
+  .strict();
+
+const ComfyUiGraphNodeV3Schema = z
+  .object({
+    class_type: z.enum([
+      "LoadImage",
+      "LoadVideo",
+      "LoadAudio",
+      "MinimaxHailuo03ReferenceNode",
+      "SaveVideo",
+    ]),
+    inputs: z.record(z.string(), z.unknown()),
+  })
+  .strict();
+export const MaterializedComfyUiGraphV3Schema = z.record(
+  z.string().regex(/^[1-9][0-9]*$/),
+  ComfyUiGraphNodeV3Schema,
+);
+export const GraphValidationResultV3Schema = z
+  .object({
+    schemaVersion: z.literal("hailuo03-graph-validation-v3"),
+    status: z.enum(["VALID", "BLOCKED"]),
+    blockerCodes: z.array(CapabilityCodeSchema).max(40),
+    validatorRef: VersionRefV2Schema,
+    materializedGraphSha256: CapabilitySha256Schema,
+    capabilityEnvelopeDigest: CapabilitySha256Schema,
+    runtimeContractDigest: CapabilitySha256Schema,
+    outputNodeId: z.string().regex(/^[1-9][0-9]*$/),
+    externalCalls: z.literal(0),
+  })
+  .strict();
+export const MaterializedGraphSnapshotV3Schema = z
+  .object({
+    schemaVersion: z.literal("materialized-graph-snapshot-v3"),
+    referencePlanDigest: CapabilitySha256Schema,
+    generationSpecRef: VersionRefV2Schema,
+    implementationRef: VersionRefV2Schema,
+    compilerRef: VersionRefV2Schema,
+    validatorRef: VersionRefV2Schema,
+    adapterRef: VersionRefV2Schema,
+    runtimeRef: VersionRefV2Schema,
+    capabilityEnvelopeDigest: CapabilitySha256Schema,
+    runtimeContractDigest: CapabilitySha256Schema,
+    materializedGraph: MaterializedComfyUiGraphV3Schema,
+    materializedGraphSha256: CapabilitySha256Schema,
+    outputNodeId: z.string().regex(/^[1-9][0-9]*$/),
+    outputMediaKey: z.literal("video"),
+    stagedInputs: z.array(ReferencePlanBindingV3Schema).max(15),
+    validation: GraphValidationResultV3Schema,
   })
   .strict();
 export const GenerationSpecV3Schema = z
@@ -603,6 +753,153 @@ export const GenerationAuthorizationV3Schema = z
       });
   });
 
+export const AuthorizationConsumptionV3Schema = z
+  .object({
+    id: CapabilityUuidSchema,
+    authorizationId: CapabilityUuidSchema,
+    generationBatchTargetId: CapabilityUuidSchema,
+    attemptId: CapabilityUuidSchema,
+    operation: z.enum(["SUBMIT", "AI_QA"]),
+    sequence: z.number().int().positive().max(40),
+    consumedCalls: z.number().int().positive().max(1),
+    consumedCostMicros: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+    createdAt: DateTimeSchema,
+  })
+  .strict();
+export const GenerationAttemptV3Schema = z
+  .object({
+    id: CapabilityUuidSchema,
+    generationBatchTargetId: CapabilityUuidSchema,
+    generationSpecRef: VersionRefV2Schema,
+    authorizationConsumptionId: CapabilityUuidSchema,
+    referencePlanDigest: CapabilitySha256Schema,
+    materializedGraphSha256: CapabilitySha256Schema,
+    compilerRef: VersionRefV2Schema,
+    validatorRef: VersionRefV2Schema,
+    capabilityEnvelopeDigest: CapabilitySha256Schema,
+    runtimeContractDigest: CapabilitySha256Schema,
+    attemptNumber: z.number().int().positive().max(100),
+    idempotencyKey: z.string().trim().min(8).max(160),
+    state: z.enum([
+      "CLAIMED",
+      "SUBMITTING",
+      "SUBMITTED",
+      "RECONCILING",
+      "SUCCEEDED",
+      "FAILED",
+      "AMBIGUOUS",
+      "CANCELLED",
+    ]),
+    providerTaskId: z.string().trim().min(1).max(500).nullable(),
+    providerCallCount: z.number().int().min(0).max(1),
+    safeResultCode: CapabilityCodeSchema.nullable(),
+    createdAt: DateTimeSchema,
+    updatedAt: DateTimeSchema,
+  })
+  .strict();
+export const ArtifactReviewFrameRoleV3Schema = z.enum(["FIRST", "MIDDLE", "LAST"]);
+export const ArtifactReviewFrameV3Schema = z
+  .object({
+    id: CapabilityUuidSchema,
+    role: ArtifactReviewFrameRoleV3Schema,
+    timestampSeconds: z.number().nonnegative(),
+    storageKey: z.string().trim().min(1).max(500),
+    sha256: CapabilitySha256Schema,
+    bytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  })
+  .strict();
+export const AttemptArtifactV3Schema = z
+  .object({
+    id: CapabilityUuidSchema,
+    attemptId: CapabilityUuidSchema,
+    storageKey: z.string().trim().min(1).max(500),
+    mediaType: z.literal("video/mp4"),
+    bytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    sha256: CapabilitySha256Schema,
+    technicalStatus: z.enum(["PENDING", "VERIFIED", "FAILED"]),
+    technicalResultCode: CapabilityCodeSchema.nullable(),
+    ffprobe: z
+      .object({
+        durationSeconds: z.number().positive(),
+        width: z.number().int().positive(),
+        height: z.number().int().positive(),
+        fps: z.number().positive(),
+        codec: z.string().trim().min(1).max(80),
+        container: z.string().trim().min(1).max(80),
+        probeVersion: CapabilityIdSchema,
+      })
+      .strict()
+      .nullable(),
+    reviewFrames: z.array(ArtifactReviewFrameV3Schema).max(3),
+    aiQaStatus: z.enum(["PENDING", "PASS", "WARN", "FAIL", "AI_QA_UNAVAILABLE"]),
+    ownerDecision: z.enum(["PASS", "FAIL", "RISK_ACCEPTED"]).nullable(),
+  })
+  .strict();
+
+export const OwnerDecisionCreateRequestV3Schema = z
+  .object({
+    schemaVersion: z.literal("owner-decision-create-request-v3"),
+    decision: z.enum(["PASS", "FAIL", "RISK_ACCEPTED"]),
+    reasonCode: CapabilityCodeSchema.optional(),
+    notes: z.string().trim().max(2_000).optional(),
+    actorRef: CapabilityIdSchema,
+    idempotencyKey: z.string().trim().min(8).max(160),
+  })
+  .strict();
+export const GenerationRetryPreviewV3Schema = z
+  .object({
+    schemaVersion: z.literal("generation-retry-preview-v3"),
+    id: CapabilityUuidSchema,
+    projectId: CapabilityUuidSchema,
+    failedAttemptId: CapabilityUuidSchema,
+    nextAttemptNumber: z.number().int().positive().max(100),
+    generationSpecRef: VersionRefV2Schema,
+    materializedGraphSha256: CapabilitySha256Schema,
+    expectedCalls: z.literal(1),
+    maximumCalls: z.literal(1),
+    maximumCostMicros: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+    previewDigest: CapabilitySha256Schema,
+    externalCalls: z.literal(0),
+    generationAuthorized: z.literal(false),
+  })
+  .strict();
+export const GenerationRetryAuthorizeRequestV3Schema = z
+  .object({
+    schemaVersion: z.literal("generation-retry-authorize-request-v3"),
+    previewDigest: CapabilitySha256Schema,
+    idempotencyKey: z.string().trim().min(8).max(160),
+    expiresInSeconds: z.number().int().min(60).max(3_600),
+    confirmed: z.literal(true),
+  })
+  .strict();
+export const GenerationAssemblyV3Schema = z
+  .object({
+    schemaVersion: z.literal("generation-assembly-v3"),
+    id: CapabilityUuidSchema,
+    projectId: CapabilityUuidSchema,
+    storyboardVersionId: CapabilityUuidSchema,
+    inputDigest: CapabilitySha256Schema,
+    idempotencyKey: z.string().trim().min(8).max(160),
+    state: z.enum(["READY", "ASSEMBLING", "COMPLETED", "FAILED"]),
+    sources: z
+      .array(
+        z
+          .object({
+            artifactId: CapabilityUuidSchema,
+            shotId: CapabilityUuidSchema,
+            ordinal: z.number().int().nonnegative().max(100),
+            sha256: CapabilitySha256Schema,
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(20),
+    outputStorageKey: z.string().trim().min(1).max(500).nullable(),
+    outputSha256: CapabilitySha256Schema.nullable(),
+    outputBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+  })
+  .strict();
+
 export const GenerationExecutionPreviewRequestV3Schema = z
   .object({
     schemaVersion: z.literal("capability-generation-execution-preview-request-v3"),
@@ -681,6 +978,14 @@ export type RegistryPublicationV2 = z.infer<typeof RegistryPublicationV2Schema>;
 export type ImplementationEvidenceV2 = z.infer<typeof ImplementationEvidenceV2Schema>;
 export type ShotRequirementSpecV3 = z.infer<typeof ShotRequirementSpecV3Schema>;
 export type PlanningInputSnapshotV3 = z.infer<typeof PlanningInputSnapshotV3Schema>;
+export type Hailuo03AspectRatioV3 = z.infer<typeof Hailuo03AspectRatioV3Schema>;
+export type Hailuo03ResolutionV3 = z.infer<typeof Hailuo03ResolutionV3Schema>;
+export type ReferenceRoleV3 = z.infer<typeof ReferenceRoleV3Schema>;
+export type ReferencePlanBindingV3 = z.infer<typeof ReferencePlanBindingV3Schema>;
+export type ReferencePlanV3 = z.infer<typeof ReferencePlanV3Schema>;
+export type MaterializedComfyUiGraphV3 = z.infer<typeof MaterializedComfyUiGraphV3Schema>;
+export type GraphValidationResultV3 = z.infer<typeof GraphValidationResultV3Schema>;
+export type MaterializedGraphSnapshotV3 = z.infer<typeof MaterializedGraphSnapshotV3Schema>;
 export type GenerationSpecV3 = z.infer<typeof GenerationSpecV3Schema>;
 export type GenerationPlanV3 = z.infer<typeof GenerationPlanV3Schema>;
 export type TrialScopeApprovalCreateRequestV3 = z.infer<
@@ -690,6 +995,15 @@ export type TrialScopeApprovalItemV3 = z.infer<typeof TrialScopeApprovalItemV3Sc
 export type TrialScopeApprovalV3 = z.infer<typeof TrialScopeApprovalV3Schema>;
 export type TrialScopeApprovalHistoryV3 = z.infer<typeof TrialScopeApprovalHistoryV3Schema>;
 export type GenerationAuthorizationV3 = z.infer<typeof GenerationAuthorizationV3Schema>;
+export type AuthorizationConsumptionV3 = z.infer<typeof AuthorizationConsumptionV3Schema>;
+export type GenerationAttemptV3 = z.infer<typeof GenerationAttemptV3Schema>;
+export type AttemptArtifactV3 = z.infer<typeof AttemptArtifactV3Schema>;
+export type OwnerDecisionCreateRequestV3 = z.infer<typeof OwnerDecisionCreateRequestV3Schema>;
+export type GenerationRetryPreviewV3 = z.infer<typeof GenerationRetryPreviewV3Schema>;
+export type GenerationRetryAuthorizeRequestV3 = z.infer<
+  typeof GenerationRetryAuthorizeRequestV3Schema
+>;
+export type GenerationAssemblyV3 = z.infer<typeof GenerationAssemblyV3Schema>;
 export type GenerationExecutionPreviewRequestV3 = z.infer<
   typeof GenerationExecutionPreviewRequestV3Schema
 >;

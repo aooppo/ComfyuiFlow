@@ -1,9 +1,11 @@
 import {
   deriveSafeOutputPrefix,
+  type ComfyUiCapabilityV3ExecutionStore,
   type ComfyUiExecutionPlanStore,
   type ExecutionPlanIdentity,
   type FrozenComfyUiExecutionRecord,
 } from "@comfyuiflow/comfyui-bridge";
+import { MaterializedGraphSnapshotV3Schema } from "@comfyuiflow/contracts";
 import type { ProjectPrisma, StorageProvider } from "@comfyuiflow/project-core";
 
 const supportedRoles = {
@@ -141,6 +143,80 @@ export function createPrismaExecutionPlanStore(input: {
   return {
     async loadForSubmission(identity: ExecutionPlanIdentity) {
       return load(identity.generationJobId);
+    },
+    loadSubmitted: load,
+  };
+}
+
+export function createPrismaCapabilityV3ExecutionStore(input: {
+  prisma: ProjectPrisma;
+  sourceStorage: StorageProvider;
+  generatedStorage: StorageProvider;
+}): ComfyUiCapabilityV3ExecutionStore {
+  const resolveInput = async (projectId: string, sha256: string) => {
+    const source = await input.prisma.asset.findFirst({
+      where: { projectId, storedObject: { sha256 } },
+      include: { storedObject: true },
+    });
+    if (source)
+      return input.sourceStorage.resolveVerified(
+        source.storedObject.storageKey,
+        source.storedObject.sha256,
+        Number(source.storedObject.byteSize),
+      );
+    const generated = await input.prisma.generationArtifactV3Record.findFirst({
+      where: { projectId, sha256 },
+    });
+    if (generated)
+      return input.generatedStorage.resolveVerified(
+        generated.storageKey,
+        generated.sha256,
+        Number(generated.byteSize),
+      );
+    throw new Error("CAPABILITY_V3_INPUT_NOT_MATERIALIZED");
+  };
+  const load = async (attemptId: string) => {
+    const attempt = await input.prisma.generationAttemptV3Record.findUnique({
+      where: { id: attemptId },
+    });
+    if (!attempt) return null;
+    const [consumption, snapshot] = await Promise.all([
+      input.prisma.authorizationConsumptionV3Record.findUnique({
+        where: { id: attempt.authorizationConsumptionId },
+      }),
+      input.prisma.materializedGraphSnapshotV3Record.findUnique({
+        where: { materializedGraphSha256: attempt.materializedGraphSha256 },
+      }),
+    ]);
+    if (!consumption || !snapshot || !attempt.providerTaskId) return null;
+    const frozen = MaterializedGraphSnapshotV3Schema.parse(snapshot.payloadJson);
+    return {
+      attemptId: attempt.id,
+      attemptState: attempt.state,
+      authorizationConsumptionId: consumption.id,
+      authorizationOperation: consumption.operation as "SUBMIT",
+      authorizationAttemptId: consumption.attemptId,
+      providerTaskId: attempt.providerTaskId,
+      referencePlanDigest: frozen.referencePlanDigest,
+      materializedGraphSha256: frozen.materializedGraphSha256,
+      capabilityEnvelopeDigest: frozen.capabilityEnvelopeDigest,
+      runtimeContractDigest: frozen.runtimeContractDigest,
+      validationStatus: frozen.validation.status as "VALID",
+      materializedGraph: frozen.materializedGraph,
+      outputNodeId: frozen.outputNodeId,
+      outputMediaKey: frozen.outputMediaKey,
+      inputs: await Promise.all(
+        frozen.stagedInputs.map(async (item) => ({
+          localPath: await resolveInput(attempt.projectId, item.sha256),
+          sha256: item.sha256,
+          stagedInputName: item.stagedInputName,
+        })),
+      ),
+    };
+  };
+  return {
+    async loadForSubmission(identity) {
+      return load(identity.attemptId);
     },
     loadSubmitted: load,
   };

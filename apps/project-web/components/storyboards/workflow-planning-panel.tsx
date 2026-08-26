@@ -6,6 +6,7 @@ import {
   capabilityPurposeText,
   capabilityRequirementReasonText,
 } from "../i18n/language-provider";
+import { CapabilityV3BatchReview } from "./capability-v3-batch-review";
 
 type Shot = { shotKey: string; ordinal: number };
 
@@ -98,6 +99,9 @@ interface CapabilityPlanningPreview {
     implementationRef: { id: string; version: string };
     implementationLifecycle: string;
     generationSpecRef: { id: string; version: string };
+    referencePlanDigest: string | null;
+    materializedGraphSha256: string | null;
+    graphValidationStatus: "VALID" | null;
   }>;
   externalCalls: 0;
   generationAuthorized: false;
@@ -184,6 +188,13 @@ export function CapabilityWorkflowPlanningPanel({
 }) {
   const locale = isChinese ? "zh-CN" : "en";
   const [selectedShotIds, setSelectedShotIds] = useState(() => shots.map((shot) => shot.id));
+  const [hailuoParameters, setHailuoParameters] = useState<
+    Record<string, { aspectRatio: string; resolution: "768P" | "2K" }>
+  >(() =>
+    Object.fromEntries(
+      shots.map((shot) => [shot.id, { aspectRatio: "adaptive", resolution: "768P" as const }]),
+    ),
+  );
   const [preview, setPreview] = useState<CapabilityPlanningPreview | null>(null);
   const [selectedForExecution, setSelectedForExecution] = useState<string[]>([]);
   const [executionPreview, setExecutionPreview] = useState<CapabilityExecutionPreview | null>(null);
@@ -195,6 +206,24 @@ export function CapabilityWorkflowPlanningPanel({
   const [error, setError] = useState("");
   const trialApprovalKey = useRef<string | null>(null);
   const trialRevocationKeys = useRef(new Map<string, string>());
+  const shotIdentityKey = shots.map((shot) => shot.id).join(":");
+
+  useEffect(() => {
+    const currentIds = new Set(shots.map((shot) => shot.id));
+    setSelectedShotIds((current) => current.filter((shotId) => currentIds.has(shotId)));
+    setSelectedForExecution((current) => current.filter((shotId) => currentIds.has(shotId)));
+    setHailuoParameters((current) =>
+      Object.fromEntries(
+        shots.map((shot) => [
+          shot.id,
+          current[shot.id] ?? { aspectRatio: "adaptive", resolution: "768P" as const },
+        ]),
+      ),
+    );
+    setPreview(null);
+    setExecutionPreview(null);
+    setConfirmed(false);
+  }, [shotIdentityKey]);
 
   async function loadTrialScopeHistory() {
     const response = await fetch(
@@ -223,6 +252,12 @@ export function CapabilityWorkflowPlanningPanel({
         shotIds: selectedShotIds,
         storyboardRevisionRefs: [{ id: storyboardVersionId, version: storyboardRevisionVersion }],
         optionalOwnerConstraints: [],
+        hailuo03Parameters: selectedShotIds.map((shotId) => ({
+          shotId,
+          aspectRatio: hailuoParameters[shotId]?.aspectRatio ?? "adaptive",
+          resolution: hailuoParameters[shotId]?.resolution ?? "768P",
+          watermark: false,
+        })),
       }),
     });
     const body = (await response.json()) as CapabilityPlanningPreview & {
@@ -397,21 +432,62 @@ export function CapabilityWorkflowPlanningPanel({
       </div>
       <div className="workflowPreferenceGrid">
         {shots.map((shot) => (
-          <label key={shot.id}>
-            <input
-              type="checkbox"
-              checked={selectedShotIds.includes(shot.id)}
+          <div key={shot.id}>
+            <label>
+              <input
+                type="checkbox"
+                checked={selectedShotIds.includes(shot.id)}
+                onChange={(event) => {
+                  setSelectedShotIds((current) =>
+                    event.target.checked
+                      ? [...current, shot.id]
+                      : current.filter((shotId) => shotId !== shot.id),
+                  );
+                  setPreview(null);
+                }}
+              />
+              {isChinese ? `镜头 ${shot.ordinal}` : `Shot ${shot.ordinal}`}
+            </label>
+            <select
+              aria-label={isChinese ? `镜头 ${shot.ordinal} 比例` : `Shot ${shot.ordinal} ratio`}
+              value={hailuoParameters[shot.id]?.aspectRatio ?? "adaptive"}
               onChange={(event) => {
-                setSelectedShotIds((current) =>
-                  event.target.checked
-                    ? [...current, shot.id]
-                    : current.filter((shotId) => shotId !== shot.id),
-                );
+                setHailuoParameters((current) => ({
+                  ...current,
+                  [shot.id]: {
+                    aspectRatio: event.target.value,
+                    resolution: current[shot.id]?.resolution ?? "768P",
+                  },
+                }));
                 setPreview(null);
               }}
-            />
-            {isChinese ? `镜头 ${shot.ordinal}` : `Shot ${shot.ordinal}`}
-          </label>
+            >
+              {["adaptive", "16:9", "4:3", "1:1", "3:4", "9:16", "21:9"].map((ratio) => (
+                <option key={ratio} value={ratio}>
+                  {ratio}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label={
+                isChinese ? `镜头 ${shot.ordinal} 分辨率` : `Shot ${shot.ordinal} resolution`
+              }
+              value={hailuoParameters[shot.id]?.resolution ?? "768P"}
+              onChange={(event) => {
+                setHailuoParameters((current) => ({
+                  ...current,
+                  [shot.id]: {
+                    aspectRatio: current[shot.id]?.aspectRatio ?? "adaptive",
+                    resolution: event.target.value as "768P" | "2K",
+                  },
+                }));
+                setPreview(null);
+              }}
+            >
+              <option value="768P">768P</option>
+              <option value="2K">2K</option>
+            </select>
+          </div>
         ))}
       </div>
       <button
@@ -609,6 +685,9 @@ export function CapabilityWorkflowPlanningPanel({
                     {shot.requirements.map((item) => item.reasonCode).join(" · ")}
                   </p>
                   <p>Blocker codes · {shot.blockerCodes.join(" · ") || "NONE"}</p>
+                  <p>ReferencePlan · {shot.referencePlanDigest ?? "NOT_MATERIALIZED"}</p>
+                  <p>Materialized Graph · {shot.materializedGraphSha256 ?? "NOT_MATERIALIZED"}</p>
+                  <p>Graph validation · {shot.graphValidationStatus ?? "NOT_VALIDATED"}</p>
                 </div>
               </details>
             </article>
@@ -727,6 +806,13 @@ export function CapabilityWorkflowPlanningPanel({
               </p>
             )}
           </section>
+          {batch && (
+            <CapabilityV3BatchReview
+              batchId={batch.id}
+              storyboardVersionId={storyboardVersionId}
+              isChinese={isChinese}
+            />
+          )}
         </div>
       )}
     </section>

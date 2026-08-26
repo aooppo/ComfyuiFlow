@@ -6,6 +6,8 @@ import {
   WorkflowPlanningRequestSchema,
   type GenerationImplementationV2,
   type GenerationSpecV3,
+  type MaterializedGraphSnapshotV3,
+  type ReferencePlanV3,
   type RequirementPurposeV3Schema,
   type ShotRequirementSpecV2,
   type VersionRefV2,
@@ -26,9 +28,16 @@ import {
 import { CapabilityRegistryLoader } from "./capability-registry.js";
 import { resolveCapabilityCandidatesV2 } from "./capability-resolver-v2.js";
 import { CapabilityCompilerRegistry } from "./compiler-registry.js";
+import {
+  HAILUO03_DYNAMIC_COMPILER_REF,
+  materializeHailuo03ReferenceGraph,
+  type MaterializedHailuo03GraphV3,
+} from "./compilers/hailuo03.js";
+import { freezeHailuo03GraphSnapshot } from "./hailuo03-graph-validator.js";
 import { selectCapabilityImplementationV2 } from "./implementation-selector-v2.js";
 import { gatherPlanningInputCandidates } from "./planning-input-service.js";
 import { createPlanningInputSnapshotV3 } from "./planning-snapshot-service.js";
+import { buildReferencePlanV3 } from "./reference-plan-v3.js";
 import {
   analyzeShotRequirementsV3,
   type NormalizedShotSemanticsV3,
@@ -475,6 +484,13 @@ function outputDimensions(aspectRatio: string) {
   return { width: 1080, height: 1920 };
 }
 
+function hailuoAspectRatio(aspectRatio: string) {
+  if (aspectRatio === "LANDSCAPE_16_9") return "16:9" as const;
+  if (aspectRatio === "SQUARE_1_1") return "1:1" as const;
+  if (aspectRatio === "PORTRAIT_4_5") return "3:4" as const;
+  return "9:16" as const;
+}
+
 /**
  * Feature 016 planning path. It starts from a saved current Storyboard head and creates immutable
  * per-Shot lineage. It deliberately has no Storyboard/Shot-Plan approval or execution authority.
@@ -633,6 +649,9 @@ export class CapabilityWorkflowPlanningApplicationService {
       current.push(constraint.purpose);
       constraints.set(constraint.shotId, current);
     }
+    const hailuoParameters = new Map(
+      (request.hailuo03Parameters ?? []).map((parameter) => [parameter.shotId, parameter]),
+    );
 
     const registry = await this.registryLoader.load();
     const activeTrialItemsByShot = await new TrialScopeApprovalService(
@@ -648,6 +667,8 @@ export class CapabilityWorkflowPlanningApplicationService {
       blockerCodes: string[];
       requirement: ReturnType<typeof analyzeShotRequirementsV3>;
       snapshot: ReturnType<typeof createPlanningInputSnapshotV3>;
+      referencePlan: ReferencePlanV3 | null;
+      graphSnapshot: MaterializedGraphSnapshotV3 | null;
     }> = [];
 
     for (const shot of shots) {
@@ -785,33 +806,6 @@ export class CapabilityWorkflowPlanningApplicationService {
         resolution.rejected.find(
           (item) => capabilityRefKey(item.implementationRef) === capabilityRefKey(implementation),
         )?.reasonCodes ?? [];
-      let compiledRequestDigest: string;
-      let compilerBlocker: string | null = null;
-      try {
-        compiledRequestDigest = this.compilerRegistry.compile(compilerProfile, {
-          compilerRef: implementation.compilerRef,
-          prompt: generationIntent.prompt,
-          durationSeconds: generationIntent.durationSeconds,
-          bindings: snapshot.bindings.map(
-            ({ sourceRef, sha256, modality, order, roleLabel, necessity }) => ({
-              sourceRef,
-              sha256,
-              modality,
-              order,
-              roleLabel,
-              necessity,
-            }),
-          ),
-        }).compiledRequestDigest;
-      } catch {
-        compilerBlocker = "INPUT_CONTRACT_UNSATISFIED";
-        compiledRequestDigest = canonicalSha256({
-          compilerRef: implementation.compilerRef,
-          generationIntent,
-          snapshotHash: snapshot.snapshotHash,
-          blockerCode: compilerBlocker,
-        });
-      }
       const inputHash = canonicalSha256({
         requirementHash: requirement.requirementHash,
         snapshotHash: snapshot.snapshotHash,
@@ -821,14 +815,88 @@ export class CapabilityWorkflowPlanningApplicationService {
         storyboardRevisionRef: expectedRevisionRef,
         continuityRequirements: shot.continuityRequirements,
       });
+      const generationSpecId = deterministicUuid({
+        kind: "generation-spec-v3",
+        shotId: shot.id,
+        inputHash,
+        dependencyHash,
+        implementationRef: { id: implementation.id, version: implementation.version },
+      });
+      let compiledRequestDigest: string;
+      let compilerBlocker: string | null = null;
+      let referencePlan: ReferencePlanV3 | null = null;
+      let materialized: MaterializedHailuo03GraphV3 | null = null;
+      try {
+        if (
+          capabilityRefKey(implementation.compilerRef) ===
+          capabilityRefKey(HAILUO03_DYNAMIC_COMPILER_REF)
+        ) {
+          if (
+            !Number.isInteger(generationIntent.durationSeconds) ||
+            generationIntent.durationSeconds < 4 ||
+            generationIntent.durationSeconds > 15
+          )
+            throw new Error("HAILUO_DURATION_UNSUPPORTED");
+          const parameters = hailuoParameters.get(shot.id);
+          const seed =
+            parameters?.seed ??
+            Number.parseInt(canonicalSha256({ shotId: shot.id, inputHash }).slice(0, 8), 16);
+          referencePlan = buildReferencePlanV3({
+            shotId: shot.id,
+            storyboardVersionId: version.id,
+            generationSpecId,
+            implementationRef: { id: implementation.id, version: implementation.version },
+            compilerRef: implementation.compilerRef,
+            durationSeconds: generationIntent.durationSeconds,
+            aspectRatio:
+              parameters?.aspectRatio ?? hailuoAspectRatio(version.project.targetAspectRatio),
+            resolution: parameters?.resolution ?? "768P",
+            seed,
+            watermark: parameters?.watermark ?? false,
+            prompt: generationIntent.prompt,
+            bindings: snapshot.bindings,
+          });
+          materialized = materializeHailuo03ReferenceGraph(referencePlan);
+          compiledRequestDigest = materialized.compiledRequestDigest;
+        } else {
+          compiledRequestDigest = this.compilerRegistry.compile(compilerProfile, {
+            compilerRef: implementation.compilerRef,
+            prompt: generationIntent.prompt,
+            durationSeconds: generationIntent.durationSeconds,
+            bindings: snapshot.bindings.map(
+              ({ sourceRef, sha256, modality, order, roleLabel, necessity }) => ({
+                sourceRef,
+                sha256,
+                modality,
+                order,
+                roleLabel,
+                necessity,
+              }),
+            ),
+          }).compiledRequestDigest;
+        }
+      } catch (error) {
+        compilerBlocker =
+          error instanceof Error && /^[A-Z][A-Z0-9_]+$/.test(error.message)
+            ? error.message
+            : "INPUT_CONTRACT_UNSATISFIED";
+        compiledRequestDigest = canonicalSha256({
+          compilerRef: implementation.compilerRef,
+          generationIntent,
+          snapshotHash: snapshot.snapshotHash,
+          blockerCode: compilerBlocker,
+        });
+      }
       const versionDigest = canonicalSha256({
         inputHash,
         dependencyHash,
         implementationRef: { id: implementation.id, version: implementation.version },
         compiledRequestDigest,
+        referencePlanDigest: referencePlan?.referencePlanDigest ?? null,
+        materializedGraphSha256: materialized?.materializedGraphSha256 ?? null,
       });
       const withoutOutputHash = {
-        id: deterministicUuid({ kind: "generation-spec-v3", shotId: shot.id, versionDigest }),
+        id: generationSpecId,
         version: versionDigest,
         shotId: shot.id,
         storyboardRevisionRef: expectedRevisionRef,
@@ -845,7 +913,7 @@ export class CapabilityWorkflowPlanningApplicationService {
         expectedOutput: {
           mediaType: "video/mp4" as const,
           ...outputDimensions(version.project.targetAspectRatio),
-          fps: 30,
+          fps: materialized ? 24 : 30,
         },
         inputHash,
         dependencyHash,
@@ -856,6 +924,16 @@ export class CapabilityWorkflowPlanningApplicationService {
           outputHash: canonicalSha256(withoutOutputHash),
         }),
       );
+      let graphSnapshot: MaterializedGraphSnapshotV3 | null = null;
+      if (referencePlan && materialized)
+        graphSnapshot = freezeHailuo03GraphSnapshot({
+          plan: referencePlan,
+          materialized,
+          generationSpecRef: { id: generationSpec.id, version: generationSpec.version },
+          implementationRef: generationSpec.implementationRef,
+          adapterRef: generationSpec.adapterRef,
+          runtimeRef: generationSpec.runtimeRef,
+        });
       const matchingTrialScope =
         implementation.lifecycle !== "TRIAL" ||
         (shotTrialItems.get(capabilityRefKey(implementation)) ?? []).some(
@@ -876,6 +954,13 @@ export class CapabilityWorkflowPlanningApplicationService {
         storyboardVersionId: version.id,
         spec: generationSpec,
       });
+      if (referencePlan && graphSnapshot)
+        await repository.persistDynamicGraph({
+          projectId: version.projectId,
+          storyboardVersionId: version.id,
+          referencePlan,
+          snapshot: graphSnapshot,
+        });
       const blockerCodes = [
         ...new Set([
           ...unresolvedRequirementCodes,
@@ -902,6 +987,8 @@ export class CapabilityWorkflowPlanningApplicationService {
         blockerCodes,
         requirement,
         snapshot,
+        referencePlan,
+        graphSnapshot,
       });
     }
 
@@ -958,6 +1045,8 @@ export class CapabilityWorkflowPlanningApplicationService {
           blockerCodes,
           requirement,
           snapshot,
+          referencePlan,
+          graphSnapshot,
         }) => ({
           shotId: shot.id,
           shotKey: shot.shotKey,
@@ -972,6 +1061,9 @@ export class CapabilityWorkflowPlanningApplicationService {
           implementationLifecycle: implementation.lifecycle,
           generationSpecRef: { id: generationSpec.id, version: generationSpec.version },
           compiledRequestDigest: generationSpec.compiledRequestDigest,
+          referencePlanDigest: referencePlan?.referencePlanDigest ?? null,
+          materializedGraphSha256: graphSnapshot?.materializedGraphSha256 ?? null,
+          graphValidationStatus: graphSnapshot?.validation.status ?? null,
         }),
       ),
       externalCalls: 0 as const,

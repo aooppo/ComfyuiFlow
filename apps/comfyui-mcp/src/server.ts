@@ -3,6 +3,7 @@ import * as z from "zod/v4";
 import {
   ComfyUiExecutionPlanService,
   ComfyUiExecutionService,
+  ComfyUiCapabilityV3ExecutionService,
   allowlistedNodeInfo,
   captureNodeCatalog,
   checkWorkflowReadiness,
@@ -10,6 +11,7 @@ import {
 import type {
   ComfyUiClient,
   ComfyUiExecutionPlanStore,
+  ComfyUiCapabilityV3ExecutionStore,
   WorkflowRegistry,
 } from "@comfyuiflow/comfyui-bridge";
 import { AuthorizationService } from "@comfyuiflow/spike-core";
@@ -21,6 +23,12 @@ export interface ComfyUiMcpDependencies {
   dataRoot: string;
   allowedInputRoots?: string[];
   executionPlanStore?: ComfyUiExecutionPlanStore;
+  capabilityV3ExecutionStore?: ComfyUiCapabilityV3ExecutionStore;
+  capabilityV3RuntimeContract?: {
+    capabilityEnvelopeDigest: string;
+    runtimeContractDigest: string;
+    nodeClasses: string[];
+  };
   executionWorkflowId?: string;
   executionAdapterId?: string;
   executionAdapterVersion?: string;
@@ -61,6 +69,29 @@ export function createComfyUiMcpServer(dependencies: ComfyUiMcpDependencies): Mc
         },
       })
     : null;
+  const capabilityV3 =
+    dependencies.capabilityV3ExecutionStore && dependencies.capabilityV3RuntimeContract
+      ? new ComfyUiCapabilityV3ExecutionService({
+          store: dependencies.capabilityV3ExecutionStore,
+          execution,
+          async recheckRuntimeContract(identity) {
+            const expected = dependencies.capabilityV3RuntimeContract!;
+            if (
+              identity.capabilityEnvelopeDigest !== expected.capabilityEnvelopeDigest ||
+              identity.runtimeContractDigest !== expected.runtimeContractDigest
+            )
+              return { ready: false, blockers: ["CAPABILITY_V3_RUNTIME_CONTRACT_DRIFT"] };
+            const catalog = await captureNodeCatalog(dependencies.client, expected.nodeClasses);
+            const missing = expected.nodeClasses.filter(
+              (className) => !allowlistedNodeInfo(catalog, className),
+            );
+            return {
+              ready: missing.length === 0,
+              blockers: missing.map((className) => `NODE_CLASS_UNAVAILABLE:${className}`),
+            };
+          },
+        })
+      : null;
 
   const nodeClasses = async () =>
     [
@@ -183,6 +214,53 @@ export function createComfyUiMcpServer(dependencies: ComfyUiMcpDependencies): Mc
     async (input) => {
       if (!executionPlans) throw new Error("Execution-plan store is unavailable");
       return result(await executionPlans.submit(input));
+    },
+  );
+
+  server.registerTool(
+    "comfyui_submit_capability_v3_attempt",
+    {
+      description:
+        "Submit one authorized Capability V3 Attempt by immutable database identity; raw graph input is forbidden",
+      inputSchema: {
+        attemptId: z.string().uuid(),
+        authorizationConsumptionId: z.string().uuid(),
+        referencePlanDigest: z.string().regex(/^[a-f0-9]{64}$/),
+        materializedGraphSha256: z.string().regex(/^[a-f0-9]{64}$/),
+        capabilityEnvelopeDigest: z.string().regex(/^[a-f0-9]{64}$/),
+        runtimeContractDigest: z.string().regex(/^[a-f0-9]{64}$/),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true },
+    },
+    async (identity) => {
+      if (!capabilityV3) throw new Error("Capability V3 execution store is unavailable");
+      return result(await capabilityV3.submit(identity));
+    },
+  );
+
+  server.registerTool(
+    "comfyui_get_capability_v3_attempt_status",
+    {
+      description: "Read one submitted Capability V3 Attempt status",
+      inputSchema: { attemptId: z.string().uuid() },
+      annotations: { readOnlyHint: true, destructiveHint: false },
+    },
+    async ({ attemptId }) => {
+      if (!capabilityV3) throw new Error("Capability V3 execution store is unavailable");
+      return result(await capabilityV3.status(attemptId));
+    },
+  );
+
+  server.registerTool(
+    "comfyui_retain_capability_v3_artifacts",
+    {
+      description: "Retain artifacts for one completed Capability V3 Attempt",
+      inputSchema: { attemptId: z.string().uuid() },
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    },
+    async ({ attemptId }) => {
+      if (!capabilityV3) throw new Error("Capability V3 execution store is unavailable");
+      return result({ artifacts: await capabilityV3.retain(attemptId) });
     },
   );
 

@@ -11,7 +11,9 @@ import {
   GenerationExecutionPreviewV3Schema,
   GenerationPlanV3Schema,
   GenerationSpecV3Schema,
+  MaterializedGraphSnapshotV3Schema,
   PlanningInputSnapshotV3Schema,
+  ReferencePlanV3Schema,
 } from "@comfyuiflow/contracts";
 import { canonicalSha256 } from "./canonical-json.js";
 import { ProjectAssetError } from "./contracts.js";
@@ -98,6 +100,18 @@ export class GenerationExecutionService {
       },
     });
     const snapshotById = new Map(snapshotRecords.map((item) => [item.id, item]));
+    const dynamicReferenceRecords = await this.client.referencePlanV3Record.findMany({
+      where: { generationSpecId: { in: specRecords.map((item) => item.id) } },
+    });
+    const dynamicReferenceBySpecId = new Map(
+      dynamicReferenceRecords.map((item) => [item.generationSpecId, item]),
+    );
+    const dynamicGraphRecords = await this.client.materializedGraphSnapshotV3Record.findMany({
+      where: { generationSpecId: { in: specRecords.map((item) => item.id) } },
+    });
+    const dynamicGraphBySpecId = new Map(
+      dynamicGraphRecords.map((item) => [item.generationSpecId, item]),
+    );
     const storyboardShots = await this.client.storyboardShot.findMany({
       where: { id: { in: input.shotIds } },
       select: { id: true, ordinal: true, storyboardVersionId: true },
@@ -168,19 +182,58 @@ export class GenerationExecutionService {
           `${implementation.compilerRef.id}@${implementation.compilerRef.version}` ===
             `${spec.compilerRef.id}@${spec.compilerRef.version}`;
         if (!exactComposition) blockers.push("IMPLEMENTATION_VERSION_MISMATCH");
-        const compiled = compilerRegistry.compile(compiler, {
-          compilerRef: spec.compilerRef,
-          prompt: spec.generationIntent.prompt,
-          durationSeconds: spec.generationIntent.durationSeconds,
-          bindings: snapshot.bindings.map((binding) => ({
-            sourceRef: binding.sourceRef,
-            sha256: binding.sha256,
-            modality: binding.modality,
-            order: binding.order,
-            roleLabel: binding.roleLabel,
-            necessity: binding.necessity,
-          })),
-        });
+        let compiled: { compiledRequestDigest: string };
+        if (compiler.compilerKey === "hailuo03-reference-dynamic-v3") {
+          const referenceRecord = dynamicReferenceBySpecId.get(spec.id);
+          const graphRecord = dynamicGraphBySpecId.get(spec.id);
+          if (!referenceRecord || !graphRecord)
+            throw this.error(
+              "GENERATION_PLAN_STALE",
+              "The frozen dynamic ReferencePlan or graph snapshot is missing",
+              409,
+            );
+          try {
+            const referencePlan = ReferencePlanV3Schema.parse(referenceRecord.payloadJson);
+            const graphSnapshot = MaterializedGraphSnapshotV3Schema.parse(graphRecord.payloadJson);
+            if (
+              referencePlan.generationSpecId !== spec.id ||
+              referencePlan.referencePlanDigest !== graphSnapshot.referencePlanDigest ||
+              graphSnapshot.generationSpecRef.id !== spec.id ||
+              graphSnapshot.generationSpecRef.version !== spec.version ||
+              graphSnapshot.materializedGraphSha256 !== graphRecord.materializedGraphSha256 ||
+              graphSnapshot.validation.status !== "VALID"
+            )
+              throw new Error("DYNAMIC_GRAPH_LINEAGE_MISMATCH");
+            const replayed = compilerRegistry.compile(compiler, referencePlan) as {
+              compiledRequestDigest: string;
+              materializedGraphSha256: string;
+            };
+            if (replayed.materializedGraphSha256 !== graphSnapshot.materializedGraphSha256)
+              blockers.push("MATERIALIZED_GRAPH_DIGEST_MISMATCH");
+            compiled = replayed;
+          } catch (error) {
+            if (error instanceof ProjectAssetError) throw error;
+            throw this.error(
+              "GENERATION_PLAN_STALE",
+              "The frozen dynamic graph can no longer be validated",
+              409,
+            );
+          }
+        } else {
+          compiled = compilerRegistry.compile(compiler, {
+            compilerRef: spec.compilerRef,
+            prompt: spec.generationIntent.prompt,
+            durationSeconds: spec.generationIntent.durationSeconds,
+            bindings: snapshot.bindings.map((binding) => ({
+              sourceRef: binding.sourceRef,
+              sha256: binding.sha256,
+              modality: binding.modality,
+              order: binding.order,
+              roleLabel: binding.roleLabel,
+              necessity: binding.necessity,
+            })),
+          });
+        }
         if (compiled.compiledRequestDigest !== spec.compiledRequestDigest)
           blockers.push("COMPILED_REQUEST_DIGEST_MISMATCH");
         if (implementation.costPolicy.kind === "MONETARY") {
@@ -1018,6 +1071,17 @@ export class GenerationExecutionService {
     });
     if (!batch)
       throw this.error("GENERATION_TARGET_INVALID", "Generation Batch V3 was not found", 404);
+    const attempts = await this.client.generationAttemptV3Record.findMany({
+      where: { generationBatchTargetId: { in: batch.targets.map((target) => target.id) } },
+      orderBy: [{ attemptNumber: "asc" }, { createdAt: "asc" }],
+    });
+    const artifacts = await this.client.generationArtifactV3Record.findMany({
+      where: { attemptId: { in: attempts.map((attempt) => attempt.id) } },
+    });
+    const decisions = await this.client.generationOwnerDecisionV3Record.findMany({
+      where: { artifactId: { in: artifacts.map((artifact) => artifact.id) } },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
     return {
       schemaVersion: "capability-generation-batch-v3" as const,
       id: batch.id,
@@ -1041,22 +1105,57 @@ export class GenerationExecutionService {
         noRetry: batch.authorization.noRetry,
         noFallback: batch.authorization.noFallback,
       },
-      targets: batch.targets.map((target) => ({
-        id: target.id,
-        shotId: target.shotId,
-        generationSpecId: target.generationSpecId,
-        ordinal: target.ordinal,
-        targetDigest: target.targetDigest,
-        implementationRef: {
-          id: target.implementationKey,
-          version: target.implementationVersion,
-        },
-        adapterRef: { id: target.adapterKey, version: target.adapterVersion },
-        compilerRef: { id: target.compilerKey, version: target.compilerVersion },
-        state: target.state,
-        safeResultCode: target.safeResultCode,
-        providerCallCount: target.providerCallCount,
-      })),
+      targets: batch.targets.map((target) => {
+        const targetAttempts = attempts.filter(
+          (attempt) => attempt.generationBatchTargetId === target.id,
+        );
+        return {
+          id: target.id,
+          shotId: target.shotId,
+          generationSpecId: target.generationSpecId,
+          ordinal: target.ordinal,
+          targetDigest: target.targetDigest,
+          implementationRef: {
+            id: target.implementationKey,
+            version: target.implementationVersion,
+          },
+          adapterRef: { id: target.adapterKey, version: target.adapterVersion },
+          compilerRef: { id: target.compilerKey, version: target.compilerVersion },
+          state: target.state,
+          safeResultCode: target.safeResultCode,
+          providerCallCount: target.providerCallCount,
+          attempts: targetAttempts.map((attempt) => {
+            const artifact = artifacts.find((item) => item.attemptId === attempt.id);
+            return {
+              id: attempt.id,
+              attemptNumber: attempt.attemptNumber,
+              state: attempt.state,
+              safeResultCode: attempt.safeResultCode,
+              materializedGraphSha256: attempt.materializedGraphSha256,
+              providerCallCount: attempt.providerCallCount,
+              artifact: artifact
+                ? {
+                    id: artifact.id,
+                    technicalStatus: artifact.technicalStatus,
+                    technicalResultCode: artifact.technicalResultCode,
+                    aiQaStatus: artifact.aiQaStatus,
+                    contentUrl: `/api/capability-v3-artifacts/${artifact.id}/content`,
+                    reviewUrl: `/api/capability-v3-artifacts/${artifact.id}`,
+                    decisions: decisions
+                      .filter((decision) => decision.artifactId === artifact.id)
+                      .map((decision) => ({
+                        id: decision.id,
+                        decision: decision.decision,
+                        reasonCode: decision.reasonCode,
+                        notes: decision.notes,
+                        createdAt: decision.createdAt.toISOString(),
+                      })),
+                  }
+                : null,
+            };
+          }),
+        };
+      }),
       createdAt: batch.createdAt.toISOString(),
     };
   }
@@ -1494,6 +1593,11 @@ export class GenerationExecutionService {
   }
 
   async getBatch(batchId: string): Promise<any> {
+    const capabilityV3 = await this.client.generationBatchV3Record.findUnique({
+      where: { id: batchId },
+      select: { id: true },
+    });
+    if (capabilityV3) return this.getBatchV3(batchId);
     await this.finishBatchIfTerminal(batchId);
     const batch = await this.client.generationBatch.findUnique({
       where: { id: batchId },

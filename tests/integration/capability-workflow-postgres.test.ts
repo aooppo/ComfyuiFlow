@@ -15,7 +15,7 @@ describe.runIf(enabled)("Capability workflow PostgreSQL foundation", () => {
     }
     client = (await import("@comfyuiflow/project-core")).prisma;
     await client.$executeRawUnsafe(
-      'TRUNCATE TABLE "TrialScopeRevocation", "TrialScopeApprovalItem", "TrialScopeApproval", "GenerationBatchTargetV3Record", "GenerationBatchV3Record", "CapabilityImplementationEvidence", "CapabilityRegistryPublication", "CapabilityDiscoveryCandidate", "GenerationAuthorizationV3Record", "GenerationPlanV3Record", "GenerationSpecV3Record", "PlanningInputSnapshotV3Record", "ShotRequirementSpecV3Record", "CapabilityGenerationImplementation", "CapabilityCompilerProfile", "CapabilityAdapterProfile", "CapabilityModelProfile", "CapabilityProviderProfile", "CapabilityRuntimeProfile", "ShotAssetBinding", "AssetResolutionManifest", "ShotAssetRequirement", "StoryboardShot", "StoryboardVersion", "Storyboard", "AssetVersionFile", "ProductionAssetVersion", "ProductionAsset", "Asset", "StoredObject", "Project" CASCADE',
+      'TRUNCATE TABLE "GenerationAssemblySourceV3Record", "GenerationAssemblyV3Record", "GenerationRetryPreviewV3Record", "GenerationOwnerDecisionV3Record", "GenerationArtifactV3Record", "GenerationAttemptV3Record", "AuthorizationConsumptionV3Record", "MaterializedGraphSnapshotV3Record", "ReferencePlanV3Record", "TrialScopeRevocation", "TrialScopeApprovalItem", "TrialScopeApproval", "GenerationBatchTargetV3Record", "GenerationBatchV3Record", "CapabilityImplementationEvidence", "CapabilityRegistryPublication", "CapabilityDiscoveryCandidate", "GenerationAuthorizationV3Record", "GenerationPlanV3Record", "GenerationSpecV3Record", "PlanningInputSnapshotV3Record", "ShotRequirementSpecV3Record", "CapabilityGenerationImplementation", "CapabilityCompilerProfile", "CapabilityAdapterProfile", "CapabilityModelProfile", "CapabilityProviderProfile", "CapabilityRuntimeProfile", "ShotAssetBinding", "AssetResolutionManifest", "ShotAssetRequirement", "StoryboardShot", "StoryboardVersion", "Storyboard", "AssetVersionFile", "ProductionAssetVersion", "ProductionAsset", "Asset", "StoredObject", "Project" CASCADE',
     );
   });
 
@@ -32,10 +32,14 @@ describe.runIf(enabled)("Capability workflow PostgreSQL foundation", () => {
           'ShotRequirementSpecV3Record', 'PlanningInputSnapshotV3Record',
           'GenerationSpecV3Record', 'GenerationPlanV3Record', 'GenerationAuthorizationV3Record',
           'GenerationBatchV3Record', 'GenerationBatchTargetV3Record', 'TrialScopeApproval',
-          'TrialScopeApprovalItem', 'TrialScopeRevocation')
+          'TrialScopeApprovalItem', 'TrialScopeRevocation', 'ReferencePlanV3Record',
+          'MaterializedGraphSnapshotV3Record', 'AuthorizationConsumptionV3Record',
+          'GenerationAttemptV3Record', 'GenerationArtifactV3Record',
+          'GenerationOwnerDecisionV3Record', 'GenerationRetryPreviewV3Record',
+          'GenerationAssemblyV3Record', 'GenerationAssemblySourceV3Record')
        ORDER BY table_name`,
     );
-    expect(tables).toHaveLength(19);
+    expect(tables).toHaveLength(28);
     await expect(
       client.$queryRawUnsafe(`SELECT COUNT(*)::int AS count FROM "GenerationSpec"`),
     ).resolves.toEqual([expect.objectContaining({ count: expect.any(Number) })]);
@@ -196,9 +200,12 @@ describe.runIf(enabled)("Capability workflow PostgreSQL foundation", () => {
     );
   });
 
-  it("keeps a bound READY Shot independent from a blocked Shot and supersedes snapshots", async () => {
-    const { CapabilityRegistryLoader, CapabilityWorkflowPlanningApplicationService } =
-      await import("@comfyuiflow/project-core");
+  it("keeps a scoped bound TRIAL Shot independent from a blocked Shot and supersedes snapshots", async () => {
+    const {
+      CapabilityRegistryLoader,
+      CapabilityWorkflowPlanningApplicationService,
+      TrialScopeApprovalService,
+    } = await import("@comfyuiflow/project-core");
     const project = await client.project.create({
       data: {
         name: "Capability planning isolation",
@@ -392,11 +399,25 @@ describe.runIf(enabled)("Capability workflow PostgreSQL foundation", () => {
       storyboardRevisionRefs: [{ id: version.id, version: version.contentHash }],
       optionalOwnerConstraints: [],
     };
+    const initial = await service.previewAndPersistStoryboard(version.id, baseRequest);
+    expect(initial.counts).toEqual({ ready: 0, trial: 0, blocked: 2 });
+    expect(initial.shots.map((shot) => shot.planningOutcome)).toEqual(["BLOCKED", "BLOCKED"]);
+    expect(initial.shots).toHaveLength(2);
+    expect(new Set(initial.shots.map((shot) => shot.generationSpecRef.id)).size).toBe(2);
+    await new TrialScopeApprovalService(client).create(
+      version.id,
+      {
+        schemaVersion: "trial-scope-approval-create-request-v3",
+        generationPlanId: initial.planId,
+        selectedShotIds: [shots[0]!.id],
+        expiresInSeconds: 1_800,
+        confirmed: true,
+      },
+      `trial-bound-${randomUUID()}`,
+    );
     const first = await service.previewAndPersistStoryboard(version.id, baseRequest);
-    expect(first.counts).toEqual({ ready: 1, trial: 0, blocked: 1 });
-    expect(first.shots.map((shot) => shot.planningOutcome)).toEqual(["READY", "BLOCKED"]);
-    expect(first.shots).toHaveLength(2);
-    expect(new Set(first.shots.map((shot) => shot.generationSpecRef.id)).size).toBe(2);
+    expect(first.counts).toEqual({ ready: 0, trial: 1, blocked: 1 });
+    expect(first.shots.map((shot) => shot.planningOutcome)).toEqual(["TRIAL", "BLOCKED"]);
     await expect(
       client.generationSpecV3Record.count({ where: { projectId: project.id } }),
     ).resolves.toBe(2);
@@ -419,13 +440,28 @@ describe.runIf(enabled)("Capability workflow PostgreSQL foundation", () => {
       }),
     ).resolves.toMatchObject({ payloadJson: originalPayload });
 
+    const automaticallyBoundInitial = await service.previewAndPersistStoryboard(version.id, {
+      ...baseRequest,
+      shotIds: [autoShot.id],
+    });
+    await new TrialScopeApprovalService(client).create(
+      version.id,
+      {
+        schemaVersion: "trial-scope-approval-create-request-v3",
+        generationPlanId: automaticallyBoundInitial.planId,
+        selectedShotIds: [autoShot.id],
+        expiresInSeconds: 1_800,
+        confirmed: true,
+      },
+      `trial-auto-${randomUUID()}`,
+    );
     const automaticallyBound = await service.previewAndPersistStoryboard(version.id, {
       ...baseRequest,
       shotIds: [autoShot.id],
     });
-    expect(automaticallyBound.counts).toEqual({ ready: 1, trial: 0, blocked: 0 });
+    expect(automaticallyBound.counts).toEqual({ ready: 0, trial: 1, blocked: 0 });
     expect(automaticallyBound.shots[0]).toMatchObject({
-      planningOutcome: "READY",
+      planningOutcome: "TRIAL",
       blockerCodes: [],
       bindings: [
         expect.objectContaining({
@@ -436,6 +472,26 @@ describe.runIf(enabled)("Capability workflow PostgreSQL foundation", () => {
         }),
       ],
     });
+    const dynamicSpecId = automaticallyBound.shots[0]!.generationSpecRef.id;
+    const frozenReference = await client.referencePlanV3Record.findUniqueOrThrow({
+      where: { generationSpecId: dynamicSpecId },
+    });
+    const frozenGraph = await client.materializedGraphSnapshotV3Record.findUniqueOrThrow({
+      where: { generationSpecId: dynamicSpecId },
+    });
+    expect(frozenGraph).toMatchObject({
+      referencePlanDigest: frozenReference.referencePlanDigest,
+      materializedGraphSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+    await expect(
+      client.referencePlanV3Record.update({
+        where: { id: frozenReference.id },
+        data: { referencePlanDigest: hash("9") },
+      }),
+    ).rejects.toThrow(/append-only/);
+    await expect(
+      client.materializedGraphSnapshotV3Record.delete({ where: { id: frozenGraph.id } }),
+    ).rejects.toThrow(/append-only/);
 
     const { GenerationExecutionService } = await import("@comfyuiflow/project-core");
     const execution = new GenerationExecutionService(client, undefined, {
@@ -503,6 +559,171 @@ describe.runIf(enabled)("Capability workflow PostgreSQL foundation", () => {
         client.generationBatchTargetV3Record.count(),
       ]),
     ).resolves.toEqual(rowCounts);
+
+    const { CapabilityGenerationWorkerV3 } = await import("@comfyuiflow/project-core");
+    const submitIdentities: Array<{ attemptId: string }> = [];
+    const artifactCalls: Array<{ attemptId: string }> = [];
+    const worker = new CapabilityGenerationWorkerV3(
+      {
+        submit: async (identity) => {
+          submitIdentities.push(identity);
+          const attempt = await client.generationAttemptV3Record.findUniqueOrThrow({
+            where: { id: identity.attemptId },
+          });
+          const consumption = await client.authorizationConsumptionV3Record.findUniqueOrThrow({
+            where: { attemptId: identity.attemptId },
+          });
+          const authorization = await client.generationAuthorizationV3Record.findUniqueOrThrow({
+            where: { id: consumption.authorizationId },
+          });
+          expect(attempt.state).toBe("SUBMITTING");
+          expect(consumption.consumedCalls).toBe(1);
+          expect(authorization.consumedCalls).toBe(1);
+          return { promptId: attempt.providerTaskId! };
+        },
+        status: async () => "COMPLETED",
+        retain: async () => [],
+      },
+      {
+        process: async ({ attemptId }) => {
+          artifactCalls.push({ attemptId });
+          return {
+            id: randomUUID(),
+            attemptId,
+            storageKey: "fake-transport/verified.mp4",
+            mediaType: "video/mp4",
+            bytes: 1,
+            sha256: hash("8"),
+            technicalStatus: "VERIFIED",
+            technicalResultCode: "VIDEO_TECHNICAL_PASS",
+            ffprobe: {
+              durationSeconds: 5,
+              width: 768,
+              height: 1344,
+              fps: 24,
+              codec: "h264",
+              container: "mp4",
+              probeVersion: "ffprobe-capability-v3",
+            },
+            reviewFrames: [],
+            aiQaStatus: "AI_QA_UNAVAILABLE",
+            ownerDecision: null,
+          };
+        },
+      },
+      client,
+    );
+    await expect(worker.runOnce()).resolves.toMatchObject({
+      state: "SUBMITTED",
+      providerCallCount: 1,
+    });
+    await expect(worker.runOnce()).resolves.toMatchObject({
+      state: "SUCCEEDED",
+      artifact: { aiQaStatus: "AI_QA_UNAVAILABLE" },
+    });
+    expect(submitIdentities).toHaveLength(1);
+    expect(artifactCalls).toHaveLength(1);
+    await expect(worker.runOnce()).resolves.toBeNull();
+    await expect(client.authorizationConsumptionV3Record.count()).resolves.toBe(1);
+    await expect(client.generationAttemptV3Record.findFirstOrThrow()).resolves.toMatchObject({
+      state: "SUCCEEDED",
+      providerCallCount: 1,
+      materializedGraphSha256: frozenGraph.materializedGraphSha256,
+    });
+
+    const ambiguousAuthorizationId = randomUUID();
+    const ambiguousBatchId = randomUUID();
+    const ambiguousTargetId = randomUUID();
+    const ambiguousScopeHash = hash("6");
+    const originalTarget = await client.generationBatchTargetV3Record.findFirstOrThrow({
+      where: { generationBatchId: created.id },
+    });
+    await client.$transaction(async (tx) => {
+      await tx.generationAuthorizationV3Record.create({
+        data: {
+          id: ambiguousAuthorizationId,
+          projectId: project.id,
+          generationPlanId: automaticallyBound.planId,
+          planDigest: executionPreview.planDigest,
+          scopeJson: { test: "ambiguous fake transport" },
+          scopeHash: ambiguousScopeHash,
+          expectedCalls: 1,
+          maximumCalls: 1,
+          consumedCalls: 0,
+          maximumCostMicros: executionPreview.maximumCostMicros,
+          expiresAt: new Date(Date.now() + 300_000),
+          noRetry: true,
+          noFallback: true,
+          state: "ACTIVE",
+        },
+      });
+      await tx.generationBatchV3Record.create({
+        data: {
+          id: ambiguousBatchId,
+          projectId: project.id,
+          generationPlanId: automaticallyBound.planId,
+          generationAuthorizationId: ambiguousAuthorizationId,
+          planDigest: executionPreview.planDigest,
+          previewHash: hash("7"),
+          scopeHash: ambiguousScopeHash,
+          selectedShotIdsJson: [autoShot.id],
+          expectedCalls: 1,
+          maximumCalls: 1,
+          maximumAiQaCalls: 0,
+          costPolicyDigest: executionPreview.costPolicyDigest,
+          maximumCostMicros: executionPreview.maximumCostMicros,
+          currency: executionPreview.currency,
+          idempotencyKey: `ambiguous-${randomUUID()}`,
+          state: "QUEUED",
+          safeResultCode: "QUEUED",
+        },
+      });
+      await tx.generationBatchTargetV3Record.create({
+        data: {
+          id: ambiguousTargetId,
+          projectId: project.id,
+          generationBatchId: ambiguousBatchId,
+          shotId: autoShot.id,
+          generationSpecId: dynamicSpecId,
+          ordinal: 1,
+          targetDigest: hash("5"),
+          implementationKey: originalTarget.implementationKey,
+          implementationVersion: originalTarget.implementationVersion,
+          adapterKey: originalTarget.adapterKey,
+          adapterVersion: originalTarget.adapterVersion,
+          compilerKey: originalTarget.compilerKey,
+          compilerVersion: originalTarget.compilerVersion,
+          state: "QUEUED",
+          safeResultCode: "QUEUED",
+        },
+      });
+    });
+    let ambiguousSubmitCalls = 0;
+    const ambiguousWorker = new CapabilityGenerationWorkerV3(
+      {
+        submit: async () => {
+          ambiguousSubmitCalls += 1;
+          throw new Error("transport outcome unknown");
+        },
+        status: async () => "UNKNOWN",
+        retain: async () => [],
+      },
+      { process: async () => Promise.reject(new Error("must not process")) },
+      client,
+    );
+    await expect(ambiguousWorker.runOnce()).resolves.toMatchObject({
+      state: "AMBIGUOUS",
+      providerCallCount: 1,
+    });
+    expect(ambiguousSubmitCalls).toBe(1);
+    await expect(ambiguousWorker.runOnce()).resolves.toBeNull();
+    expect(ambiguousSubmitCalls).toBe(1);
+    await expect(
+      client.generationBatchV3Record.findUniqueOrThrow({ where: { id: ambiguousBatchId } }),
+    ).resolves.toMatchObject({
+      state: "FAILED",
+      safeResultCode: "AMBIGUOUS_ATTEMPT_REVIEW_REQUIRED",
+    });
   });
 
   it("keeps discovery non-selectable and requires explicit exact-version evidence promotion", async () => {

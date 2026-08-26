@@ -3,9 +3,10 @@ import {
   compileHailuo03FirstLast,
   compileHailuo03Reference,
   compileHailuo03Text,
+  materializeHailuo03ReferenceGraph,
 } from "./compilers/hailuo03.js";
 
-type Compiler = (input: unknown) => ReturnType<typeof compileHailuo03Text>;
+type Compiler = (input: unknown) => { compiledRequestDigest: string };
 
 export class CapabilityCompilerRegistry {
   private readonly compilers = new Map<string, Compiler>();
@@ -13,7 +14,8 @@ export class CapabilityCompilerRegistry {
   constructor() {
     this.register("hailuo03-text-v1", compileHailuo03Text)
       .register("hailuo03-reference-v1", compileHailuo03Reference)
-      .register("hailuo03-first-last-v1", compileHailuo03FirstLast);
+      .register("hailuo03-first-last-v1", compileHailuo03FirstLast)
+      .register("hailuo03-reference-dynamic-v3", materializeHailuo03ReferenceGraph);
   }
 
   register(key: string, compiler: Compiler) {

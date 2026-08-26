@@ -22,6 +22,10 @@ export interface StagedInputEvidence extends StagedInput {
   role: "character" | "scene" | "product" | "characterFace" | "characterRear";
 }
 
+export interface FrozenStagedInputEvidence extends StagedInput {
+  sourceSha256: string;
+}
+
 export interface GenerationSubmission {
   workflowId: string;
   workflowSha256: string;
@@ -84,6 +88,28 @@ export class ComfyUiExecutionService {
   }): Promise<StagedInputEvidence> {
     const loaded = await this.dependencies.registry.load(input.workflowId);
     if (!loaded.manifest.enabled) throw new Error("Workflow is disabled");
+    return {
+      ...(await this.stageVerifiedInput(input)),
+      role: input.role,
+    };
+  }
+
+  async stageFrozenInput(input: {
+    localPath: string;
+    expectedSha256: string;
+    expectedStagedInputName: string;
+  }): Promise<FrozenStagedInputEvidence> {
+    const staged = await this.stageVerifiedInput(input);
+    const stagedName = staged.subfolder ? `${staged.subfolder}/${staged.name}` : staged.name;
+    if (stagedName !== input.expectedStagedInputName)
+      throw new Error("FROZEN_STAGED_INPUT_NAME_MISMATCH");
+    return staged;
+  }
+
+  private async stageVerifiedInput(input: {
+    localPath: string;
+    expectedSha256: string;
+  }): Promise<FrozenStagedInputEvidence> {
     const localPath = await realpath(input.localPath);
     const configuredRoots = [
       join(this.dependencies.dataRoot, "inputs"),
@@ -104,8 +130,27 @@ export class ComfyUiExecutionService {
     return {
       ...(await this.dependencies.client.stageInput(localPath)),
       sourceSha256: actualHash,
-      role: input.role,
     };
+  }
+
+  async submitFrozenGraph(input: {
+    promptId: string;
+    materializedGraph: Record<string, unknown>;
+    materializedGraphSha256: string;
+  }): Promise<SubmitResult> {
+    this.assertLiveEnabled();
+    if (hashCanonical(input.materializedGraph) !== input.materializedGraphSha256)
+      throw new Error("FROZEN_GRAPH_DIGEST_MISMATCH");
+    try {
+      return await this.dependencies.client.submitWorkflow(input.promptId, input.materializedGraph);
+    } catch (error) {
+      if (error instanceof ComfyUiHttpError && error.classification === "TRANSPORT")
+        throw new AmbiguousSubmissionError(
+          `ComfyUI submission outcome is ambiguous for prompt ${input.promptId}`,
+          input.promptId,
+        );
+      throw error;
+    }
   }
 
   async submit(input: AuthorizedGenerationSubmission): Promise<SubmitResult> {
@@ -222,6 +267,38 @@ export class ComfyUiExecutionService {
         item.mediaKey === loaded.manifest.output.mediaKey,
     );
     if (references.length === 0) throw new Error("Registered workflow output artifact is missing");
+    const directory = resolve(this.dependencies.dataRoot, "artifacts", input.runId);
+    await mkdir(directory, { recursive: true });
+    return Promise.all(
+      references.map(async (reference: ArtifactReference) => {
+        const response = await this.dependencies.client.downloadArtifact(reference);
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (bytes.byteLength === 0) throw new Error("Artifact is empty");
+        const path = join(directory, `${input.promptId}-${basename(reference.filename)}`);
+        await writeFile(path, bytes, { flag: "wx", mode: 0o600 });
+        return {
+          path,
+          sha256: sha256Bytes(bytes),
+          byteSize: bytes.byteLength,
+          mimeType: response.headers.get("content-type") ?? "application/octet-stream",
+          sourceReference: reference,
+        };
+      }),
+    );
+  }
+
+  async retainFrozenArtifacts(input: {
+    promptId: string;
+    runId: string;
+    outputNodeId: string;
+    outputMediaKey: string;
+  }) {
+    const status = await this.status(input.promptId);
+    if (status.status !== "COMPLETED") throw new Error("Artifacts require a completed job");
+    const references = status.artifacts.filter(
+      (item) => item.nodeId === input.outputNodeId && item.mediaKey === input.outputMediaKey,
+    );
+    if (references.length === 0) throw new Error("Frozen graph output artifact is missing");
     const directory = resolve(this.dependencies.dataRoot, "artifacts", input.runId);
     await mkdir(directory, { recursive: true });
     return Promise.all(

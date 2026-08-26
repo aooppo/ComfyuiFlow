@@ -2481,6 +2481,170 @@ model GenerationSpecV3Record {
   @@index([planningInputSnapshotId])
 }
 
+model ReferencePlanV3Record {
+  id                    String   @id @default(uuid()) @db.Uuid
+  projectId             String   @db.Uuid
+  shotId                String   @db.Uuid
+  storyboardVersionId   String   @db.Uuid
+  generationSpecId      String   @unique @db.Uuid
+  implementationKey     String   @db.VarChar(160)
+  implementationVersion String   @db.VarChar(80)
+  compilerKey           String   @db.VarChar(160)
+  compilerVersion       String   @db.VarChar(80)
+  referencePlanDigest   String   @unique @db.Char(64)
+  payloadJson           Json
+  createdAt             DateTime @default(now())
+
+  @@index([projectId, storyboardVersionId, shotId])
+}
+
+model MaterializedGraphSnapshotV3Record {
+  id                       String   @id @default(uuid()) @db.Uuid
+  projectId                String   @db.Uuid
+  generationSpecId         String   @unique @db.Uuid
+  referencePlanDigest      String   @unique @db.Char(64)
+  implementationKey        String   @db.VarChar(160)
+  implementationVersion    String   @db.VarChar(80)
+  compilerKey              String   @db.VarChar(160)
+  compilerVersion          String   @db.VarChar(80)
+  validatorKey             String   @db.VarChar(160)
+  validatorVersion         String   @db.VarChar(80)
+  materializedGraphSha256  String   @unique @db.Char(64)
+  capabilityEnvelopeDigest String   @db.Char(64)
+  runtimeContractDigest    String   @db.Char(64)
+  payloadJson              Json
+  createdAt                DateTime @default(now())
+
+  @@index([projectId, createdAt(sort: Desc)])
+}
+
+model AuthorizationConsumptionV3Record {
+  id                      String   @id @default(uuid()) @db.Uuid
+  projectId               String   @db.Uuid
+  authorizationId         String   @db.Uuid
+  generationBatchTargetId String   @db.Uuid
+  attemptId               String   @unique @db.Uuid
+  operation               String   @db.VarChar(40)
+  sequence                Int
+  consumedCalls           Int      @default(1)
+  consumedCostMicros      BigInt?
+  payloadJson             Json
+  createdAt               DateTime @default(now())
+
+  @@unique([authorizationId, sequence])
+  @@index([projectId, authorizationId, createdAt])
+}
+
+model GenerationAttemptV3Record {
+  id                         String   @id @default(uuid()) @db.Uuid
+  projectId                  String   @db.Uuid
+  generationBatchTargetId    String   @db.Uuid
+  generationSpecId           String   @db.Uuid
+  authorizationConsumptionId String   @unique @db.Uuid
+  referencePlanDigest        String   @db.Char(64)
+  materializedGraphSha256    String   @db.Char(64)
+  compilerKey                String   @db.VarChar(160)
+  compilerVersion            String   @db.VarChar(80)
+  validatorKey               String   @db.VarChar(160)
+  validatorVersion           String   @db.VarChar(80)
+  capabilityEnvelopeDigest   String   @db.Char(64)
+  runtimeContractDigest      String   @db.Char(64)
+  attemptNumber              Int
+  idempotencyKey             String   @unique @db.VarChar(160)
+  state                      String   @db.VarChar(40)
+  providerTaskId             String?  @unique @db.VarChar(500)
+  providerCallCount          Int      @default(0)
+  safeResultCode             String?  @db.VarChar(160)
+  payloadJson                Json
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  @@unique([generationBatchTargetId, attemptNumber])
+  @@index([projectId, state, createdAt])
+}
+
+model GenerationArtifactV3Record {
+  id                  String   @id @default(uuid()) @db.Uuid
+  projectId           String   @db.Uuid
+  attemptId           String   @unique @db.Uuid
+  storageKey          String   @unique @db.VarChar(500)
+  mediaType           String   @db.VarChar(120)
+  byteSize            BigInt
+  sha256              String   @db.Char(64)
+  technicalStatus     String   @db.VarChar(40)
+  technicalResultCode String?  @db.VarChar(160)
+  ffprobeJson         Json?
+  reviewFramesJson    Json?
+  aiQaStatus          String   @default("AI_QA_UNAVAILABLE") @db.VarChar(60)
+  aiQaResultJson      Json?
+  payloadJson         Json
+  createdAt           DateTime @default(now())
+
+  @@index([projectId, createdAt(sort: Desc)])
+}
+
+model GenerationOwnerDecisionV3Record {
+  id             String   @id @default(uuid()) @db.Uuid
+  projectId      String   @db.Uuid
+  artifactId     String   @db.Uuid
+  decision       String   @db.VarChar(40)
+  reasonCode     String?  @db.VarChar(160)
+  notes          String?
+  actorRef       String   @db.VarChar(160)
+  idempotencyKey String   @unique @db.VarChar(160)
+  createdAt      DateTime @default(now())
+
+  @@unique([artifactId, createdAt])
+  @@index([projectId, artifactId, createdAt(sort: Desc)])
+}
+
+model GenerationRetryPreviewV3Record {
+  id                      String   @id @default(uuid()) @db.Uuid
+  projectId               String   @db.Uuid
+  failedAttemptId         String   @db.Uuid
+  nextAttemptNumber       Int
+  generationSpecId        String   @db.Uuid
+  materializedGraphSha256 String   @db.Char(64)
+  expectedCalls           Int      @default(1)
+  maximumCalls            Int      @default(1)
+  maximumCostMicros       BigInt?
+  previewDigest           String   @unique @db.Char(64)
+  payloadJson             Json
+  createdAt               DateTime @default(now())
+
+  @@unique([failedAttemptId, nextAttemptNumber])
+  @@index([projectId, createdAt(sort: Desc)])
+}
+
+model GenerationAssemblyV3Record {
+  id                  String   @id @default(uuid()) @db.Uuid
+  projectId           String   @db.Uuid
+  storyboardVersionId String   @db.Uuid
+  inputDigest         String   @unique @db.Char(64)
+  idempotencyKey      String   @unique @db.VarChar(160)
+  state               String   @db.VarChar(40)
+  outputStorageKey    String?  @unique @db.VarChar(500)
+  outputSha256        String?  @db.Char(64)
+  outputByteSize      BigInt?
+  payloadJson         Json
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([projectId, storyboardVersionId, createdAt(sort: Desc)])
+}
+
+model GenerationAssemblySourceV3Record {
+  id         String   @id @default(uuid()) @db.Uuid
+  assemblyId String   @db.Uuid
+  artifactId String   @db.Uuid
+  ordinal    Int
+  sha256     String   @db.Char(64)
+  createdAt  DateTime @default(now())
+
+  @@unique([assemblyId, ordinal])
+  @@unique([assemblyId, artifactId])
+}
+
 model GenerationPlanV3Record {
   id                  String                            @id @default(uuid()) @db.Uuid
   projectId           String                            @db.Uuid

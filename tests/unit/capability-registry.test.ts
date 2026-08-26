@@ -107,9 +107,7 @@ function registry() {
 describe("capability registry loader", () => {
   it("loads the reviewed default registry and excludes trials, deprecated history, and fixtures", async () => {
     const loaded = await new CapabilityRegistryLoader().load();
-    expect(loaded.resolveSelectable({ production: true }).map((item) => item.id)).toEqual([
-      "implementation.hailuo03-reference-partner",
-    ]);
+    expect(loaded.resolveSelectable({ production: true }).map((item) => item.id)).toEqual([]);
     expect(loaded.explainResolution({ production: true }).rejected).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ reasonCode: "TRIAL_SCOPE_REQUIRED" }),

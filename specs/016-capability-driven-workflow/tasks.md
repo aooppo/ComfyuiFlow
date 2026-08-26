@@ -1,4 +1,4 @@
-# Tasks: Simplified Gates and Capability-Driven Workflow
+# Tasks: Dynamic Hailuo 03 Capability V3
 
 **Input**: Design documents from `/specs/016-capability-driven-workflow/`
 
@@ -264,6 +264,118 @@ history, and zero external calls.
 
 ---
 
+## Phase 12: Future Dynamic Implementation Contracts and Compiler
+
+**Goal**: Replace the non-executable compiler preview with an exact deterministic Hailuo 03
+Reference-to-Video Graph compiler and independent validator while preserving the fixed five-image
+Graph as fixture/evidence only.
+
+- [x] T099 [US7] Upgrade spec/plan/tasks/data-model/verification and contracts for FR-045 through
+      FR-058 and SC-016 through SC-022 before implementation
+- [x] T100 [P] [US7] Add byte/SHA regression proving `minimax-h3-project-shot-4s-v1` remains unchanged,
+      disabled for formal dynamic selection, and referenced only as known-good fixture/provider evidence
+- [x] T101 [P] [US7] Add strict `ReferencePlanV3`, capability envelope, materialized Graph snapshot,
+      validator result, frozen execution snapshot, and public API schemas in
+      packages/contracts/src/capability-workflow.ts
+- [x] T102 [P] [US7] Add failing deterministic Graph/security tests covering allowed node classes,
+      staged-name/output-prefix safety, LLM raw-Graph rejection, and identical-byte/SHA behavior in
+      tests/unit/hailuo03-dynamic-compiler.test.ts and tests/contract/capability-compiler-security.test.ts
+- [x] T103 [US7] Implement deterministic `ReferencePlanV3` construction and semantic-role ordering in
+      packages/project-core/src/workflow-agent/reference-plan-v3.ts without filename/path guessing
+- [x] T104 [US7] Implement `LoadImage × N` / `LoadVideo × N` / `LoadAudio × N` →
+      `MinimaxHailuo03ReferenceNode` → `SaveVideo` Graph materialization with deterministic node IDs in
+      packages/project-core/src/workflow-agent/compilers/hailuo03.ts
+- [x] T105 [US7] Implement independent exact-topology, parameter, cardinality, invariant, safe-path,
+      output, and runtime-contract validation in
+      packages/project-core/src/workflow-agent/hailuo03-graph-validator.ts
+- [x] T106 [US7] Add the zero-call matrix for image counts 1/5/9, video/audio combinations 0–3,
+      duration 4/5/10/15, every supported ratio, 768P/2K, 100-run determinism, and BLOCKED cases for
+  > 9/>3/>3, duration outside 4–15, unsupported ratio/resolution, empty visual, and audio-only
+- [x] T107 [US7] Change dynamic implementation identity and registry evidence evaluation to exact
+      compiler/validator/envelope/adapter/runtime-contract digests; keep unproven slices TRIAL/BLOCKED
+
+**Checkpoint**: Compiler and validator produce executable, deterministic, frozen Graphs locally, but
+no Provider call is possible and no theoretical capability is READY.
+
+---
+
+## Phase 13: Additive V3 Execution and Artifact Persistence
+
+- [ ] T108 [P] [US7] Add failing Prisma/PostgreSQL tests for immutable ReferencePlan, Graph snapshot,
+      AuthorizationConsumption, Attempt, Artifact, FFprobe, review frames, AI QA, Owner decision, retry
+      preview, and assembly lineage with update/delete guards
+- [x] T109 [US7] Add additive Prisma models and migration
+      `202608260045_dynamic_hailuo_v3` without modifying/deleting V1/V2 tables or historical bytes
+- [x] T110 [US7] Implement repositories that atomically freeze ReferencePlan/Graph snapshots and
+      append Attempt/consumption/artifact/QA/decision/retry/assembly records with idempotent readback
+- [ ] T111 [US7] Extend cleanup guards and serial PostgreSQL migration/historical compatibility tests
+
+**Checkpoint**: All dynamic execution and review lineage is durable and append-only before the Worker
+can access it.
+
+---
+
+## Phase 14: CapabilityGenerationWorker and MCP V3 Frozen-Plan Boundary
+
+- [ ] T112 [P] [US7] Add failing consume-before-attempt, exact-Graph submission, adapter/runtime drift,
+      exhausted/expired authority, timeout/ambiguous terminal, reconcile, restart, and no-retry/fallback
+      tests in tests/unit/project-worker-loop.test.ts and tests/integration/live-safety.test.ts
+- [x] T113 [US7] Extend the shared ComfyUI MCP adapter to accept only a persisted frozen Graph snapshot,
+      stage exact hash-verified image/video/audio inputs, and reject compiler or raw caller payloads at
+      submit time
+- [x] T114 [US7] Implement `CapabilityGenerationWorker` claim/consume/Attempt/submit/poll/reconcile
+      lifecycle in packages/project-core/src/generation-worker.ts and apps/project-worker/src/index.ts
+- [x] T115 [US7] Persist artifact bytes/hash, FFprobe facts, and deterministic first/middle/last frames;
+      treat download/probe/frame failure as technical failure without retry
+- [x] T116 [US7] Keep `AI_QA_UNAVAILABLE` advisory/non-blocking and preserve explicit Owner
+      PASS/FAIL/RISK_ACCEPTED as a separate append-only decision
+
+**Checkpoint**: Fake transport proves exactly one frozen submission and complete technical evidence;
+the real LIVE kill switch remains closed.
+
+---
+
+## Phase 15: Retry and Idempotent Assembly
+
+- [ ] T117 [P] [US7] Add FAIL → zero-call retry preview → new authorization → new Attempt coverage,
+      proving old grants are not reused and no preview/retry path auto-submits
+- [x] T118 [US7] Implement retry preview and confirmation services/routes with current-input/price/
+      implementation drift detection and exact no-retry disclosure
+- [ ] T119 [P] [US7] Add concurrent/repeated assembly idempotency, source-digest drift, Owner-decision
+      gate, playable output, FFprobe/hash, and historical assembly tests
+- [x] T120 [US7] Implement V3 assembly selection/render/read/download using exact ordered approved
+      artifacts and immutable source/output digests
+
+---
+
+## Phase 16: Persistent Storyboard Execution UX
+
+- [ ] T121 [P] [US7] Add source/API/browser tests for persisted state restoration, bounded polling,
+      terminal polling stop, player, three frames, FFprobe, AI QA unavailable, Owner decisions, retry
+      preview/history, Attempt history, assembly history, and download
+- [x] T122 [US7] Add Storyboard execution aggregate/status/content/download/retry/assembly APIs with
+      `no-store` status reads and strict same-origin/idempotency mutation handling
+- [x] T123 [US7] Implement the non-technical Storyboard UI flow and polling lifecycle without exposing
+      Graph SHA, task IDs, manifests, grants, provider profiles, or workflow internals in the main path
+
+---
+
+## Phase 17: Zero-Call Convergence and New LIVE Gate
+
+- [ ] T124 [P] Close T052/T053/T058/T059/T062/T064/T065/T070/T071/T073/T074 using the dynamic V3
+      Worker, historical compatibility, security, performance, and documentation evidence
+- [x] T125 Run focused/full tests, serial PostgreSQL, migration rehearsal, Prisma, lint, typecheck,
+      production build, secret scan, `git diff --check`, and zero-call browser acceptance; record exact
+      Director/AI QA/ComfyUI `/prompt`/video Provider call counts
+- [ ] T126 Audit FR-001–FR-058 and SC-001–SC-022 against tasks/code/tests, update living specs, and
+      leave no READY claim without exact evidence
+- [x] T127 Prepare one exact one-shot LIVE preview naming Storyboard/version/Shot, ReferencePlan,
+      compiler/validator/envelope/runtime/adapter identities, materialized Graph SHA, staged input hashes,
+      duration/ratio/resolution, provider/model, exact price and expiry, one video call, AI QA cap, no retry,
+      and expected Human QA; stop with confirmation unchecked and no authorization/Attempt/Provider call
+
+---
+
 ## Dependencies and Execution Order
 
 ### Phase Dependencies
@@ -280,6 +392,13 @@ history, and zero external calls.
   adoption; its automated acceptance must remain zero-call.
 - Phase 11 depends on US2 exact resolution and V3 planning persistence; it must complete before any
   first real TRIAL execution can be proposed.
+- Phase 12 depends on the existing Feature 016 V3 planning/registry foundation and blocks all new
+  dynamic execution work.
+- Phase 13 depends on Phase 12 contracts and freezes additive persistence before Worker integration.
+- Phase 14 depends on Phase 13 and must pass fake-transport safety before retry or UI work.
+- Phase 15 depends on durable Attempts, Artifacts, Owner decisions, and authority consumption.
+- Phase 16 depends on the persisted aggregate and never owns execution authority in browser state.
+- Phase 17 depends on all prior phases and stops before any paid action.
 
 ### User Story Dependencies
 
@@ -290,6 +409,8 @@ history, and zero external calls.
 - **US5 (P2)**: Can be implemented after the foundation but must preserve US4 historical projections.
 - **US6 (P1)**: Uses US2/US4 planning lineage but grants planning scope only; it is independent from
   and strictly weaker than paid execution authorization.
+- **US7 (P1)**: Consumes US1/US2 planning plus US4/US6 authorization boundaries and completes the
+  dynamic compiler → frozen Graph → Worker → artifact → review → retry → assembly path.
 
 ### Within Each User Story
 

@@ -12,11 +12,14 @@ import {
 } from "@modelcontextprotocol/sdk/client/stdio.js";
 import {
   AnalysisWorker,
+  CapabilityGenerationWorkerV3,
+  CapabilityV3McpTransportClient,
   ComfyUiMcpGenerationProvider,
   ComfyUiExecutionPlanAdapter,
   GenerationAdapterRegistry,
   GenerationWorker,
   LegacyGenerationProviderAdapter,
+  LocalCapabilityArtifactPipelineV3,
   StoryboardDirectorWorker,
   prisma,
   type ComfyUiMcpToolClient,
@@ -136,6 +139,12 @@ async function main() {
     undefined,
     adapters,
   );
+  const capabilityWorker = executionPlanMcp
+    ? new CapabilityGenerationWorkerV3(
+        new CapabilityV3McpTransportClient(executionPlanMcp),
+        new LocalCapabilityArtifactPipelineV3(),
+      )
+    : null;
   const directorWorker =
     process.env.PROJECT_STORYBOARD_DIRECTOR_LIVE_ENABLED === "true"
       ? new StoryboardDirectorWorker()
@@ -152,7 +161,9 @@ async function main() {
       pollIntervalMs: workerPollInterval(process.env.PROJECT_WORKER_POLL_INTERVAL_MS),
       shouldStop: () => stopping,
       runAnalysis: () => analysisWorker.runOnce(`project-worker:${process.pid}`),
-      runGeneration: () => generationWorker.runOnce(`generation-worker:${process.pid}`),
+      runGeneration: async () =>
+        (capabilityWorker ? await capabilityWorker.runOnce() : null) ??
+        generationWorker.runOnce(`generation-worker:${process.pid}`),
       runDirector: () =>
         directorWorker
           ? directorWorker.processNext(`storyboard-director-worker:${process.pid}`)

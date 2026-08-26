@@ -112,7 +112,7 @@ export class ComfyUiClient {
     const form = new FormData();
     form.append("image", new Blob([new Uint8Array(bytes)]), basename(path));
     form.append("type", "input");
-    form.append("subfolder", "comfyuiflow");
+    form.append("subfolder", "comfyuiflow/staged");
     form.append("overwrite", "false");
     const value = (await this.json("/upload/image", { method: "POST", body: form })) as Record<
       string,
