@@ -128,6 +128,15 @@ interface CapabilityExecutionPreview {
   maximumAiQaCalls: number;
   costPolicyDigest: string;
   maximumCostMicros: number | null;
+  maximumAiQaCostMicros: number | null;
+  maximumTotalCostMicros: number | null;
+  aiQa: {
+    providerId: string;
+    modelId: string;
+    billingChannel: string;
+    effectiveAt: string;
+    expiresAt: string;
+  } | null;
   currency: string | null;
   localComputeResources: string[];
   pricingExpiresAt: string | null;
@@ -207,6 +216,15 @@ export function CapabilityWorkflowPlanningPanel({
   const trialApprovalKey = useRef<string | null>(null);
   const trialRevocationKeys = useRef(new Map<string, string>());
   const shotIdentityKey = shots.map((shot) => shot.id).join(":");
+
+  useEffect(() => {
+    void fetch(`/api/storyboard-versions/${storyboardVersionId}/workflow-plans`, {
+      cache: "no-store",
+    })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((value) => value?.batch && setBatch(value.batch as CapabilityBatch))
+      .catch(() => undefined);
+  }, [storyboardVersionId]);
 
   useEffect(() => {
     const currentIds = new Set(shots.map((shot) => shot.id));
@@ -744,6 +762,20 @@ export function CapabilityWorkflowPlanningPanel({
                   {isChinese ? "视频调用上限" : "Video call cap"}: {executionPreview.maximumCalls} ·{" "}
                   {isChinese ? "AI 质检上限" : "AI QA ceiling"}: {executionPreview.maximumAiQaCalls}
                 </p>
+                <p>
+                  {executionPreview.aiQa
+                    ? `${isChinese ? "AI 质检" : "AI QA"}: ${executionPreview.aiQa.providerId} / ${executionPreview.aiQa.modelId} · ${isChinese ? "上限" : "ceiling"} ${executionPreview.maximumAiQaCostMicros ?? "?"} micros · ${isChinese ? "有效至" : "expires"} ${new Date(executionPreview.aiQa.expiresAt).toLocaleString(isChinese ? "zh-CN" : "en")}`
+                    : isChinese
+                      ? "AI 质检未准备：缺少当前开关、凭据、健康状态或价格。"
+                      : "AI QA is not ready: a current switch, credential, health status, or price is missing."}
+                </p>
+                {executionPreview.maximumTotalCostMicros !== null && (
+                  <p>
+                    {isChinese ? "批次总费用上限" : "Total Batch ceiling"}:{" "}
+                    {executionPreview.maximumTotalCostMicros} {executionPreview.currency ?? ""}{" "}
+                    micros
+                  </p>
+                )}
                 <p>
                   {executionPreview.maximumCostMicros === null
                     ? `${isChinese ? "本地计算" : "Local compute"}: ${executionPreview.localComputeResources.join(", ") || "configured runtime"}`

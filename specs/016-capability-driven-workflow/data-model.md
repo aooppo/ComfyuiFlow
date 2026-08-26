@@ -231,6 +231,12 @@ Provider success without artifact, successful FFprobe, and three review frames i
 
 ### AiQaRunV3 / OwnerDecisionV3
 
+`AiQaRunV3` and immutable `AiQaResultV3` are per-Attempt records separate from `ArtifactV3`. The run
+links its `AI_QA` authorization consumption, provider/model, request/input/output hashes, response,
+usage, terminal status, and result. `GenerationAuthorizationV3` retains independent video and QA
+maximum/consumed calls, QA price ceiling, total ceiling, and price/profile snapshot. An Artifact has
+one effective terminal Owner decision; historical duplicate decisions remain readable only.
+
 - AI QA has its own authorization/call cap and Attempt/Artifact input digest
 - advisory state includes `PASS | WARN | FAIL | AI_QA_UNAVAILABLE`
 - Owner decision is exactly `PASS | FAIL | RISK_ACCEPTED`, bound to one Artifact hash and actor/time
@@ -238,11 +244,18 @@ Provider success without artifact, successful FFprobe, and three review frames i
 
 ### RetryPreviewV3
 
+Retry carries `retryOfAttemptId` across Authorization, Batch Target, and Attempt. Attempt number is
+the next number for the original Project/GenerationSpec lineage, not a number local to its new Target.
+
 - zero-call preview bound to the failed Owner decision, prior Attempt/Artifact, current Shot inputs,
   proposed new ReferencePlan/Graph SHA, calls/cost/expiry/no-retry facts, and stale digest
 - creates no Attempt and consumes no authorization
 
 ### AssemblyV3 / AssemblySourceV3
+
+`inputDigest` is the ordered source identity and is unique independently of request idempotency. The
+Assembly payload stores normalized H.264/yuv420p/24fps FFprobe output, bytes/SHA, source list, and
+play/download locations; changed source digest creates a new immutable history row.
 
 - exact ordered Owner-approved Artifact refs/hashes and source digest
 - immutable output storage key/hash and FFprobe facts

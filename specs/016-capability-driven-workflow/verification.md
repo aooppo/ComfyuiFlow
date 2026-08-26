@@ -464,3 +464,32 @@ Assembly`.
   root/Web TypeScript; Prisma validation; all 25 migrations on a fresh temporary database; production
   monorepo/Next build; secret scan; and `git diff --check`. The temporary database and local Web
   process were removed/stopped after verification.
+
+## Dynamic V3 QA Closure - 2026-08-27 (zero-call, partial)
+
+- Constitution 2.0.0 changes READY from a universal quality claim to an exact implementation identity
+  with one authorized real E2E validation baseline. A real success appends server-derived evidence;
+  it never auto-promotes READY. The UI/spec contract require a visible baseline and a disclosure that
+  other combinations are not individually tested.
+- Migration `202608270046_dynamic_hailuo_v3_qa_closure` is additive: it adds separate V3 AI-QA run/
+  result records, independent authorization QA counts/costs/pricing, `SUBMIT` plus `AI_QA` consumption
+  uniqueness, and retry lineage. Existing Artifact records are not updated by QA completion.
+- A V3 preview now blocks Batch creation when `VIDEO_QA_LIVE_ENABLED`, the CodexManager Local/gpt-5.4
+  profile, credential, billing channel, or current QA pricing facts are absent. The preview exposes
+  video, QA, and total ceilings; Worker consumes QA authorization before the provider call and records
+  ambiguity without retry, continuation, assembly, or fabricated Owner decision.
+- The read path restores the newest persisted V3 Batch by Storyboard version. The review component
+  polls only `QUEUED`, `RUNNING`, `SUBMITTED`, or `RECONCILING`; it performs one terminal refresh,
+  stops, and switches to the returned Retry Batch while retaining historical records.
+- Completed local checks: `pnpm exec prisma generate --schema packages/project-core/prisma/schema.prisma`;
+  `DATABASE_URL=postgresql://schema:validation@127.0.0.1:5432/schema pnpm exec prisma validate --schema
+packages/project-core/prisma/schema.prisma`; `pnpm typecheck`; `pnpm lint`; targeted Vitest contract/
+  assembly/evidence tests (5 files, 15 tests); `pnpm build`; `git diff --check`.
+- Full `pnpm format:check` still reports two untouched baseline files:
+  `packages/project-core/src/workflow-agent/compilers/hailuo03.ts` and
+  `tests/unit/workflow-agent-registry.test.ts`. All Feature 016 files modified in this closure were
+  individually formatted.
+- The only reachable PostgreSQL listener is `comfyuiflow-phase14-project-postgres-1` on 5448, owned by
+  the Phase 14 worktree. It was not migrated, reset, queried for project data, or reused. T129–T137
+  stay open pending a target-owned serial PostgreSQL/migration rehearsal and the added QA/browser tests.
+- External calls in this closure: Director 0, AI QA 0, ComfyUI `/prompt` 0, Hailuo/video Provider 0.

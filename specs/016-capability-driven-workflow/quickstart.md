@@ -102,4 +102,11 @@ Run the repository's focused unit, contract, integration, type, lint, and browse
 
 ## Real validation boundary
 
+Before Test A, run the target Web and Worker from this worktree only, load but do not copy the private
+environment, verify the dynamic runtime digest and `/prompt` counter baseline, and confirm no pending
+V3 targets exist. Regenerate the one-Shot preview and compare Storyboard, Shot, scene SHA, Graph SHA,
+implementation identity, video price, QA price, and expiry. Start with LIVE disabled for one Worker
+turn and prove zero submissions. Only then may an owner separately authorize one Hailuo call and one
+AI-QA call. A PASS still requires server-read evidence plus a separate operator READY promotion.
+
 Only after zero-call verification passes may an operator propose an exact `TRIAL` execution. Before any real call, show the selected shot(s), implementation/provider/compiler versions, expected price or local-compute policy, call cap, expiry, and no-retry rule, then obtain a fresh action-time confirmation. Record the result as exact-version evidence; do not auto-promote without the required reviewer decision.

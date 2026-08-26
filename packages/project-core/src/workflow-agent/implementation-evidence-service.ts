@@ -5,6 +5,7 @@ import {
   type ImplementationEvidenceV2,
 } from "@comfyuiflow/contracts";
 import { prisma, type ProjectPrisma } from "../prisma.js";
+import { canonicalSha256 } from "../canonical-json.js";
 import { RegistryPublicationService } from "./registry-publication-service.js";
 
 const sameRef = (left: { id: string; version: string }, right: { id: string; version: string }) =>
@@ -51,6 +52,80 @@ export class ImplementationEvidenceService {
 
   async append(raw: ImplementationEvidenceV2) {
     return new RegistryPublicationService(this.client).appendEvidence(raw);
+  }
+
+  /** Derives, rather than accepts, evidence from one complete persisted V3 attempt. */
+  async appendAuthorizedRealEvidence(input: {
+    attemptId: string;
+    artifactId: string;
+    operatorRef: string;
+  }) {
+    const attempt = await this.client.generationAttemptV3Record.findUnique({
+      where: { id: input.attemptId },
+    });
+    const artifact = await this.client.generationArtifactV3Record.findUnique({
+      where: { id: input.artifactId },
+    });
+    if (
+      !attempt ||
+      !artifact ||
+      artifact.attemptId !== attempt.id ||
+      attempt.state !== "SUCCEEDED" ||
+      artifact.technicalStatus !== "VERIFIED"
+    )
+      throw new Error("REAL_EVIDENCE_TECHNICAL_PASS_REQUIRED");
+    const payload = artifact.payloadJson as { reviewFrames?: unknown[] };
+    if (
+      !Array.isArray(payload.reviewFrames) ||
+      payload.reviewFrames.length !== 3 ||
+      !artifact.ffprobeJson
+    )
+      throw new Error("REAL_EVIDENCE_ARTIFACT_FACTS_REQUIRED");
+    const target = await this.client.generationBatchTargetV3Record.findUnique({
+      where: { id: attempt.generationBatchTargetId },
+      include: { generationBatch: { include: { authorization: true } } },
+    });
+    const submit = await this.client.authorizationConsumptionV3Record.findFirst({
+      where: { attemptId: attempt.id, operation: "SUBMIT" },
+    });
+    const qa = await this.client.aiQaRunV3Record.findUnique({ where: { attemptId: attempt.id } });
+    const qaResult = qa
+      ? await this.client.aiQaResultV3Record.findUnique({ where: { aiQaRunId: qa.id } })
+      : null;
+    const owner = await this.client.generationOwnerDecisionV3Record.findFirst({
+      where: { artifactId: artifact.id },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    if (
+      !target ||
+      !submit ||
+      !qa ||
+      qa.status !== "COMPLETED" ||
+      !qaResult ||
+      !owner ||
+      owner.decision !== "PASS" ||
+      !target.generationBatch.authorization.aiQaPricingJson
+    )
+      throw new Error("REAL_EVIDENCE_QA_OR_OWNER_PASS_REQUIRED");
+    const evidence = {
+      id: `authorized-real-evidence-${attempt.id}`,
+      version: "1.0.0",
+      implementationRef: { id: target.implementationKey, version: target.implementationVersion },
+      compilerRef: { id: target.compilerKey, version: target.compilerVersion },
+      kind: "AUTHORIZED_REAL_EXECUTION" as const,
+      outcome: "PASS" as const,
+      callCount: submit.consumedCalls + qa.providerCallCount,
+      costDigest: canonicalSha256({
+        video: target.generationBatch.maximumCostMicros?.toString() ?? null,
+        qa: target.generationBatch.maximumAiQaCostMicros?.toString() ?? null,
+        total: target.generationBatch.maximumTotalCostMicros?.toString() ?? null,
+        pricing: target.generationBatch.authorization.aiQaPricingJson,
+      }),
+      artifactRefs: [{ id: "generation-artifact-v3", version: artifact.sha256 }],
+      reviewerRef: input.operatorRef,
+      recordedAt: new Date().toISOString(),
+    } satisfies ImplementationEvidenceV2;
+    return this.append(evidence);
   }
 
   async promoteReady(implementationRef: { id: string; version: string }) {

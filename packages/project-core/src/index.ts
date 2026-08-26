@@ -71,6 +71,7 @@ export * from "./generation-continuation.js";
 export * from "./generation-worker.js";
 export * from "./capability-generation-worker-v3.js";
 export * from "./capability-artifact-pipeline-v3.js";
+export * from "./capability-v3-qa-service.js";
 export * from "./capability-review-service-v3.js";
 export * from "./generation-execution-service.js";
 export * from "./generated-artifact-service.js";

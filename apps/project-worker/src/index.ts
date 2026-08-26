@@ -14,6 +14,7 @@ import {
   AnalysisWorker,
   CapabilityGenerationWorkerV3,
   CapabilityV3McpTransportClient,
+  CapabilityV3QaService,
   ComfyUiMcpGenerationProvider,
   ComfyUiExecutionPlanAdapter,
   GenerationAdapterRegistry,
@@ -143,6 +144,10 @@ async function main() {
     ? new CapabilityGenerationWorkerV3(
         new CapabilityV3McpTransportClient(executionPlanMcp),
         new LocalCapabilityArtifactPipelineV3(),
+        prisma,
+        process.env.VIDEO_QA_LIVE_ENABLED === "true"
+          ? new CapabilityV3QaService(qaProvider, prisma)
+          : undefined,
       )
     : null;
   const directorWorker =

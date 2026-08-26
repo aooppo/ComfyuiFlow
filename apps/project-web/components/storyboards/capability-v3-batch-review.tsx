@@ -24,7 +24,7 @@ interface CapabilityBatchView {
   state: string;
   safeResultCode: string;
   maximumCalls: number;
-  authorization: { consumedCalls: number; expiresAt: string };
+  authorization: { consumedCalls: number; consumedAiQaCalls?: number; expiresAt: string };
   targets: Array<{
     id: string;
     ordinal: number;
@@ -66,10 +66,12 @@ export function CapabilityV3BatchReview({
   const [retryConfirmed, setRetryConfirmed] = useState<Record<string, boolean>>({});
   const [assemblyId, setAssemblyId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [activeBatchId, setActiveBatchId] = useState(batchId);
+  const terminalRefresh = useRef<string | null>(null);
   const decisionKeys = useRef(new Map<string, string>());
 
   async function refresh() {
-    const response = await fetch(`/api/generation-batches/${batchId}`, { cache: "no-store" });
+    const response = await fetch(`/api/generation-batches/${activeBatchId}`, { cache: "no-store" });
     if (!response.ok) return;
     const value = (await response.json()) as CapabilityBatchView;
     setBatch(value);
@@ -97,9 +99,16 @@ export function CapabilityV3BatchReview({
 
   useEffect(() => {
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 3_000);
-    return () => window.clearInterval(timer);
-  }, [batchId]);
+    const active = new Set(["QUEUED", "RUNNING", "SUBMITTED", "RECONCILING"]);
+    if (!batch || active.has(batch.state)) {
+      const timer = window.setInterval(() => void refresh(), 3_000);
+      return () => window.clearInterval(timer);
+    }
+    if (terminalRefresh.current !== activeBatchId) {
+      terminalRefresh.current = activeBatchId;
+      void refresh();
+    }
+  }, [activeBatchId, batch?.state]);
 
   const accepted = useMemo(
     () =>
@@ -166,6 +175,13 @@ export function CapabilityV3BatchReview({
     if (!response.ok) {
       setError(isChinese ? "新重试授权未创建。" : "A new retry authorization was not created.");
       return;
+    }
+    const authorized = (await response.json()) as { batchId?: string };
+    if (authorized.batchId) {
+      terminalRefresh.current = null;
+      setBatch(null);
+      setArtifacts({});
+      setActiveBatchId(authorized.batchId);
     }
     setRetry((current) => {
       const next = { ...current };

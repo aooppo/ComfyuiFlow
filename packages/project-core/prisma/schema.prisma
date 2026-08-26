@@ -2523,7 +2523,7 @@ model AuthorizationConsumptionV3Record {
   projectId               String   @db.Uuid
   authorizationId         String   @db.Uuid
   generationBatchTargetId String   @db.Uuid
-  attemptId               String   @unique @db.Uuid
+  attemptId               String   @db.Uuid
   operation               String   @db.VarChar(40)
   sequence                Int
   consumedCalls           Int      @default(1)
@@ -2532,6 +2532,7 @@ model AuthorizationConsumptionV3Record {
   createdAt               DateTime @default(now())
 
   @@unique([authorizationId, sequence])
+  @@unique([attemptId, operation])
   @@index([projectId, authorizationId, createdAt])
 }
 
@@ -2539,6 +2540,7 @@ model GenerationAttemptV3Record {
   id                         String   @id @default(uuid()) @db.Uuid
   projectId                  String   @db.Uuid
   generationBatchTargetId    String   @db.Uuid
+  retryOfAttemptId           String?  @db.Uuid
   generationSpecId           String   @db.Uuid
   authorizationConsumptionId String   @unique @db.Uuid
   referencePlanDigest        String   @db.Char(64)
@@ -2560,6 +2562,7 @@ model GenerationAttemptV3Record {
   updatedAt                  DateTime @updatedAt
 
   @@unique([generationBatchTargetId, attemptNumber])
+  @@index([projectId, generationSpecId, attemptNumber])
   @@index([projectId, state, createdAt])
 }
 
@@ -2575,12 +2578,50 @@ model GenerationArtifactV3Record {
   technicalResultCode String?  @db.VarChar(160)
   ffprobeJson         Json?
   reviewFramesJson    Json?
-  aiQaStatus          String   @default("AI_QA_UNAVAILABLE") @db.VarChar(60)
+  aiQaStatus          String   @default("PENDING") @db.VarChar(60)
   aiQaResultJson      Json?
   payloadJson         Json
   createdAt           DateTime @default(now())
 
   @@index([projectId, createdAt(sort: Desc)])
+}
+
+model AiQaRunV3Record {
+  id                         String   @id @default(uuid()) @db.Uuid
+  projectId                  String   @db.Uuid
+  attemptId                  String   @unique @db.Uuid
+  artifactId                 String   @db.Uuid
+  authorizationConsumptionId String   @unique @db.Uuid
+  providerId                 String   @db.VarChar(160)
+  requestedModelId           String   @db.VarChar(160)
+  resolvedModelId            String?  @db.VarChar(160)
+  requestHash                String   @db.Char(64)
+  inputHash                  String   @db.Char(64)
+  responseId                 String?  @db.VarChar(255)
+  status                     String   @db.VarChar(40)
+  safeResultCode             String   @db.VarChar(160)
+  providerCallCount          Int      @default(0)
+  usageJson                  Json?
+  createdAt                  DateTime @default(now())
+  finishedAt                 DateTime?
+
+  @@unique([artifactId, requestHash])
+  @@index([projectId, attemptId, createdAt(sort: Desc)])
+}
+
+model AiQaResultV3Record {
+  id              String   @id @default(uuid()) @db.Uuid
+  aiQaRunId       String   @unique @db.Uuid
+  contractVersion String   @db.VarChar(80)
+  overallStatus   String   @db.VarChar(40)
+  summary         String
+  limitationsJson Json
+  criteriaJson    Json
+  outputHash      String   @db.Char(64)
+  payloadJson     Json
+  createdAt       DateTime @default(now())
+
+  @@index([createdAt(sort: Desc)])
 }
 
 model GenerationOwnerDecisionV3Record {
@@ -2607,7 +2648,10 @@ model GenerationRetryPreviewV3Record {
   materializedGraphSha256 String   @db.Char(64)
   expectedCalls           Int      @default(1)
   maximumCalls            Int      @default(1)
+  maximumAiQaCalls        Int      @default(1)
   maximumCostMicros       BigInt?
+  maximumAiQaCostMicros   BigInt?
+  maximumTotalCostMicros  BigInt?
   previewDigest           String   @unique @db.Char(64)
   payloadJson             Json
   createdAt               DateTime @default(now())
@@ -2673,7 +2717,14 @@ model GenerationAuthorizationV3Record {
   expectedCalls     Int
   maximumCalls      Int
   consumedCalls     Int                            @default(0)
+  maximumAiQaCalls  Int                            @default(0)
+  consumedAiQaCalls Int                            @default(0)
   maximumCostMicros BigInt?
+  maximumAiQaCostMicros BigInt?
+  maximumTotalCostMicros BigInt?
+  aiQaProviderId    String?                        @db.VarChar(160)
+  aiQaModelId       String?                        @db.VarChar(160)
+  aiQaPricingJson   Json?
   expiresAt         DateTime
   noRetry           Boolean                        @default(true)
   noFallback        Boolean                        @default(true)
@@ -2699,8 +2750,14 @@ model GenerationBatchV3Record {
   expectedCalls             Int
   maximumCalls              Int
   maximumAiQaCalls          Int
+  consumedAiQaCalls         Int                             @default(0)
   costPolicyDigest          String                          @db.Char(64)
   maximumCostMicros         BigInt?
+  maximumAiQaCostMicros     BigInt?
+  maximumTotalCostMicros    BigInt?
+  aiQaProviderId            String?                         @db.VarChar(160)
+  aiQaModelId               String?                         @db.VarChar(160)
+  aiQaPricingJson           Json?
   currency                  String?                         @db.Char(3)
   idempotencyKey            String                          @unique @db.VarChar(160)
   state                     GenerationBatchV3State          @default(QUEUED)
@@ -2721,6 +2778,7 @@ model GenerationBatchTargetV3Record {
   generationBatchId     String                       @db.Uuid
   shotId                String                       @db.Uuid
   generationSpecId      String                       @db.Uuid
+  retryOfAttemptId      String?                      @db.Uuid
   ordinal               Int
   targetDigest          String                       @db.Char(64)
   implementationKey     String                       @db.VarChar(160)

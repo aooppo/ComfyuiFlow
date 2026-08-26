@@ -6,6 +6,11 @@
 
 ## Summary
 
+Feature 016 closure preserves the dynamic compiler/Worker path and adds an independent V3 AI-QA
+authority and projection, evidence-scoped READY promotion, persisted reload recovery, retry lineage,
+and normalized idempotent assembly. This plan remains zero-call: no provider, ComfyUI submission, or
+AI-QA request is authorized by implementation or verification.
+
 Complete the Future Dynamic Implementation directly. Per-Shot semantic requirements produce an
 immutable `ReferencePlan`; a deterministic Hailuo 03 compiler materializes a real API-format ComfyUI
 Graph; a validator freezes the Graph plus runtime/adapter contract before authorization; and a V3
@@ -253,3 +258,22 @@ compiler and validator code, not AI-authored Graphs. The materialized Graph is f
 authorization boundary, every network attempt consumes authority first, and retry/assembly preserve
 append-only lineage and explicit Owner decisions. Runtime metadata inspection is zero-call evidence,
 not paid generation evidence. No complexity exception is required.
+
+### 10. Separate V3 QA and READY evidence closure
+
+`AiQaRunV3Record` and `AiQaResultV3Record` are append-only projections keyed to one technical
+Attempt. V3 authorization separately carries video and QA call/cost ceilings, QA profile and current
+pricing evidence. Both operations consume independently before network I/O. A server-only evidence
+action reads persisted facts; it cannot promote READY. The UI restores the latest Batch by Storyboard
+version, polls only active states, and uses source digest rather than request key as Assembly identity.
+
+Migration `202608270046_dynamic_hailuo_v3_qa_closure` is additive. It replaces the accidental
+one-consumption-per-attempt uniqueness with one `SUBMIT` plus one `AI_QA` consumption, adds retry
+lineage and separate QA/total cost facts, and adds immutable V3 QA run/result tables. No historical
+Artifact, Batch, or decision row is rewritten.
+
+V3 QA tests prove missing LIVE/credential/price facts block before Batch creation; one QA consumption
+is written before a fake provider sees a request; failure/ambiguity never refunds or retries; the
+artifact remains immutable; and Owner decisions stay advisory-independent. Browser acceptance verifies
+reload restoration, terminal-poll stop, retry Batch switch, player/frames/QA/history/download. Ten
+concurrent Assembly requests must resolve to one source digest record and normalized H.264/yuv420p/24fps output.

@@ -152,7 +152,22 @@ Every selectable capability-envelope slice must have PASS evidence for the exact
 4. authorized runtime/E2E submission, artifact, FFprobe, review frames, and technical outcome.
 
 Provider documentation, node schema, fixture Graph, compiler output, or runtime readiness alone is
-insufficient for READY. Missing evidence leaves the slice `TRIAL` or `BLOCKED`.
+insufficient for READY. `READY` covers the published envelope of this exact identity after one real
+authorized baseline, not every possible parameter tuple. The Registry/UI must disclose that baseline
+and that other combinations are not individually verified. Missing evidence leaves the slice `TRIAL`
+or `BLOCKED`; real success only appends evidence and an operator separately promotes READY.
+
+## V3 AI QA and real evidence
+
+Each successful technical Attempt has one independent V3 AI-QA authorization budget and at most one
+immutable `AiQaRunV3` / `AiQaResultV3` projection. The input is the exact ReferencePlan evidence,
+three review frames, technical facts, and Shot expectation. Static-frame findings are advisory; video,
+audio, and motion limitations are explicit. QA must never create an Owner decision, retry, pause an
+already-authorized downstream Shot, or trigger Assembly.
+
+`APPEND_AUTHORIZED_REAL_EVIDENCE` is server-owned. It reads persisted Attempt, consumption, price,
+Graph, FFprobe, three frames, completed QA, and Owner PASS; browsers cannot submit PASS evidence.
+`PROMOTE_READY` is a distinct operator action and rejects every incomplete or non-exact identity.
 
 ## Worker, retry, and assembly
 

@@ -571,7 +571,7 @@ describe.runIf(enabled)("Capability workflow PostgreSQL foundation", () => {
             where: { id: identity.attemptId },
           });
           const consumption = await client.authorizationConsumptionV3Record.findUniqueOrThrow({
-            where: { attemptId: identity.attemptId },
+            where: { attemptId_operation: { attemptId: identity.attemptId, operation: "SUBMIT" } },
           });
           const authorization = await client.generationAuthorizationV3Record.findUniqueOrThrow({
             where: { id: consumption.authorizationId },

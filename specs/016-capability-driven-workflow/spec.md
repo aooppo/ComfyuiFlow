@@ -26,6 +26,9 @@ compiled into a validated, frozen, executable ComfyUI API Graph for each Attempt
 - Q: May the Director or another LLM emit raw ComfyUI JSON? → A: No. AI may select capability,
   bounded parameters, and semantic reference roles only. Server-owned compiler code exclusively
   materializes node classes, node IDs, connections, filenames, and output mappings.
+- Q: Does READY guarantee every parameter combination was exercised live? → A: No. It records at
+  least one authorized real E2E baseline for the exact implementation identity and published
+  capability envelope; the UI must disclose that other combinations remain individually untested.
 
 ## User Scenarios & Testing
 
@@ -245,7 +248,9 @@ assemble the owner-approved artifacts exactly once.
    Provider after the authority boundary.
 5. **Given** Provider completion, **When** the artifact pipeline runs, **Then** it stores the playable
    artifact, content hash, FFprobe facts, and first/middle/last review frames before technical success
-   is displayed. `AI_QA_UNAVAILABLE` remains advisory and does not block Owner review.
+   is displayed. When the separately authorized V3 AI QA configuration is live and current, one
+   immutable QA run/result is recorded; otherwise creation is blocked before the Batch. AI QA advice
+   remains advisory and does not block Owner review.
 6. **Given** Owner `FAIL`, **When** retry is requested, **Then** the first step is a zero-call retry
    preview. A new action-time authorization and a new Attempt are mandatory; the prior Attempt,
    consumption, artifact, QA, and decision remain append-only.
@@ -402,10 +407,11 @@ assemble the owner-approved artifacts exactly once.
   seconds, ratios `adaptive`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16`, `21:9`, and resolutions `768P`
   and `2K`, subject to `imageCount + videoCount >= 1` and audio-not-alone invariants for the Reference
   node. Per-reference media validation remains part of readiness.
-- **FR-046**: A capability tuple MAY be marked `READY` only when the exact compiler/version,
-  validator/version, adapter/runtime contract, and capability-envelope slice have passing compiler,
-  validator, runtime-readiness, and authorized runtime/E2E evidence. Provider-advertised capability
-  alone MUST remain `TRIAL` or `BLOCKED`.
+- **FR-046**: `READY` means the exact compiler/version, validator/version, adapter/runtime contract,
+  and published capability envelope have at least one authorized real E2E success. It does not mean
+  every parameter combination was live-tested. The Registry and UI MUST show the real validation
+  baseline and disclose that other combinations are not individually verified. Provider-advertised,
+  compiler-only, fixture, or runtime-readiness evidence alone MUST remain `TRIAL` or `BLOCKED`.
 - **FR-047**: Implementation identity MUST be the immutable compiler/version plus validated capability
   envelope digest and adapter/runtime contract digest. A single fixed Workflow SHA MUST NOT identify
   the dynamic implementation.
@@ -445,6 +451,29 @@ assemble the owner-approved artifacts exactly once.
 - **FR-058**: The immutable fixed-five `minimax-h3-project-shot-4s-v1` Graph and SHA MUST remain
   byte-for-byte preserved as known-good regression/provider evidence and MUST NOT be selectable as the
   formal dynamic Hailuo 03 V3 implementation.
+- **FR-059**: V3 AI QA MUST have an immutable per-Attempt run and result projection separate from the
+  immutable Artifact. A Batch authorization MUST disclose independent video and AI-QA provider/model,
+  prices, expiry, call caps, video cap, QA cap, and combined cap; each `SUBMIT` and `AI_QA` operation
+  consumes its own authorization record before its first network byte and never refunds on failure,
+  timeout, or ambiguity.
+- **FR-060**: Only a server-owned `APPEND_AUTHORIZED_REAL_EVIDENCE` action may derive real PASS
+  evidence by reading persisted Attempt, consumption, current price, Graph, FFprobe, three frames,
+  completed AI QA, and Owner PASS. This action MUST NOT promote READY; `PROMOTE_READY` remains a
+  separate operator action that accepts only such exact-identity evidence.
+- **FR-061**: Reload APIs MUST recover the latest V3 plan for a Storyboard version and all linked
+  Batches, Attempts, Artifacts, QA runs/results, Owner decisions, Retry lineage, and Assembly history.
+  Polling runs only in queued/active reconciliation states, performs one final refresh on a terminal
+  state, then stops.
+- **FR-062**: A V3 Artifact has one effective terminal Owner decision. Replaying the same idempotency
+  key returns that decision; a distinct conflicting terminal decision returns `409`. Historical
+  duplicate records remain readable with the latest record as the effective projection.
+- **FR-063**: Retry is available only after effective Owner FAIL. Its new authorization, Batch, Target,
+  and Attempt link to `retryOfAttemptId`; attempt numbering increments across the original
+  Shot/GenerationSpec lineage, and a retry authorizes one new independent AI-QA call at current price.
+- **FR-064**: Assembly identity is the ordered source digest, independent of request idempotency keys.
+  Concurrent equivalent requests return one record; changed inputs create history. Output is normalized
+  to H.264, yuv420p, and 24fps and persists output SHA, bytes, FFprobe facts, sources, playback, and
+  download recovery.
 
 ### Key Entities
 

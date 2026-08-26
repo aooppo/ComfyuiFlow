@@ -731,8 +731,35 @@ export const GenerationAuthorizationV3Schema = z
     providerRefs: z.array(VersionRefV2Schema).min(1).max(20),
     expectedCalls: z.number().int().nonnegative().max(40),
     maximumCalls: z.number().int().positive().max(40),
+    maximumAiQaCalls: z.number().int().nonnegative().max(40).default(0),
+    consumedAiQaCalls: z.number().int().nonnegative().max(40).default(0),
     costPolicyDigest: CapabilitySha256Schema,
     maximumCostMicros: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+    maximumAiQaCostMicros: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(Number.MAX_SAFE_INTEGER)
+      .nullable()
+      .default(null),
+    maximumTotalCostMicros: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(Number.MAX_SAFE_INTEGER)
+      .nullable()
+      .default(null),
+    aiQa: z
+      .object({
+        providerId: CapabilityIdSchema,
+        modelId: CapabilityIdSchema,
+        billingChannel: z.string().trim().min(1).max(160),
+        effectiveAt: DateTimeSchema,
+        expiresAt: DateTimeSchema,
+      })
+      .strict()
+      .nullable()
+      .default(null),
     expiresAt: DateTimeSchema,
     noRetry: z.literal(true),
     noFallback: z.literal(true),
@@ -770,6 +797,7 @@ export const GenerationAttemptV3Schema = z
   .object({
     id: CapabilityUuidSchema,
     generationBatchTargetId: CapabilityUuidSchema,
+    retryOfAttemptId: CapabilityUuidSchema.nullable().default(null),
     generationSpecRef: VersionRefV2Schema,
     authorizationConsumptionId: CapabilityUuidSchema,
     referencePlanDigest: CapabilitySha256Schema,
@@ -858,6 +886,21 @@ export const GenerationRetryPreviewV3Schema = z
     expectedCalls: z.literal(1),
     maximumCalls: z.literal(1),
     maximumCostMicros: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+    maximumAiQaCalls: z.literal(1).default(1),
+    maximumAiQaCostMicros: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(Number.MAX_SAFE_INTEGER)
+      .nullable()
+      .default(null),
+    maximumTotalCostMicros: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(Number.MAX_SAFE_INTEGER)
+      .nullable()
+      .default(null),
     previewDigest: CapabilitySha256Schema,
     externalCalls: z.literal(0),
     generationAuthorized: z.literal(false),
@@ -951,6 +994,18 @@ export const GenerationExecutionPreviewV3Schema = z
     maximumAiQaCalls: z.number().int().nonnegative().max(20),
     costPolicyDigest: CapabilitySha256Schema,
     maximumCostMicros: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+    maximumAiQaCostMicros: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+    maximumTotalCostMicros: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+    aiQa: z
+      .object({
+        providerId: CapabilityIdSchema,
+        modelId: CapabilityIdSchema,
+        billingChannel: z.string().trim().min(1).max(160),
+        effectiveAt: DateTimeSchema,
+        expiresAt: DateTimeSchema,
+      })
+      .strict()
+      .nullable(),
     currency: z.string().length(3).nullable(),
     localComputeResources: z.array(z.string().trim().min(1).max(160)).max(20),
     pricingExpiresAt: DateTimeSchema.nullable(),

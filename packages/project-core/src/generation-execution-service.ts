@@ -65,6 +65,59 @@ export class GenerationExecutionService {
     return this.buildPreviewV3(planId, rawInput);
   }
 
+  async latestCapabilityBatchForStoryboardVersion(storyboardVersionId: string) {
+    const plans = await this.client.generationPlanV3Record.findMany({
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    const plan = plans.find((candidate) => {
+      try {
+        return GenerationPlanV3Schema.parse(candidate.payloadJson).storyboardRevisionRefs.some(
+          (reference) => reference.id === storyboardVersionId,
+        );
+      } catch {
+        return false;
+      }
+    });
+    if (!plan) return { plan: null, batch: null };
+    const batch = await this.client.generationBatchV3Record.findFirst({
+      where: { generationPlanId: plan.id },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    return {
+      plan: { id: plan.id, planDigest: plan.planDigest },
+      batch: batch ? await this.getBatchV3(batch.id) : null,
+    };
+  }
+
+  private v3QaPricing() {
+    const providerId = this.environment.VIDEO_QA_PROVIDER_PROFILE ?? "";
+    const modelId = this.environment.VIDEO_QA_MODEL_ID ?? "";
+    const billingChannel = this.environment.VIDEO_QA_BILLING_CHANNEL ?? "";
+    const effectiveAt = this.environment.VIDEO_QA_PRICE_EFFECTIVE_AT ?? "";
+    const expiresAt = this.environment.VIDEO_QA_PRICE_EXPIRES_AT ?? "";
+    const maximumCostMicros = Number(this.environment.VIDEO_QA_MAX_COST_MICROS ?? "");
+    const live = this.environment.VIDEO_QA_LIVE_ENABLED === "true";
+    const priceCurrent =
+      Number.isSafeInteger(maximumCostMicros) &&
+      maximumCostMicros >= 0 &&
+      Number.isFinite(Date.parse(effectiveAt)) &&
+      Date.parse(effectiveAt) <= Date.now() &&
+      Number.isFinite(Date.parse(expiresAt)) &&
+      Date.parse(expiresAt) > Date.now();
+    const configured =
+      live &&
+      providerId === "codexmanager-local" &&
+      modelId === "gpt-5.4" &&
+      Boolean(billingChannel) &&
+      priceCurrent &&
+      Boolean(this.environment.CODEX_MANAGER_API_KEY);
+    return {
+      configured,
+      maximumCostMicros: priceCurrent ? maximumCostMicros : null,
+      view: configured ? { providerId, modelId, billingChannel, effectiveAt, expiresAt } : null,
+    };
+  }
+
   private async buildPreviewV3(planId: string, rawInput: GenerationExecutionPreviewV3Input) {
     const input = generationExecutionPreviewV3InputSchema.parse(rawInput);
     const record = await this.client.generationPlanV3Record.findUnique({ where: { id: planId } });
@@ -303,6 +356,12 @@ export class GenerationExecutionService {
         costPolicy: target.costPolicy,
       })),
     );
+    const qa = this.v3QaPricing();
+    const qaBlockers = qa.configured ? [] : ["V3_AI_QA_NOT_READY"];
+    const maximumTotalCostMicros =
+      maximumCostMicros === null || qa.maximumCostMicros === null
+        ? null
+        : maximumCostMicros + qa.maximumCostMicros * targets.length;
     const core = {
       schemaVersion: "capability-generation-execution-preview-v3" as const,
       projectId: record.projectId,
@@ -311,13 +370,19 @@ export class GenerationExecutionService {
       selectedShotIds: targets.map((target) => target.shotId),
       targets,
       ready: targets.every((target) => target.blockers.length === 0),
-      submissionBlockers:
-        this.environment.PROJECT_GENERATION_LIVE_ENABLED === "true" ? [] : ["LIVE_DISABLED"],
+      submissionBlockers: [
+        ...(this.environment.PROJECT_GENERATION_LIVE_ENABLED === "true" ? [] : ["LIVE_DISABLED"]),
+        ...qaBlockers,
+      ],
       expectedCalls: targets.length,
       maximumCalls: targets.length,
       maximumAiQaCalls: targets.length,
       costPolicyDigest,
       maximumCostMicros,
+      maximumAiQaCostMicros:
+        qa.maximumCostMicros === null ? null : qa.maximumCostMicros * targets.length,
+      maximumTotalCostMicros,
+      aiQa: qa.view,
       currency: currencies.size === 1 ? [...currencies][0]! : null,
       localComputeResources: [
         ...new Set(
@@ -920,7 +985,8 @@ export class GenerationExecutionService {
       preview.costPolicyDigest !== input.costPolicyDigest ||
       preview.maximumCalls !== input.maximumCalls ||
       preview.maximumAiQaCalls !== input.maximumAiQaCalls ||
-      preview.maximumCostMicros !== input.maximumCostMicros
+      preview.maximumCostMicros !== input.maximumCostMicros ||
+      preview.submissionBlockers.length > 0
     )
       throw this.error(
         "PREVIEW_STALE",
@@ -960,6 +1026,9 @@ export class GenerationExecutionService {
       maximumAiQaCalls: preview.maximumAiQaCalls,
       costPolicyDigest: preview.costPolicyDigest,
       maximumCostMicros: preview.maximumCostMicros,
+      maximumAiQaCostMicros: preview.maximumAiQaCostMicros,
+      maximumTotalCostMicros: preview.maximumTotalCostMicros,
+      aiQa: preview.aiQa,
       expiresAt: expiresAt.toISOString(),
       noRetry: true as const,
       noFallback: true as const,
@@ -974,8 +1043,13 @@ export class GenerationExecutionService {
       providerRefs: preview.targets.map((target) => target.providerRef),
       expectedCalls: preview.expectedCalls,
       maximumCalls: preview.maximumCalls,
+      maximumAiQaCalls: preview.maximumAiQaCalls,
+      consumedAiQaCalls: 0,
       costPolicyDigest: preview.costPolicyDigest,
       maximumCostMicros: preview.maximumCostMicros,
+      maximumAiQaCostMicros: preview.maximumAiQaCostMicros,
+      maximumTotalCostMicros: preview.maximumTotalCostMicros,
+      aiQa: preview.aiQa,
       expiresAt: expiresAt.toISOString(),
       noRetry: true,
       noFallback: true,
@@ -1003,6 +1077,13 @@ export class GenerationExecutionService {
               expectedCalls: authorization.expectedCalls,
               maximumCalls: authorization.maximumCalls,
               maximumCostMicros: authorization.maximumCostMicros,
+              maximumAiQaCalls: authorization.maximumAiQaCalls,
+              consumedAiQaCalls: 0,
+              maximumAiQaCostMicros: authorization.maximumAiQaCostMicros,
+              maximumTotalCostMicros: authorization.maximumTotalCostMicros,
+              aiQaProviderId: authorization.aiQa?.providerId ?? null,
+              aiQaModelId: authorization.aiQa?.modelId ?? null,
+              aiQaPricingJson: authorization.aiQa as Prisma.InputJsonValue,
               expiresAt,
               noRetry: true,
               noFallback: true,
@@ -1024,6 +1105,11 @@ export class GenerationExecutionService {
               maximumAiQaCalls: preview.maximumAiQaCalls,
               costPolicyDigest: preview.costPolicyDigest,
               maximumCostMicros: preview.maximumCostMicros,
+              maximumAiQaCostMicros: preview.maximumAiQaCostMicros,
+              maximumTotalCostMicros: preview.maximumTotalCostMicros,
+              aiQaProviderId: preview.aiQa?.providerId ?? null,
+              aiQaModelId: preview.aiQa?.modelId ?? null,
+              aiQaPricingJson: preview.aiQa as Prisma.InputJsonValue,
               currency: preview.currency,
               idempotencyKey,
             },
@@ -1082,6 +1168,13 @@ export class GenerationExecutionService {
       where: { artifactId: { in: artifacts.map((artifact) => artifact.id) } },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });
+    const qaRuns = await this.client.aiQaRunV3Record.findMany({
+      where: { attemptId: { in: attempts.map((attempt) => attempt.id) } },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    const qaResults = await this.client.aiQaResultV3Record.findMany({
+      where: { aiQaRunId: { in: qaRuns.map((run) => run.id) } },
+    });
     return {
       schemaVersion: "capability-generation-batch-v3" as const,
       id: batch.id,
@@ -1096,11 +1189,17 @@ export class GenerationExecutionService {
       maximumCalls: batch.maximumCalls,
       maximumAiQaCalls: batch.maximumAiQaCalls,
       maximumCostMicros: batch.maximumCostMicros === null ? null : Number(batch.maximumCostMicros),
+      maximumAiQaCostMicros:
+        batch.maximumAiQaCostMicros === null ? null : Number(batch.maximumAiQaCostMicros),
+      maximumTotalCostMicros:
+        batch.maximumTotalCostMicros === null ? null : Number(batch.maximumTotalCostMicros),
+      aiQa: batch.aiQaPricingJson,
       currency: batch.currency,
       authorization: {
         id: batch.authorization.id,
         state: batch.authorization.state,
         consumedCalls: batch.authorization.consumedCalls,
+        consumedAiQaCalls: batch.authorization.consumedAiQaCalls,
         expiresAt: batch.authorization.expiresAt.toISOString(),
         noRetry: batch.authorization.noRetry,
         noFallback: batch.authorization.noFallback,
@@ -1133,6 +1232,23 @@ export class GenerationExecutionService {
               safeResultCode: attempt.safeResultCode,
               materializedGraphSha256: attempt.materializedGraphSha256,
               providerCallCount: attempt.providerCallCount,
+              retryOfAttemptId: attempt.retryOfAttemptId,
+              aiQa: qaRuns
+                .filter((run) => run.attemptId === attempt.id)
+                .map((run) => ({
+                  id: run.id,
+                  status: run.status,
+                  safeResultCode: run.safeResultCode,
+                  providerId: run.providerId,
+                  modelId: run.requestedModelId,
+                  result: qaResults.find((result) => result.aiQaRunId === run.id)
+                    ? {
+                        overallStatus: qaResults.find((result) => result.aiQaRunId === run.id)!
+                          .overallStatus,
+                        summary: qaResults.find((result) => result.aiQaRunId === run.id)!.summary,
+                      }
+                    : null,
+                })),
               artifact: artifact
                 ? {
                     id: artifact.id,

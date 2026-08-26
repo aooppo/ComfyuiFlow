@@ -34,6 +34,32 @@ export class CapabilityReviewServiceV3 {
     private readonly environment: NodeJS.ProcessEnv = process.env,
   ) {}
 
+  private v3QaPricing() {
+    const providerId = this.environment.VIDEO_QA_PROVIDER_PROFILE ?? "";
+    const modelId = this.environment.VIDEO_QA_MODEL_ID ?? "";
+    const billingChannel = this.environment.VIDEO_QA_BILLING_CHANNEL ?? "";
+    const effectiveAt = this.environment.VIDEO_QA_PRICE_EFFECTIVE_AT ?? "";
+    const expiresAt = this.environment.VIDEO_QA_PRICE_EXPIRES_AT ?? "";
+    const maximumCostMicros = Number(this.environment.VIDEO_QA_MAX_COST_MICROS ?? "");
+    const current =
+      Number.isSafeInteger(maximumCostMicros) &&
+      maximumCostMicros >= 0 &&
+      Date.parse(effectiveAt) <= Date.now() &&
+      Date.parse(expiresAt) > Date.now();
+    const configured =
+      this.environment.VIDEO_QA_LIVE_ENABLED === "true" &&
+      providerId === "codexmanager-local" &&
+      modelId === "gpt-5.4" &&
+      Boolean(billingChannel) &&
+      current &&
+      Boolean(this.environment.CODEX_MANAGER_API_KEY);
+    return {
+      configured,
+      maximumCostMicros: current ? maximumCostMicros : null,
+      pricing: configured ? { providerId, modelId, billingChannel, effectiveAt, expiresAt } : null,
+    };
+  }
+
   async decide(artifactId: string, raw: unknown) {
     const request = OwnerDecisionCreateRequestV3Schema.parse(raw);
     const artifact = await this.client.generationArtifactV3Record.findUnique({
@@ -49,6 +75,16 @@ export class CapabilityReviewServiceV3 {
         throw new ProjectAssetError("IDEMPOTENCY_CONFLICT", "Decision key was already used", 409);
       return this.decisionView(existing);
     }
+    const effective = await this.client.generationOwnerDecisionV3Record.findFirst({
+      where: { artifactId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    if (effective)
+      throw new ProjectAssetError(
+        "OWNER_DECISION_ALREADY_FINAL",
+        "This Artifact already has an effective terminal Owner decision",
+        409,
+      );
     const decision = await this.client.generationOwnerDecisionV3Record.create({
       data: {
         id: randomUUID(),
@@ -75,6 +111,13 @@ export class CapabilityReviewServiceV3 {
       where: { artifactId },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });
+    const qaRuns = await this.client.aiQaRunV3Record.findMany({
+      where: { artifactId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    const qaResults = await this.client.aiQaResultV3Record.findMany({
+      where: { aiQaRunId: { in: qaRuns.map((run) => run.id) } },
+    });
     return {
       ...artifact,
       storageKey: undefined,
@@ -88,6 +131,20 @@ export class CapabilityReviewServiceV3 {
         contentUrl: `/api/capability-v3-artifacts/${artifact.id}/review-frames/${frame.role}`,
       })),
       decisions: decisions.map((decision) => this.decisionView(decision)),
+      aiQa: qaRuns.map((run) => ({
+        id: run.id,
+        status: run.status,
+        safeResultCode: run.safeResultCode,
+        providerId: run.providerId,
+        requestedModelId: run.requestedModelId,
+        result: qaResults.find((result) => result.aiQaRunId === run.id)
+          ? {
+              overallStatus: qaResults.find((result) => result.aiQaRunId === run.id)!.overallStatus,
+              summary: qaResults.find((result) => result.aiQaRunId === run.id)!.summary,
+              limitations: qaResults.find((result) => result.aiQaRunId === run.id)!.limitationsJson,
+            }
+          : null,
+      })),
     };
   }
 
@@ -142,7 +199,12 @@ export class CapabilityReviewServiceV3 {
         : Math.ceil(
             Number(target.generationBatch.maximumCostMicros) / target.generationBatch.maximumCalls,
           );
-    const nextAttemptNumber = attempt.attemptNumber + 1;
+    const lineage = await this.client.generationAttemptV3Record.aggregate({
+      where: { projectId: attempt.projectId, generationSpecId: attempt.generationSpecId },
+      _max: { attemptNumber: true },
+    });
+    const nextAttemptNumber = (lineage._max.attemptNumber ?? 0) + 1;
+    const qa = this.v3QaPricing();
     const core = {
       schemaVersion: "generation-retry-preview-v3" as const,
       projectId: artifact.projectId,
@@ -153,6 +215,12 @@ export class CapabilityReviewServiceV3 {
       expectedCalls: 1 as const,
       maximumCalls: 1 as const,
       maximumCostMicros: perCallCost,
+      maximumAiQaCalls: 1 as const,
+      maximumAiQaCostMicros: qa.maximumCostMicros,
+      maximumTotalCostMicros:
+        perCallCost === null || qa.maximumCostMicros === null
+          ? null
+          : perCallCost + qa.maximumCostMicros,
       externalCalls: 0 as const,
       generationAuthorized: false as const,
     };
@@ -174,6 +242,9 @@ export class CapabilityReviewServiceV3 {
         expectedCalls: 1,
         maximumCalls: 1,
         maximumCostMicros: preview.maximumCostMicros,
+        maximumAiQaCalls: preview.maximumAiQaCalls,
+        maximumAiQaCostMicros: preview.maximumAiQaCostMicros,
+        maximumTotalCostMicros: preview.maximumTotalCostMicros,
         previewDigest,
         payloadJson: preview as Prisma.InputJsonValue,
       },
@@ -204,6 +275,13 @@ export class CapabilityReviewServiceV3 {
     }
     if (this.environment.PROJECT_GENERATION_LIVE_ENABLED !== "true")
       throw new ProjectAssetError("LIVE_DISABLED", "LIVE generation is disabled", 409);
+    const qa = this.v3QaPricing();
+    if (!qa.configured || retry.maximumAiQaCostMicros !== qa.maximumCostMicros)
+      throw new ProjectAssetError(
+        "V3_AI_QA_NOT_READY",
+        "Current V3 AI QA configuration or price is unavailable",
+        409,
+      );
     const failedAttempt = await this.client.generationAttemptV3Record.findUniqueOrThrow({
       where: { id: retry.failedAttemptId },
     });
@@ -272,6 +350,9 @@ export class CapabilityReviewServiceV3 {
       materializedGraphSha256: retry.materializedGraphSha256,
       maximumCalls: 1,
       maximumCostMicros: retry.maximumCostMicros === null ? null : Number(retry.maximumCostMicros),
+      maximumAiQaCalls: 1,
+      maximumAiQaCostMicros:
+        retry.maximumAiQaCostMicros === null ? null : Number(retry.maximumAiQaCostMicros),
       expiresAt: expiresAt.toISOString(),
     });
     await this.client.$transaction(async (tx) => {
@@ -290,7 +371,14 @@ export class CapabilityReviewServiceV3 {
           expectedCalls: 1,
           maximumCalls: 1,
           consumedCalls: 0,
+          maximumAiQaCalls: 1,
+          consumedAiQaCalls: 0,
           maximumCostMicros: retry.maximumCostMicros,
+          maximumAiQaCostMicros: retry.maximumAiQaCostMicros,
+          maximumTotalCostMicros: retry.maximumTotalCostMicros,
+          aiQaProviderId: qa.pricing!.providerId,
+          aiQaModelId: qa.pricing!.modelId,
+          aiQaPricingJson: qa.pricing as Prisma.InputJsonValue,
           expiresAt,
           noRetry: true,
           noFallback: true,
@@ -309,9 +397,14 @@ export class CapabilityReviewServiceV3 {
           selectedShotIdsJson: [originalTarget.shotId],
           expectedCalls: 1,
           maximumCalls: 1,
-          maximumAiQaCalls: 0,
+          maximumAiQaCalls: 1,
           costPolicyDigest: originalTarget.generationBatch.costPolicyDigest,
           maximumCostMicros: retry.maximumCostMicros,
+          maximumAiQaCostMicros: retry.maximumAiQaCostMicros,
+          maximumTotalCostMicros: retry.maximumTotalCostMicros,
+          aiQaProviderId: qa.pricing!.providerId,
+          aiQaModelId: qa.pricing!.modelId,
+          aiQaPricingJson: qa.pricing as Prisma.InputJsonValue,
           currency: originalTarget.generationBatch.currency,
           idempotencyKey: request.idempotencyKey,
           state: "QUEUED",
@@ -325,6 +418,7 @@ export class CapabilityReviewServiceV3 {
           generationBatchId: batchId,
           shotId: originalTarget.shotId,
           generationSpecId: retry.generationSpecId,
+          retryOfAttemptId: failedAttempt.id,
           ordinal: originalTarget.ordinal,
           targetDigest: canonicalSha256({
             retryPreviewDigest: retry.previewDigest,
@@ -461,8 +555,16 @@ export class CapabilityReviewServiceV3 {
         "0",
         "-i",
         manifest,
-        "-c",
-        "copy",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-r",
+        "24",
+        "-c:a",
+        "aac",
+        "-ar",
+        "48000",
         "-y",
         output,
       ]);

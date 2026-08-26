@@ -1,15 +1,14 @@
 <!--
 Sync Impact Report
-- Version change: template -> 1.0.0
-- Added principles:
-  - I. Prove the Video Path First
-  - II. Separate Creative Intelligence from Generation
-  - III. Provider-Neutral Contracts and Honest Capabilities
-  - IV. Zero-Call Defaults and Bounded Live Execution
-  - V. Durable Provenance and Verification
-- Added sections:
-  - MVP Technical Constraints
-  - Delivery Workflow and Quality Gates
+- Version change: 1.0.0 -> 2.0.0
+- Modified principles:
+  - III. Provider-Neutral Contracts and Honest Capabilities: READY is evidence-scoped,
+    not a blanket quality guarantee.
+  - IV. Zero-Call Defaults and Bounded Live Execution: video and AI-QA authority are
+    separately bounded and consumed before their respective network attempts.
+  - V. Durable Provenance and Verification: server-owned real-execution evidence and
+    explicit operator promotion are required for READY.
+- Added sections: none
 - Removed sections: none
 - Deferred items: none
 -->
@@ -46,6 +45,13 @@ the active experiment. Provider capabilities MUST be registered and verified. Th
 invent MCP tools, silently fall back to another model, or claim unsupported audio, video,
 continuity, cancellation, or artifact behavior.
 
+`READY` MUST mean that the exact implementation/compiler/validator/adapter/runtime identity has
+at least one authorized real E2E success within its published capability envelope. It applies to
+that implementation's published envelope, not to every parameter combination, and product surfaces
+MUST disclose both the real validation baseline and that other combinations are not individually
+tested. Real success appends server-read evidence only; an operator MUST explicitly promote the
+implementation after a real AI-QA result and an Owner `PASS`.
+
 Rationale: compatibility at the HTTP or SDK layer does not guarantee equivalent modality,
 structured-output, error, or billing behavior.
 
@@ -57,6 +63,11 @@ the network attempt. Failures, timeouts, and ambiguous submissions MUST fail clo
 trigger automatic fallback, retry, replacement, or resubmission. A real Phase 0.5 spike is limited
 to exactly one authorized ComfyUI generation submission.
 
+Video submission and AI QA are separate authority and cost boundaries. Their independent limits,
+prices, expiry, and consumption records MUST be disclosed before batch creation; both are consumed
+before their first network byte. Missing LIVE enablement, credentials, healthy provider status, or
+current price facts MUST block preview before a batch is created.
+
 Rationale: paid or GPU-backed operations are irreversible cost and idempotency boundaries.
 
 ### V. Durable Provenance and Verification
@@ -66,6 +77,11 @@ and model changes create new records. Completion claims MUST be backed by automa
 verification at the actual boundary: MCP request/response, persisted job state, playable media,
 FFprobe facts, and explicit human review where required. Provider technical success MUST NOT be
 reported as semantic or human quality approval.
+
+Only a server-owned action that reads persisted Attempt, Artifact, consumption, price, FFprobe,
+three-frame, AI-QA, and Owner-decision records may append authorized real-execution evidence. A
+browser MUST NOT assert its own PASS evidence. AI QA remains advisory and MUST NOT infer an Owner
+decision, trigger a retry, or trigger assembly.
 
 Rationale: reproducibility and failure recovery require immutable lineage, not overwritten state.
 
@@ -116,4 +132,4 @@ changes, MINOR for new principles or materially expanded policy, and PATCH for n
 clarification. Compliance MUST be reviewed before implementation begins and again during
 convergence.
 
-**Version**: 1.0.0 | **Ratified**: 2026-08-23 | **Last Amended**: 2026-08-23
+**Version**: 2.0.0 | **Ratified**: 2026-08-23 | **Last Amended**: 2026-08-27

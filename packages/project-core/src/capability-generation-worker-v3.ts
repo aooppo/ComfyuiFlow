@@ -40,6 +40,10 @@ export interface CapabilityArtifactPipelineV3 {
   }): Promise<AttemptArtifactV3>;
 }
 
+export interface CapabilityV3QaRunner {
+  reviewAttempt(attemptId: string): Promise<unknown>;
+}
+
 export interface CapabilityV3McpToolClient {
   callTool<T = unknown>(name: string, input: Record<string, unknown>): Promise<T>;
 }
@@ -91,6 +95,7 @@ export class CapabilityGenerationWorkerV3 {
     private readonly transport: CapabilityV3McpTransport,
     private readonly artifacts: CapabilityArtifactPipelineV3,
     private readonly client: ProjectPrisma = prisma,
+    private readonly qa?: CapabilityV3QaRunner,
   ) {}
 
   async runOnce() {
@@ -147,6 +152,7 @@ export class CapabilityGenerationWorkerV3 {
     const attempt = GenerationAttemptV3Schema.parse({
       id: attemptId,
       generationBatchTargetId: target.id,
+      retryOfAttemptId: target.retryOfAttemptId,
       generationSpecRef: { id: target.generationSpec.id, version: target.generationSpec.version },
       authorizationConsumptionId: consumptionId,
       referencePlanDigest: snapshot.referencePlanDigest,
@@ -200,6 +206,7 @@ export class CapabilityGenerationWorkerV3 {
           id: attempt.id,
           projectId: target.projectId,
           generationBatchTargetId: attempt.generationBatchTargetId,
+          retryOfAttemptId: attempt.retryOfAttemptId,
           generationSpecId: attempt.generationSpecRef.id,
           authorizationConsumptionId: attempt.authorizationConsumptionId,
           referencePlanDigest: attempt.referencePlanDigest,
@@ -304,6 +311,9 @@ export class CapabilityGenerationWorkerV3 {
       valid ? "COMPLETED" : "FAILED",
       valid ? "ARTIFACT_TECHNICAL_PASS" : (artifact.technicalResultCode ?? "ARTIFACT_INVALID"),
     );
+    // AI QA is an independently authorized, advisory operation. A QA failure records its own
+    // terminal run and must not undo technical completion or submit anything else.
+    if (valid && this.qa) await this.qa.reviewAttempt(attempt.id).catch(() => undefined);
     return { attemptId, state: valid ? ("SUCCEEDED" as const) : ("FAILED" as const), artifact };
   }
 

@@ -21,6 +21,14 @@ const actionSchema = z.discriminatedUnion("action", [
   z
     .object({ action: z.literal("APPEND_EVIDENCE"), evidence: ImplementationEvidenceV2Schema })
     .strict(),
+  z
+    .object({
+      action: z.literal("APPEND_AUTHORIZED_REAL_EVIDENCE"),
+      attemptId: z.string().uuid(),
+      artifactId: z.string().uuid(),
+      operatorRef: z.string().trim().min(1).max(160),
+    })
+    .strict(),
   z.object({ action: z.literal("PROMOTE_READY"), implementationRef: VersionRefV2Schema }).strict(),
 ]);
 const noStore = { "Cache-Control": "no-store" };
@@ -55,6 +63,11 @@ export async function POST(request: Request) {
     }
     if (body.action === "APPEND_EVIDENCE")
       return Response.json(await evidenceService.append(body.evidence), {
+        status: 201,
+        headers: noStore,
+      });
+    if (body.action === "APPEND_AUTHORIZED_REAL_EVIDENCE")
+      return Response.json(await evidenceService.appendAuthorizedRealEvidence(body), {
         status: 201,
         headers: noStore,
       });
