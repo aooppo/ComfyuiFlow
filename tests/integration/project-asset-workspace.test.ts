@@ -38,6 +38,9 @@ async function* chunks(value: Buffer) {
 }
 
 async function clearWorkspace(client: ProjectPrisma) {
+  await client.$executeRawUnsafe(
+    'TRUNCATE TABLE "GenerationImplementationEvidence", "ShotExecutionPlan", "GenerationImplementation", "Project" CASCADE',
+  );
   await client.understandingApplication.deleteMany();
   await client.understandingReview.deleteMany();
   await client.assetUnderstandingRevision.deleteMany();
@@ -70,6 +73,9 @@ describe.runIf(enabled)("Project/Asset PostgreSQL workspace", () => {
   let storageRoot: string;
 
   beforeAll(async () => {
+    const databaseUrl = new URL(process.env.DATABASE_URL ?? "");
+    if (!databaseUrl.pathname.endsWith("_test"))
+      throw new Error("Project/Asset tests require an isolated *_test database");
     storageRoot = await mkdtemp(path.join(tmpdir(), "comfyuiflow-project-integration-"));
     const module = await import("@comfyuiflow/project-core");
     client = module.prisma;

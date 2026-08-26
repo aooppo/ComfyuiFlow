@@ -1,7 +1,17 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import * as z from "zod/v4";
-import { ComfyUiExecutionService, checkWorkflowReadiness } from "@comfyuiflow/comfyui-bridge";
-import type { ComfyUiClient, WorkflowRegistry } from "@comfyuiflow/comfyui-bridge";
+import {
+  ComfyUiExecutionPlanService,
+  ComfyUiExecutionService,
+  allowlistedNodeInfo,
+  captureNodeCatalog,
+  checkWorkflowReadiness,
+} from "@comfyuiflow/comfyui-bridge";
+import type {
+  ComfyUiClient,
+  ComfyUiExecutionPlanStore,
+  WorkflowRegistry,
+} from "@comfyuiflow/comfyui-bridge";
 import { AuthorizationService } from "@comfyuiflow/spike-core";
 
 export interface ComfyUiMcpDependencies {
@@ -10,6 +20,10 @@ export interface ComfyUiMcpDependencies {
   liveEnabled: boolean;
   dataRoot: string;
   allowedInputRoots?: string[];
+  executionPlanStore?: ComfyUiExecutionPlanStore;
+  executionWorkflowId?: string;
+  executionAdapterId?: string;
+  executionAdapterVersion?: string;
   verifyProjectAuthorization?: (input: {
     authorizationConsumptionId: string;
     generationJobId: string;
@@ -33,6 +47,157 @@ export function createComfyUiMcpServer(dependencies: ComfyUiMcpDependencies): Mc
     ...dependencies,
     authorization: new AuthorizationService(dependencies.dataRoot),
   });
+  const executionPlans = dependencies.executionPlanStore
+    ? new ComfyUiExecutionPlanService({
+        store: dependencies.executionPlanStore,
+        execution,
+        async recheckReadiness(workflowId) {
+          const readiness = await checkWorkflowReadiness(
+            dependencies.client,
+            dependencies.registry,
+            workflowId,
+          );
+          return { ready: readiness.ready, blockers: readiness.blockers };
+        },
+      })
+    : null;
+
+  const nodeClasses = async () =>
+    [
+      ...new Set(
+        (await dependencies.registry.manifests()).flatMap((item) => item.requiredNodeClasses),
+      ),
+    ].sort();
+
+  server.registerTool(
+    "comfyui_get_node_catalog",
+    {
+      description: "Return a redacted catalog for only project-allowlisted ComfyUI node classes",
+      inputSchema: {},
+      annotations: { readOnlyHint: true, destructiveHint: false },
+    },
+    async () => {
+      const [catalog, stats] = await Promise.all([
+        captureNodeCatalog(dependencies.client, await nodeClasses()),
+        dependencies.client.getSystemStats(),
+      ]);
+      const system = stats.system;
+      const runtimeVersion =
+        system && typeof system === "object"
+          ? String((system as Record<string, unknown>).comfyui_version ?? "unknown")
+          : "unknown";
+      return result({
+        ...catalog,
+        runtimeVersion,
+        capturedAt: new Date().toISOString(),
+        generationCalls: 0,
+      });
+    },
+  );
+
+  server.registerTool(
+    "comfyui_get_node_info",
+    {
+      description: "Return one redacted node contract only when the class is project-allowlisted",
+      inputSchema: {
+        className: z.string().min(1),
+        catalogSha256: z.string().regex(/^[a-f0-9]{64}$/),
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false },
+    },
+    async ({ className, catalogSha256 }) => {
+      const catalog = await captureNodeCatalog(dependencies.client, await nodeClasses());
+      if (catalog.catalogSha256 !== catalogSha256) throw new Error("Node catalog is stale");
+      const node = allowlistedNodeInfo(catalog, className);
+      if (!node) throw new Error("Node class is not project-allowlisted");
+      return result({ node, catalogSha256: catalog.catalogSha256, generationCalls: 0 });
+    },
+  );
+
+  server.registerTool(
+    "comfyui_validate_graph",
+    {
+      description:
+        "Statically validate one registered graph without accepting graph JSON or a path",
+      inputSchema: { workflowId: z.string().min(1) },
+      annotations: { readOnlyHint: true, destructiveHint: false },
+    },
+    async ({ workflowId }) => {
+      const catalog = await captureNodeCatalog(dependencies.client, await nodeClasses());
+      return result(await dependencies.registry.validate(workflowId, catalog));
+    },
+  );
+
+  server.registerTool(
+    "comfyui_check_graph_readiness",
+    {
+      description: "Recheck the configured Workflow Agent execution adapter without generation",
+      inputSchema: { adapterId: z.string().min(1), adapterVersion: z.string().min(1) },
+      annotations: { readOnlyHint: true, destructiveHint: false },
+    },
+    async ({ adapterId, adapterVersion }) => {
+      if (
+        !dependencies.executionWorkflowId ||
+        adapterId !== dependencies.executionAdapterId ||
+        adapterVersion !== dependencies.executionAdapterVersion
+      ) {
+        return result({
+          ready: false,
+          blockers: ["EXECUTION_ADAPTER_NOT_CONFIGURED"],
+          generationCalls: 0,
+        });
+      }
+      const catalog = await captureNodeCatalog(dependencies.client, await nodeClasses());
+      const [runtime, graph] = await Promise.all([
+        checkWorkflowReadiness(
+          dependencies.client,
+          dependencies.registry,
+          dependencies.executionWorkflowId,
+        ),
+        dependencies.registry.validate(dependencies.executionWorkflowId, catalog),
+      ]);
+      return result({
+        ...runtime,
+        ready: runtime.ready && graph.valid,
+        catalogSha256: catalog.catalogSha256,
+        graphSha256: graph.graphSha256,
+        blockers: [...new Set([...runtime.blockers, ...graph.errors])],
+        generationCalls: 0,
+      });
+    },
+  );
+
+  server.registerTool(
+    "comfyui_submit_execution_plan",
+    {
+      description: "Submit only one database-frozen, authorized and materialized execution plan",
+      inputSchema: {
+        executionPlanId: z.string().uuid(),
+        executionPlanSha256: z.string().regex(/^[a-f0-9]{64}$/),
+        generationJobId: z.string().uuid(),
+        authorizationConsumptionId: z.string().uuid(),
+        materializedExecutionSha256: z.string().regex(/^[a-f0-9]{64}$/),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true },
+    },
+    async (input) => {
+      if (!executionPlans) throw new Error("Execution-plan store is unavailable");
+      return result(await executionPlans.submit(input));
+    },
+  );
+
+  server.registerTool(
+    "comfyui_retain_execution_plan_artifacts",
+    {
+      description: "Retain artifacts only for an existing database generation job",
+      inputSchema: { generationJobId: z.string().uuid() },
+      annotations: { readOnlyHint: false, destructiveHint: false },
+    },
+    async ({ generationJobId }) => {
+      if (!executionPlans) throw new Error("Execution-plan store is unavailable");
+      return result({ artifacts: await executionPlans.retain(generationJobId) });
+    },
+  );
 
   server.registerTool(
     "comfyui_list_workflows",

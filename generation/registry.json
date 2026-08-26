@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "generation-registry-v1",
+  "registryVersion": "2026-08-26.1",
+  "providers": [
+    {
+      "providerId": "comfyui-partner",
+      "displayName": "ComfyUI Partner Nodes",
+      "authenticationProfileId": "comfy-org",
+      "regions": ["provider-managed"],
+      "readinessCheckId": "comfyui-partner-readiness-v1"
+    }
+  ],
+  "models": [
+    {
+      "modelProfileId": "minimax-h3-comfyui-partner",
+      "providerId": "comfyui-partner",
+      "modelFamily": "minimax-h3",
+      "displayName": "MiniMax H3",
+      "modelVersion": "partner-current-code-verified"
+    }
+  ],
+  "implementations": [
+    {
+      "implementationId": "minimax-h3-reference-comfyui-partner-v1",
+      "version": "1.0.0",
+      "providerId": "comfyui-partner",
+      "modelProfileId": "minimax-h3-comfyui-partner",
+      "executorType": "COMFYUI_GRAPH",
+      "adapterId": "comfyui-partner-h3-reference",
+      "adapterVersion": "1.0.0",
+      "defaultStatus": "DISCOVERED",
+      "selectable": true,
+      "availabilityCode": "REAL_TECHNICAL_EVIDENCE_REQUIRED",
+      "capabilities": ["REFERENCE_TO_VIDEO", "MULTI_REFERENCE_VIDEO"],
+      "referenceSlots": [
+        "SCENE",
+        "PRODUCT",
+        "CHARACTER_FULL_BODY",
+        "CHARACTER_FACE",
+        "CHARACTER_REAR"
+      ],
+      "constraints": {
+        "durationSeconds": { "min": 4, "max": 4 },
+        "width": 768,
+        "height": 1344,
+        "fps": 24,
+        "aspectRatios": ["PORTRAIT_9_16"]
+      },
+      "referenceWorkflowIds": ["minimax-h3-project-shot-4s-v1"],
+      "referenceWorkflowSha256": "6eb380b17fd775ee15e45cc7a65b5fb80478954bc51c027faff67dcd5b0d1d7a",
+      "patternIds": [],
+      "nodeClasses": ["LoadImage", "MinimaxHailuo03ReferenceNode", "SaveVideo"],
+      "pricing": {
+        "currency": "USD",
+        "estimatedCostMicros": 514800,
+        "effectiveAt": "2026-08-24T00:00:00.000Z",
+        "expiresAt": "2026-09-23T00:00:00.000Z"
+      }
+    },
+    {
+      "implementationId": "minimax-h3-first-frame-comfyui-partner-v1",
+      "version": "1.0.0",
+      "providerId": "comfyui-partner",
+      "modelProfileId": "minimax-h3-comfyui-partner",
+      "executorType": "COMFYUI_GRAPH",
+      "adapterId": "comfyui-partner-h3-first-frame",
+      "adapterVersion": "1.0.0",
+      "defaultStatus": "TRIAL",
+      "selectable": false,
+      "availabilityCode": "STATIC_GRAPH_PREPROCESSING_PRICE_EVIDENCE_REQUIRED",
+      "capabilities": ["FIRST_FRAME_TO_VIDEO", "PREVIOUS_FINAL_FRAME_TO_VIDEO"],
+      "referenceSlots": ["FIRST_FRAME"],
+      "constraints": {
+        "durationSeconds": { "min": 4, "max": 15 },
+        "width": 768,
+        "height": 1344,
+        "fps": 24,
+        "aspectRatios": ["PORTRAIT_9_16"]
+      },
+      "referenceWorkflowIds": [],
+      "patternIds": ["minimax-h3-first-frame-v1"],
+      "nodeClasses": ["LoadImage", "MinimaxHailuo03FirstLastFrameNode", "SaveVideo"],
+      "pricing": null
+    },
+    {
+      "implementationId": "minimax-h3-first-last-frame-comfyui-partner-v1",
+      "version": "1.0.0",
+      "providerId": "comfyui-partner",
+      "modelProfileId": "minimax-h3-comfyui-partner",
+      "executorType": "COMFYUI_GRAPH",
+      "adapterId": "comfyui-partner-h3-first-last-frame",
+      "adapterVersion": "1.0.0",
+      "defaultStatus": "DISCOVERED",
+      "selectable": false,
+      "availabilityCode": "FIRST_LAST_FRAME_IMPLEMENTATION_NOT_AVAILABLE",
+      "capabilities": ["FIRST_LAST_FRAME_TO_VIDEO"],
+      "referenceSlots": ["FIRST_FRAME", "LAST_FRAME"],
+      "constraints": {
+        "durationSeconds": { "min": 4, "max": 15 },
+        "width": 768,
+        "height": 1344,
+        "fps": 24,
+        "aspectRatios": ["PORTRAIT_9_16"]
+      },
+      "referenceWorkflowIds": [],
+      "patternIds": [],
+      "nodeClasses": ["LoadImage", "MinimaxHailuo03FirstLastFrameNode", "SaveVideo"],
+      "pricing": null
+    }
+  ]
+}

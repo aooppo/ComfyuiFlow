@@ -38,6 +38,7 @@ export interface GenerationSubmission {
     width: number;
     height: number;
     fps: number;
+    outputPrefix?: string;
   };
   authorizationScope?: Record<string, unknown>;
 }
@@ -70,6 +71,10 @@ export class ComfyUiExecutionService {
       allowedInputRoots?: string[];
     },
   ) {}
+
+  assertLiveEnabled(): void {
+    if (!this.dependencies.liveEnabled) throw new Error("ComfyUI LIVE is disabled");
+  }
 
   async stageInput(input: {
     workflowId: string;
@@ -115,7 +120,7 @@ export class ComfyUiExecutionService {
     input: AuthorizedGenerationSubmission,
     consumeFileGrant: boolean,
   ): Promise<SubmitResult> {
-    if (!this.dependencies.liveEnabled) throw new Error("ComfyUI LIVE is disabled");
+    this.assertLiveEnabled();
     const loaded = await this.dependencies.registry.load(input.workflowId);
     if (loaded.manifest.requiresComfyOrgAuth && !this.dependencies.client.hasComfyOrgCredential()) {
       throw new Error("Comfy Partner Node credential is missing");
@@ -173,6 +178,7 @@ export class ComfyUiExecutionService {
         width: input.shot.width,
         height: input.shot.height,
         fps: input.shot.fps,
+        ...(input.shot.outputPrefix ? { outputPrefix: input.shot.outputPrefix } : {}),
       },
     );
     const scopeHash = generationScopeHash(input);

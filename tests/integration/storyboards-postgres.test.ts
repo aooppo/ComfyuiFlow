@@ -182,7 +182,7 @@ describe.runIf(enabled)("Storyboard PostgreSQL workspace", () => {
 
 async function reset(client: ProjectPrisma) {
   await client.$executeRawUnsafe(
-    'TRUNCATE TABLE "StoryboardDecision", "ShotAssetBinding", "AssetResolutionManifest", "ShotAssetRequirement", "StoryboardShot", "StoryboardDirectorRun", "StoryboardVersion", "Storyboard", "Project" CASCADE',
+    'TRUNCATE TABLE "GenerationImplementationEvidence", "ShotExecutionPlan", "GenerationImplementation", "StoryboardDecision", "ShotAssetBinding", "AssetResolutionManifest", "ShotAssetRequirement", "StoryboardShot", "StoryboardDirectorRun", "StoryboardVersion", "Storyboard", "Project" CASCADE',
   );
 }
 

@@ -253,6 +253,6 @@ async function seedBatch(
 
 async function reset(client: ProjectPrisma) {
   await client.$executeRawUnsafe(
-    'TRUNCATE TABLE "HumanQaDecision", "AiQaResult", "AiQaRun", "ArtifactReviewFrame", "ArtifactTechnicalCheck", "GeneratedArtifact", "GenerationJobEvent", "AuthorizationConsumption", "GenerationJob", "ExecutionAuthorization", "GenerationBatchTarget", "GenerationBatch", "GenerationPlanDecision", "GenerationSpecReference", "GenerationSpec", "GenerationPlanVersion", "GenerationPlan", "StoryboardDecision", "ShotAssetBinding", "AssetResolutionManifest", "ShotAssetRequirement", "StoryboardShot", "StoryboardDirectorRun", "StoryboardVersion", "Storyboard", "Project" CASCADE',
+    'TRUNCATE TABLE "GenerationImplementationEvidence", "ShotExecutionPlan", "GenerationImplementation", "HumanQaDecision", "AiQaResult", "AiQaRun", "ArtifactReviewFrame", "ArtifactTechnicalCheck", "GeneratedArtifact", "GenerationJobEvent", "AuthorizationConsumption", "GenerationJob", "ExecutionAuthorization", "GenerationBatchTarget", "GenerationBatch", "GenerationPlanDecision", "GenerationSpecReference", "GenerationSpec", "GenerationPlanVersion", "GenerationPlan", "StoryboardDecision", "ShotAssetBinding", "AssetResolutionManifest", "ShotAssetRequirement", "StoryboardShot", "StoryboardDirectorRun", "StoryboardVersion", "Storyboard", "Project" CASCADE',
   );
 }

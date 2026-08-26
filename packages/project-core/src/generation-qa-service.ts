@@ -6,6 +6,7 @@ import type { Prisma } from "./generated/client/index.js";
 import { canonicalSha256 } from "./canonical-json.js";
 import { ProjectAssetError } from "./contracts.js";
 import { GenerationExecutionService } from "./generation-execution-service.js";
+import { continuationPolicy, decideContinuation } from "./generation-continuation.js";
 import { LocalContentStorage, type StorageProvider } from "./local-storage.js";
 import { prisma, type ProjectPrisma } from "./prisma.js";
 
@@ -26,12 +27,13 @@ export class GenerationQaService {
       where: { id: artifactId },
       include: {
         technicalChecks: { where: { status: "PASS" }, orderBy: { checkedAt: "desc" } },
-        reviewFrames: { orderBy: { role: "asc" } },
+        reviewFrames: { where: { extractorVersion: "review-frames-v1" }, orderBy: { role: "asc" } },
         generationJob: {
           include: {
-            generationBatch: true,
+            generationBatch: { include: { project: true } },
             generationBatchTarget: {
               include: {
+                shotExecutionPlan: true,
                 generationSpec: {
                   include: {
                     references: { include: { projectAsset: { include: { storedObject: true } } } },
@@ -52,8 +54,11 @@ export class GenerationQaService {
     if (artifact.reviewFrames.some((frame) => frame.extractorVersion !== frameVersion))
       throw new ProjectAssetError("QA_NOT_READY", "Review frames are not one immutable set", 409);
 
+    const referenceSlots = Array.isArray(target.slotManifestJson)
+      ? (target.slotManifestJson as any[])
+      : [];
     const referenceImages = await Promise.all(
-      (target.slotManifestJson as any[]).map(async (slot) => {
+      referenceSlots.map(async (slot) => {
         if (slot.sourceKind === "KEYFRAME_ARTIFACT" && slot.keyframeArtifactId) {
           const keyframe = await this.client.keyframeArtifact.findUnique({
             where: { id: slot.keyframeArtifactId },
@@ -111,7 +116,7 @@ export class GenerationQaService {
       artifactId: artifact.id,
       generationSpecId: spec.id,
       generationSpecHash: spec.outputHash,
-      referenceSlots: target.slotManifestJson,
+      referenceSlots,
       modelRef: { providerId: this.provider.providerId, modelId: this.provider.modelId },
       referenceImages,
       reviewFrames,
@@ -145,7 +150,17 @@ export class GenerationQaService {
       expectedFacts: request.expectedFacts,
     });
     const requestHash = canonicalSha256({ inputHash, modelRef: request.modelRef });
-    await this.execution.consume(job.id, "AI_QA_REVIEW", requestHash);
+    const shotPricing =
+      target.shotExecutionPlan?.payloadJson &&
+      typeof target.shotExecutionPlan.payloadJson === "object"
+        ? ((target.shotExecutionPlan.payloadJson as Record<string, any>).pricing as
+            Record<string, unknown> | undefined)
+        : undefined;
+    const reservedQaCostMicros =
+      typeof shotPricing?.qaMaximumCostMicros === "number" ? shotPricing.qaMaximumCostMicros : 0;
+    await this.execution.consume(job.id, "AI_QA_REVIEW", requestHash, {
+      reservedCostMicros: reservedQaCostMicros,
+    });
     const run = await this.client.aiQaRun.create({
       data: {
         id: randomUUID(),
@@ -163,7 +178,18 @@ export class GenerationQaService {
     try {
       const result = AiQaResultV1Schema.parse(await this.provider.reviewVideoFrames(request));
       const outputHash = canonicalSha256(result);
-      await this.client.$transaction([
+      const policy = continuationPolicy(job.generationBatch.project.continuationMode);
+      if (
+        job.generationBatch.engineVersion === "WORKFLOW_AGENT_V1" &&
+        job.generationBatch.continuationPolicyHash !== policy.policyHash
+      )
+        throw new ProjectAssetError(
+          "CONTINUATION_POLICY_STALE",
+          "The confirmed QA continuation policy changed",
+          409,
+        );
+      const continuation = decideContinuation(result, policy);
+      const writes = [
         this.client.aiQaResult.create({
           data: {
             id: randomUUID(),
@@ -175,6 +201,9 @@ export class GenerationQaService {
             limitationsJson: result.limitations,
             criteriaJson: result.criteria,
             outputHash,
+            continuationDecision: continuation.decision,
+            continuationPolicyVersion: policy.schemaVersion,
+            continuationPolicyHash: policy.policyHash,
           },
         }),
         this.client.aiQaRun.update({
@@ -191,20 +220,41 @@ export class GenerationQaService {
         }),
         this.client.generationJob.update({
           where: { id: job.id },
-          data: { status: "AWAITING_HUMAN_QA", safeResultCode: "AWAITING_OWNER_QA" },
+          data: {
+            status: "AWAITING_HUMAN_QA",
+            safeResultCode:
+              continuation.decision === "CONTINUE"
+                ? "AWAITING_OWNER_QA_CONTINUING"
+                : continuation.reasonCode,
+          },
         }),
-      ]);
+        ...(continuation.decision !== "CONTINUE"
+          ? [
+              this.client.generationBatch.update({
+                where: { id: job.generationBatchId },
+                data: { status: "PAUSED", rowVersion: { increment: 1 } },
+              }),
+            ]
+          : []),
+      ];
+      await this.client.$transaction(writes);
       return result;
     } catch (error) {
-      await this.client.aiQaRun.update({
-        where: { id: run.id },
-        data: {
-          status: "AMBIGUOUS",
-          safeResultCode: "AI_QA_RESULT_AMBIGUOUS",
-          providerCallCount: this.provider.externalCallCount - providerCallsBefore,
-          finishedAt: new Date(),
-        },
-      });
+      await this.client.$transaction([
+        this.client.aiQaRun.update({
+          where: { id: run.id },
+          data: {
+            status: "AMBIGUOUS",
+            safeResultCode: "AI_QA_RESULT_AMBIGUOUS",
+            providerCallCount: this.provider.externalCallCount - providerCallsBefore,
+            finishedAt: new Date(),
+          },
+        }),
+        this.client.generationBatch.update({
+          where: { id: job.generationBatchId },
+          data: { status: "PAUSED", rowVersion: { increment: 1 } },
+        }),
+      ]);
       throw error;
     }
   }

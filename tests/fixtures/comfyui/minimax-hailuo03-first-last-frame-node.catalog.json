@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "comfyui-node-catalog-v1",
+  "requestedNodeClasses": ["MinimaxHailuo03FirstLastFrameNode"],
+  "nodes": [
+    {
+      "className": "MinimaxHailuo03FirstLastFrameNode",
+      "inputs": [
+        { "name": "first_frame", "required": true, "type": "IMAGE" },
+        { "name": "last_frame", "required": false, "type": "IMAGE" },
+        { "name": "model", "required": true, "type": "COMFY_DYNAMICCOMBO_V3" },
+        { "name": "seed", "required": true, "type": "INT", "minimum": 0, "maximum": 4294967295 },
+        { "name": "watermark", "required": true, "type": "BOOLEAN" }
+      ],
+      "outputs": ["VIDEO"]
+    }
+  ],
+  "sourceSha256": "3f1645fabf8e5f025da1abec9ec7540c529005368ced3bf7212ed6ede3d21cfb",
+  "catalogSha256": "305c806d1cf7671728d7ffe628a6e86fe8886b2b409178b7f0ab192dd66183af"
+}

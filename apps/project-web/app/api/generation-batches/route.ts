@@ -1,5 +1,6 @@
 import { GenerationExecutionService } from "@comfyuiflow/project-core";
 import { apiError, jsonBody } from "../../../lib/api";
+import { requiredGenerationPlanRowVersion } from "../../../lib/generation-plan-http";
 import { z } from "zod";
 
 const service = new GenerationExecutionService();
@@ -20,7 +21,15 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const key = request.headers.get("idempotency-key") ?? "";
-    return Response.json(await service.createBatch(await jsonBody(request), key), {
+    const body = await jsonBody(request);
+    const expectedRowVersion =
+      typeof body === "object" &&
+      body !== null &&
+      "engineVersion" in body &&
+      body.engineVersion === "WORKFLOW_AGENT_V1"
+        ? requiredGenerationPlanRowVersion(request)
+        : undefined;
+    return Response.json(await service.createBatch(body as any, key, expectedRowVersion), {
       status: 201,
       headers: { "Cache-Control": "no-store" },
     });

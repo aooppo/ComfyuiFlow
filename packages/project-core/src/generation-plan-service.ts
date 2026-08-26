@@ -25,6 +25,7 @@ const versionInclude = {
 };
 
 type StoredSpec = {
+  contractVersion: string;
   storyboardShotId: string;
   shotKey: string;
   ordinal: number;
@@ -35,8 +36,8 @@ type StoredSpec = {
   composition: string;
   continuityRequirements: unknown;
   durationSeconds: number;
-  positivePrompt: string;
-  capabilityRequirements: unknown;
+  positivePrompt: string | null;
+  capabilityRequirements: unknown | null;
   inputHash: string;
   referencesHash: string;
   outputHash: string;
@@ -662,6 +663,17 @@ export class GenerationPlanService {
     },
     spec: StoredSpec,
   ): GenerationSpecV1 {
+    if (
+      spec.contractVersion !== "generation-spec-v1" ||
+      spec.positivePrompt === null ||
+      spec.capabilityRequirements === null
+    ) {
+      throw this.error(
+        "GENERATION_SPEC_INVALID",
+        "This legacy operation requires a GenerationSpec V1 payload",
+        409,
+      );
+    }
     return GenerationSpecV1Schema.parse({
       schemaVersion: "generation-spec-v1",
       plannerVersion: DETERMINISTIC_SHOT_PLANNER_VERSION,
@@ -751,6 +763,7 @@ export class GenerationPlanService {
           composition: spec.composition,
           continuityRequirements: spec.continuityRequirements,
           durationSeconds: spec.durationSeconds,
+          contractVersion: "generation-spec-v1",
           positivePrompt: spec.positivePrompt,
           capabilityRequirements: spec.capabilityRequirements,
           inputHash: spec.inputHash,

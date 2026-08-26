@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLanguage } from "../i18n/language-provider";
+import { FinalOwnerReviewPanel } from "./final-owner-review-panel";
+import { GenerationBatchPanel } from "./generation-batch-panel";
+import { WorkflowPlanningPanel } from "./workflow-planning-panel";
 
 interface ReferenceView {
   requirementId: string;
@@ -120,9 +123,10 @@ interface ContinuitySummary {
 
 interface BatchView {
   id: string;
+  engineVersion?: "LEGACY_V1" | "WORKFLOW_AGENT_V1";
   status: string;
   createdAt: string;
-  providerProfileId: "fake-video-v1" | "minimax-h3-4s-v1";
+  providerProfileId: "fake-video-v1" | "minimax-h3-4s-v1" | null;
   rowVersion: number;
   jobs: Array<{
     id: string;
@@ -150,6 +154,21 @@ interface BatchView {
     maximumAiQaCalls: number;
     consumptions: Array<{ operation: string }>;
   } | null;
+  finalOwnerReview?: {
+    schemaVersion: "final-owner-review-v1";
+    ready: boolean;
+    ownerDecisionRequired: boolean;
+    items: Array<{
+      ordinal: number;
+      generationSpecId: string;
+      artifactId: string | null;
+      technicalStatus: string;
+      aiQaStatus: string | null;
+      continuationDecision: string | null;
+      humanDecision: string | null;
+      ownerDecisionRequired: boolean;
+    }>;
+  };
 }
 
 interface AssemblySourceView {
@@ -296,14 +315,19 @@ export function ShotPlanEditor({
   const [assembling, setAssembling] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [approvedKeyframePlanId, setApprovedKeyframePlanId] = useState<string | null>(null);
+  const [engineMode, setEngineMode] = useState<"workflow-agent-v1" | "legacy-v1">(
+    "workflow-agent-v1",
+  );
   const retryPanelRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
-    const [planResponse, versionsResponse, continuityResponse] = await Promise.all([
-      fetch(`/api/generation-plans/${planId}`),
-      fetch(`/api/generation-plans/${planId}/versions`),
-      fetch(`/api/storyboards/${storyboardId}/continuity`),
-    ]);
+    const [planResponse, versionsResponse, continuityResponse, readinessResponse] =
+      await Promise.all([
+        fetch(`/api/generation-plans/${planId}`),
+        fetch(`/api/generation-plans/${planId}/versions`),
+        fetch(`/api/storyboards/${storyboardId}/continuity`),
+        fetch(`/api/projects/${projectId}/generation-readiness`),
+      ]);
     const body = (await planResponse.json()) as PlanView & { error?: { message: string } };
     if (!planResponse.ok) throw new Error(body.error?.message ?? "Shot plan could not be loaded");
     const history = (await versionsResponse.json()) as {
@@ -315,6 +339,12 @@ export function ShotPlanEditor({
       current.length ? current : body.headVersion.specs.map((spec) => spec.id),
     );
     setVersions(history.versions ?? []);
+    if (readinessResponse.ok) {
+      const readiness = (await readinessResponse.json()) as {
+        engineMode: "workflow-agent-v1" | "legacy-v1";
+      };
+      setEngineMode(readiness.engineMode);
+    } else setEngineMode("workflow-agent-v1");
     if (continuityResponse.ok) {
       const continuity = (await continuityResponse.json()) as ContinuitySummary;
       setApprovedKeyframePlanId(
@@ -341,7 +371,7 @@ export function ShotPlanEditor({
         setBatch(loaded.batch);
         setBatchHistory(loaded.batches ?? (loaded.batch ? [loaded.batch] : []));
         if (loaded.batch) {
-          setProviderProfile(loaded.batch.providerProfileId);
+          if (loaded.batch.providerProfileId) setProviderProfile(loaded.batch.providerProfileId);
           if (batchBlocksNewConfirmation(loaded.batch)) {
             setSelectedForGeneration(
               loaded.batch.jobs.map((job) => job.generationBatchTarget.generationSpecId),
@@ -359,7 +389,7 @@ export function ShotPlanEditor({
       setAssemblyState(null);
       setDraftState(null);
     }
-  }, [planId, storyboardId]);
+  }, [planId, projectId, storyboardId]);
 
   useEffect(() => {
     void load().catch((reason: unknown) =>
@@ -648,8 +678,12 @@ export function ShotPlanEditor({
     setAssembling(false);
   }
 
-  async function decideArtifact(artifactId: string, decision: "PASS" | "FAIL") {
-    const notes = reviewNotes[artifactId]?.trim() ?? "";
+  async function decideArtifact(
+    artifactId: string,
+    decision: "PASS" | "FAIL",
+    notesOverride?: string,
+  ) {
+    const notes = notesOverride?.trim() ?? reviewNotes[artifactId]?.trim() ?? "";
     if (decision === "FAIL" && !notes) {
       setError(
         isChinese
@@ -955,6 +989,14 @@ export function ShotPlanEditor({
       </p>
       {message && <p className="successPanel">{message}</p>}
       {error && <p className="formError">{error}</p>}
+      {plan.approvedVersionId && engineMode === "workflow-agent-v1" && (
+        <WorkflowPlanningPanel
+          generationPlanVersionId={plan.approvedVersionId}
+          generationPlanRowVersion={plan.rowVersion}
+          shots={specs.map((spec) => ({ shotKey: spec.shotKey, ordinal: spec.ordinal }))}
+          isChinese={isChinese}
+        />
+      )}
       <section className="shotGrid">
         {specs.map((spec, index) => (
           <article className="shotCard" key={spec.shotKey}>
@@ -1095,7 +1137,7 @@ export function ShotPlanEditor({
               ? "请先批准当前这个确切的分镜计划版本，再开始生成。"
               : "Approve this exact Shot Plan before generation."}
           </p>
-        ) : (
+        ) : engineMode === "legacy-v1" ? (
           <>
             <label>
               {isChinese ? "已注册的执行配置" : "Registered execution profile"}
@@ -1257,8 +1299,14 @@ export function ShotPlanEditor({
               )}
             </div>
           </>
+        ) : (
+          <p className="noticePanel">
+            {isChinese
+              ? "当前使用 Workflow Agent。请在上方完成零调用规划并确认一次确切的视频批次；Fake 配置不会出现在新流程中。"
+              : "Workflow Agent is active. Complete the zero-call plan above and confirm one exact video batch; Fake is not offered in the new flow."}
+          </p>
         )}
-        {executionPreview && (
+        {engineMode === "legacy-v1" && executionPreview && (
           <div className="executionPreview">
             <p>
               <strong>
@@ -1361,7 +1409,23 @@ export function ShotPlanEditor({
             ))}
           </div>
         )}
-        {batch && (
+        {batch?.engineVersion === "WORKFLOW_AGENT_V1" && (
+          <>
+            <GenerationBatchPanel
+              batch={batch}
+              isChinese={isChinese}
+              onRefresh={() => void refreshBatch()}
+            />
+            <FinalOwnerReviewPanel
+              batch={batch}
+              isChinese={isChinese}
+              onDecision={async (artifactId, decision, notes) => {
+                await decideArtifact(artifactId, decision, notes);
+              }}
+            />
+          </>
+        )}
+        {batch && batch.engineVersion !== "WORKFLOW_AGENT_V1" && (
           <div className="batchProgress">
             <h3>
               {isChinese ? "批次" : "Batch"} {t(batch.status)}

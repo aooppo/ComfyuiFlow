@@ -663,6 +663,8 @@ export type StoryboardGenerationRequestV2 = z.infer<typeof StoryboardGenerationR
 export type StoryboardProposalShotV2 = z.infer<typeof StoryboardProposalShotV2Schema>;
 export type StoryboardProposalV2 = z.infer<typeof StoryboardProposalV2Schema>;
 
+export * from "./workflow-agent.js";
+
 export const GenerationSpecReferenceV1Schema = z
   .object({
     requirementId: UuidSchema,
@@ -933,7 +935,7 @@ export const AiQaRequestV1Schema = z
     artifactId: UuidSchema,
     generationSpecId: UuidSchema,
     generationSpecHash: Sha256Schema,
-    referenceSlots: z.array(GenerationExecutionSlotV1Schema).length(5),
+    referenceSlots: z.array(GenerationExecutionSlotV1Schema).max(30),
     reviewFrames: z
       .array(
         z.object({
@@ -953,7 +955,7 @@ export const AiQaRequestV1Schema = z
           content: z.instanceof(Uint8Array),
         }),
       )
-      .length(5),
+      .max(30),
     technicalFacts: z.record(z.string(), z.unknown()),
     expectedFacts: z.record(z.string(), z.unknown()),
     modelRef: z.object({

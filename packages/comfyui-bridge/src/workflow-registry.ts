@@ -1,11 +1,12 @@
-import { readFile, realpath } from "node:fs/promises";
-import { dirname, relative, resolve } from "node:path";
+import { readFile } from "node:fs/promises";
 import {
   WorkflowRegistrySchema,
   type WorkflowManifest,
   type WorkflowRegistry as WorkflowRegistryDocument,
 } from "@comfyuiflow/contracts";
 import { sha256Bytes } from "@comfyuiflow/spike-core";
+import { loadTrustedGraphFile, validateComfyUiGraph } from "./graph-validator.js";
+import type { NormalizedNodeCatalog } from "./node-catalog.js";
 
 export interface LoadedWorkflow {
   manifest: WorkflowManifest;
@@ -27,6 +28,7 @@ export interface WorkflowBindingValues {
   width: number;
   height: number;
   fps: number;
+  outputPrefix?: string;
 }
 
 function decodePointer(pointer: string): string[] {
@@ -99,14 +101,9 @@ export class WorkflowRegistry {
   async load(workflowId: string): Promise<LoadedWorkflow> {
     const manifest = (await this.manifests()).find((item) => item.workflowId === workflowId);
     if (!manifest) throw new Error(`Workflow is not registered: ${workflowId}`);
-    const registryRoot = await realpath(dirname(this.registryPath));
-    const workflowPath = resolve(registryRoot, manifest.apiWorkflowPath);
-    const traversal = relative(registryRoot, workflowPath);
-    if (traversal.startsWith("..") || traversal.includes("../")) {
-      throw new Error("Workflow path escapes registry root");
-    }
-    const bytes = await readFile(workflowPath);
-    const workflow = JSON.parse(bytes.toString("utf8")) as Record<string, unknown>;
+    const trusted = await loadTrustedGraphFile(this.registryPath, manifest.apiWorkflowPath);
+    const bytes = trusted.bytes;
+    const workflow = trusted.graph;
     const nodeClasses = workflowNodeClasses(workflow);
     return {
       manifest,
@@ -118,6 +115,13 @@ export class WorkflowRegistry {
         (nodeClass) => !nodeClasses.has(nodeClass),
       ),
     };
+  }
+
+  async validate(workflowId: string, catalog: NormalizedNodeCatalog) {
+    const loaded = await this.load(workflowId);
+    return validateComfyUiGraph(loaded.workflow, catalog, {
+      outputNodeId: loaded.manifest.output.nodeId,
+    });
   }
 
   async materialize(
@@ -151,6 +155,27 @@ export class WorkflowRegistry {
       if (values[name] === undefined) throw new Error(`Workflow binding value is missing: ${name}`);
       const [parent, key] = resolvePointerParent(result, binding.pointer);
       parent[key] = values[name];
+    }
+    if (values.outputPrefix !== undefined) {
+      if (
+        !/^comfyuiflow\/[a-z0-9][a-z0-9/_-]{1,138}$/.test(values.outputPrefix) ||
+        values.outputPrefix.includes("..")
+      ) {
+        throw new Error("Workflow output prefix is invalid");
+      }
+      const output = result[loaded.manifest.output.nodeId];
+      if (!output || typeof output !== "object" || Array.isArray(output))
+        throw new Error("Workflow output node is invalid");
+      const inputs = (output as Record<string, unknown>).inputs;
+      if (
+        !inputs ||
+        typeof inputs !== "object" ||
+        Array.isArray(inputs) ||
+        typeof (inputs as Record<string, unknown>).filename_prefix !== "string"
+      ) {
+        throw new Error("Workflow output prefix binding is missing");
+      }
+      (inputs as Record<string, unknown>).filename_prefix = values.outputPrefix;
     }
     return result;
   }

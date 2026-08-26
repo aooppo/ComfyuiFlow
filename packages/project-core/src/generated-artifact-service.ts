@@ -10,6 +10,10 @@ import { ProjectAssetError } from "./contracts.js";
 import type { Prisma } from "./generated/client/index.js";
 import { LocalContentStorage, type StorageProvider } from "./local-storage.js";
 import { prisma, type ProjectPrisma } from "./prisma.js";
+import {
+  DependencyFrameExtractor,
+  DEPENDENCY_FINAL_FRAME_EXTRACTOR_VERSION,
+} from "./dependency-frame-extractor.js";
 
 const execute = promisify(execFile);
 export const TECHNICAL_CHECKER_VERSION = "ffprobe-video-v1" as const;
@@ -182,11 +186,79 @@ export class GeneratedArtifactService {
 
   async resolveFramePath(artifactId: string, role: "FIRST" | "MIDDLE" | "FINAL"): Promise<string> {
     const frame = await this.client.artifactReviewFrame.findFirst({
-      where: { generatedArtifactId: artifactId, role },
+      where: {
+        generatedArtifactId: artifactId,
+        role,
+        extractorVersion: REVIEW_FRAME_EXTRACTOR_VERSION,
+      },
       orderBy: { createdAt: "desc" },
     });
     if (!frame) throw new ProjectAssetError("QA_NOT_READY", "Review frame was not found", 404);
     return this.storage.resolveVerified(frame.storageKey, frame.sha256, Number(frame.byteSize));
+  }
+
+  async ensureDependencyFinalFrame(artifactId: string) {
+    const existing = await this.client.artifactReviewFrame.findUnique({
+      where: {
+        generatedArtifactId_role_extractorVersion: {
+          generatedArtifactId: artifactId,
+          role: "FINAL",
+          extractorVersion: DEPENDENCY_FINAL_FRAME_EXTRACTOR_VERSION,
+        },
+      },
+    });
+    if (existing) return existing;
+    const artifact = await this.client.generatedArtifact.findUnique({ where: { id: artifactId } });
+    if (!artifact || artifact.status !== "TECHNICALLY_VALID")
+      throw new ProjectAssetError(
+        "UPSTREAM_ARTIFACT_NOT_READY",
+        "The upstream artifact is not technically valid",
+        409,
+      );
+    const videoPath = await this.storage.resolveVerified(
+      artifact.storageKey,
+      artifact.sha256,
+      Number(artifact.byteSize),
+    );
+    const extracted = await new DependencyFrameExtractor(this.storage).extract(videoPath);
+    try {
+      return await this.client.artifactReviewFrame.create({
+        data: {
+          id: randomUUID(),
+          generatedArtifactId: artifact.id,
+          role: "FINAL",
+          requestedTimestamp: extracted.actualTimestamp,
+          actualTimestamp: extracted.actualTimestamp,
+          frameIndex: BigInt(extracted.frameIndex),
+          pts: extracted.pts,
+          timeBaseNumerator: extracted.timeBaseNumerator,
+          timeBaseDenominator: extracted.timeBaseDenominator,
+          extractorVersion: extracted.extractorVersion,
+          storageKey: extracted.storageKey,
+          sha256: extracted.sha256,
+          byteSize: BigInt(extracted.byteSize),
+          mimeType: extracted.mimeType,
+        },
+      });
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "P2002"
+      ) {
+        return this.client.artifactReviewFrame.findUniqueOrThrow({
+          where: {
+            generatedArtifactId_role_extractorVersion: {
+              generatedArtifactId: artifactId,
+              role: "FINAL",
+              extractorVersion: DEPENDENCY_FINAL_FRAME_EXTRACTOR_VERSION,
+            },
+          },
+        });
+      }
+      throw error;
+    }
   }
 
   private async extractFrames(artifactId: string, videoPath: string, duration: number) {

@@ -31,6 +31,7 @@ export function computeDraftSelection(
   specs: Array<{
     id: string;
     ordinal: number;
+    frozenReuseArtifactId?: string;
     artifacts: Array<{
       id: string;
       sha256: string;
@@ -48,7 +49,10 @@ export function computeDraftSelection(
   for (const spec of [...specs].sort((a, b) => a.ordinal - b.ordinal)) {
     const artifact = [...spec.artifacts]
       .filter(
-        (item) => item.status === "TECHNICALLY_VALID" && item.detectedMimeType === "video/mp4",
+        (item) =>
+          item.status === "TECHNICALLY_VALID" &&
+          item.detectedMimeType === "video/mp4" &&
+          (!spec.frozenReuseArtifactId || item.id === spec.frozenReuseArtifactId),
       )
       .sort(
         (a, b) =>
@@ -273,6 +277,17 @@ export class GenerationPlanDraftService {
               include: {
                 generationTargets: {
                   include: {
+                    generationBatch: { select: { createdAt: true } },
+                    sourceArtifact: {
+                      include: {
+                        humanQaDecisions: { orderBy: { createdAt: "desc" } },
+                        aiQaRuns: {
+                          where: { status: "COMPLETED" },
+                          include: { result: true },
+                          orderBy: { createdAt: "desc" },
+                        },
+                      },
+                    },
                     job: {
                       include: {
                         artifacts: {
@@ -304,9 +319,26 @@ export class GenerationPlanDraftService {
       throw new ProjectAssetError("PLAN_NOT_APPROVED", "Approve the Shot Plan first", 409);
     const artifactsById = new Map<string, any>();
     const specs = plan.approvedVersion.specs.map((spec) => {
-      const artifacts = spec.generationTargets.flatMap((target) => target.job?.artifacts ?? []);
+      const latestTarget = [...spec.generationTargets].sort(
+        (left, right) =>
+          right.generationBatch.createdAt.getTime() - left.generationBatch.createdAt.getTime() ||
+          right.id.localeCompare(left.id),
+      )[0];
+      const frozenReuseArtifactId =
+        latestTarget?.executionDisposition === "REUSE_ARTIFACT"
+          ? (latestTarget.sourceArtifactId ?? undefined)
+          : undefined;
+      const artifacts =
+        frozenReuseArtifactId && latestTarget?.sourceArtifact
+          ? [latestTarget.sourceArtifact]
+          : spec.generationTargets.flatMap((target) => target.job?.artifacts ?? []);
       artifacts.forEach((artifact) => artifactsById.set(artifact.id, artifact));
-      return { id: spec.id, ordinal: spec.ordinal, artifacts };
+      return {
+        id: spec.id,
+        ordinal: spec.ordinal,
+        artifacts,
+        ...(frozenReuseArtifactId ? { frozenReuseArtifactId } : {}),
+      };
     });
     return {
       plan,

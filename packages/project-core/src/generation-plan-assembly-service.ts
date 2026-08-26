@@ -29,6 +29,7 @@ export interface AssemblySelectionSpec {
   id: string;
   ordinal: number;
   artifacts: AssemblySelectionArtifact[];
+  frozenReuseArtifactId?: string;
 }
 
 export interface AssemblySourceSelection {
@@ -149,7 +150,8 @@ export function computeAssemblySelection(
         return (
           artifact.status === "TECHNICALLY_VALID" &&
           artifact.detectedMimeType === "video/mp4" &&
-          latestDecision?.decision === "PASS"
+          latestDecision?.decision === "PASS" &&
+          (!spec.frozenReuseArtifactId || artifact.id === spec.frozenReuseArtifactId)
         );
       })
       .sort(descendingArtifact)[0];
@@ -405,6 +407,10 @@ export class GenerationPlanAssemblyService {
               include: {
                 generationTargets: {
                   include: {
+                    generationBatch: { select: { createdAt: true } },
+                    sourceArtifact: {
+                      include: { humanQaDecisions: { orderBy: { createdAt: "desc" } } },
+                    },
                     job: {
                       include: {
                         artifacts: {
@@ -437,11 +443,26 @@ export class GenerationPlanAssemblyService {
 
     const artifactsById = new Map<string, any>();
     const specs: AssemblySelectionSpec[] = plan.approvedVersion.specs.map((spec: any) => {
-      const artifacts = spec.generationTargets.flatMap(
-        (target: any) => target.job?.artifacts ?? [],
-      );
+      const latestTarget = [...spec.generationTargets].sort(
+        (left: any, right: any) =>
+          new Date(right.generationBatch.createdAt).getTime() -
+            new Date(left.generationBatch.createdAt).getTime() || right.id.localeCompare(left.id),
+      )[0] as any;
+      const frozenReuseArtifactId =
+        latestTarget?.executionDisposition === "REUSE_ARTIFACT"
+          ? (latestTarget.sourceArtifactId ?? undefined)
+          : undefined;
+      const artifacts =
+        frozenReuseArtifactId && latestTarget?.sourceArtifact
+          ? [latestTarget.sourceArtifact]
+          : spec.generationTargets.flatMap((target: any) => target.job?.artifacts ?? []);
       for (const artifact of artifacts) artifactsById.set(artifact.id, artifact);
-      return { id: spec.id, ordinal: spec.ordinal, artifacts };
+      return {
+        id: spec.id,
+        ordinal: spec.ordinal,
+        artifacts,
+        ...(frozenReuseArtifactId ? { frozenReuseArtifactId } : {}),
+      };
     });
     const selection = computeAssemblySelection(plan.approvedVersionId, specs);
     return { plan, selection, artifactsById };

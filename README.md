@@ -69,6 +69,12 @@ It exposes only:
 
 - `comfyui_list_workflows`
 - `comfyui_check_readiness`
+- `comfyui_get_node_catalog`
+- `comfyui_get_node_info`
+- `comfyui_validate_registered_workflow`
+- `comfyui_check_execution_readiness`
+- `comfyui_submit_execution_plan`
+- `comfyui_retain_execution_plan_artifacts`
 - `comfyui_get_queue`
 - `comfyui_stage_input`
 - `comfyui_submit_workflow`
@@ -79,6 +85,11 @@ It exposes only:
 The CLI talks to ComfyUI through these MCP tools. The bridge translates to the locally confirmed
 HTTP endpoints; ordinary CLI input cannot supply raw workflow JSON, node IDs, arbitrary base URLs,
 or output paths.
+
+Workflow Agent submission accepts only the frozen plan/job/authorization identities and exact
+hashes. The bridge reloads the plan from PostgreSQL, resolves immutable inputs inside server-owned
+storage, rechecks readiness and materialized identity, then submits once. Path-bearing spike tools
+remain only for legacy compatibility.
 
 ## Registered workflow
 
@@ -263,3 +274,20 @@ LIVE H3 remains closed unless `PROJECT_GENERATION_LIVE_ENABLED=true`, the regist
 Partner credential, credits, and CodexManager gateway are all ready, and the Owner confirms the
 exact action at execution time. That later acceptance is capped at one H3 submission and, only after
 a technically valid artifact, one `gpt-5.4` frame-QA call.
+
+## Workflow Agent operation and rollback
+
+`pnpm project:dev` checks/starts project PostgreSQL, deploys existing migrations, checks loopback
+ComfyUI health, optionally starts only the existing install named by `COMFYUI_INSTALL_DIR`, and owns
+the Web and Worker children it starts. It never installs nodes, models, ComfyUI, or packages, and it
+never stops an externally owned process.
+
+`GET /api/projects/:projectId/generation-readiness` reports database, Worker, generation runtime,
+bridge, credential, quota, current-price, and implementation state without exposing credentials,
+endpoints, paths, raw graphs, task IDs, or machine configuration.
+
+Rollback is additive and fail-closed: set `REAL_GENERATION_ENABLED=false`, then set
+`PROJECT_GENERATION_ENGINE=legacy-v1` and restart local services. New real Workflow Agent submission
+is blocked. Plans, evidence, artifacts, QA, and Owner decisions remain readable; already-submitted
+work is limited to status, retention, supported cancellation, and reconciliation. There is no
+destructive down migration.

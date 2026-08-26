@@ -97,7 +97,7 @@ export class StoryboardDirectorWorker {
     try {
       const head = await this.client.storyboardVersion.findUniqueOrThrow({
         where: { id: run.headVersionId! },
-        select: { versionNumber: true },
+        include: { shots: { orderBy: { ordinal: "asc" } } },
       });
       const requestReferences = await Promise.all(
         run.inputReferences.map(async (reference) => {
@@ -119,12 +119,33 @@ export class StoryboardDirectorWorker {
           };
         }),
       );
+      const blockedIndex =
+        run.runKind === "SHOT_REPAIR"
+          ? head.shots.findIndex((shot) => shot.shotKey === run.blockedShotKey)
+          : -1;
+      if (run.runKind === "SHOT_REPAIR" && blockedIndex < 0)
+        throw new Error("DIRECTOR_REPAIR_SOURCE_INVALID");
+      const blocked = blockedIndex >= 0 ? head.shots[blockedIndex] : null;
+      const previous = blockedIndex > 0 ? head.shots[blockedIndex - 1] : null;
+      const next = blockedIndex >= 0 ? head.shots[blockedIndex + 1] : null;
+      const repairBrief = blocked
+        ? [
+            run.storyboard.creativeBrief,
+            `SHOT_REPAIR ${run.repairAction}: replace only Shot ${blocked.ordinal} (${blocked.shotKey}).`,
+            `Preserve incoming state: ${previous?.endState ?? blocked.startState}`,
+            `Blocked Shot: start=${blocked.startState}; action=${blocked.action}; end=${blocked.endState}; camera=${blocked.camera}; composition=${blocked.composition}.`,
+            `Preserve outgoing state: ${next?.startState ?? blocked.endState}`,
+            run.repairAction === "REWRITE_SHOT"
+              ? "Return exactly one replacement Shot."
+              : "Return exactly two contiguous replacement Shots whose first start and final end preserve the boundary states.",
+          ].join("\n")
+        : run.storyboard.creativeBrief;
       const request: StoryboardGenerationRequestV2 = {
         taskType: "STORYBOARD_GENERATION_V2",
         contractVersion: "storyboard-generation-v2",
         promptTemplateVersion: "storyboard-director-v2",
         modelRef: { providerId: run.providerId, modelId: run.requestedModelId },
-        creativeBrief: run.storyboard.creativeBrief,
+        creativeBrief: repairBrief,
         maxShotCount: run.maxShotCount ?? 3,
         currentHead: {
           versionNumber: head.versionNumber,
@@ -136,13 +157,27 @@ export class StoryboardDirectorWorker {
       if (!provider?.generateStoryboardV2) throw new Error("DIRECTOR_PROVIDER_UNAVAILABLE");
       const raw = await provider.generateStoryboardV2(request);
       const proposal = validateStoryboardProposalV2(raw, request);
+      if (
+        (run.runKind === "SHOT_REPAIR" &&
+          run.repairAction === "REWRITE_SHOT" &&
+          proposal.shots.length !== 1) ||
+        (run.runKind === "SHOT_REPAIR" &&
+          run.repairAction === "SPLIT_SHOT" &&
+          proposal.shots.length !== 2)
+      )
+        throw new Error("DIRECTOR_REPAIR_SHOT_COUNT_INVALID");
       const normalizedBase = { narrativeSummary: proposal.narrativeSummary, shots: proposal.shots };
       const outputHash = canonicalSha256(normalizedBase);
       const normalized = {
         narrativeSummary: proposal.narrativeSummary,
         shots: proposal.shots.map((shot) => ({
           ...shot,
-          shotKey: stableUuid(`${outputHash}:${shot.ordinal}`),
+          shotKey:
+            run.runKind === "SHOT_REPAIR" && run.repairAction === "REWRITE_SHOT"
+              ? run.blockedShotKey!
+              : run.runKind === "SHOT_REPAIR"
+                ? stableUuid(`${run.impactHash}:${outputHash}:${shot.ordinal}`)
+                : stableUuid(`${outputHash}:${shot.ordinal}`),
         })),
       };
       return await this.client.$transaction(async (tx) => {
@@ -154,6 +189,19 @@ export class StoryboardDirectorWorker {
             narrativeSummary: proposal.narrativeSummary,
             normalizedProposalJson: normalized as never,
             outputHash,
+            proposalKind: run.runKind,
+            ...(run.runKind === "SHOT_REPAIR"
+              ? {
+                  affectedShotKeysJson: [run.blockedShotKey!] as never,
+                  repairPayloadJson: {
+                    sourceStoryboardVersionId: run.sourceStoryboardVersionId,
+                    blockedShotKey: run.blockedShotKey,
+                    action: run.repairAction,
+                    replacementShotKeys: normalized.shots.map((shot) => shot.shotKey),
+                  } as never,
+                  impactHash: run.impactHash,
+                }
+              : {}),
           },
         });
         await tx.storyboardDirectorAttempt.update({

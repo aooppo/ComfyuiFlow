@@ -1,6 +1,10 @@
 import { access, readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { generationExecutionErrorCodes } from "@comfyuiflow/project-core";
+import {
+  canonicalSha256,
+  createGenerationBatchInputSchema,
+  generationExecutionErrorCodes,
+} from "@comfyuiflow/project-core";
 
 describe("Generation execution HTTP contract", () => {
   const routes = [
@@ -74,5 +78,57 @@ describe("Generation execution HTTP contract", () => {
     expect(combined).not.toContain("COMFYUI_API_KEY");
     expect(combined).not.toContain("workflowJson");
     expect(combined).not.toContain("absolutePath");
+  });
+
+  it("accepts strict mixed Workflow Agent targets while preserving the V1 request", () => {
+    const costCore = {
+      schemaVersion: "batch-cost-snapshot-v1" as const,
+      currency: "USD",
+      estimatedCostMicros: 100,
+      maximumCostMicros: 100,
+      generationCalls: 1,
+      qaCalls: 1,
+      pricingExpiresAt: "2026-09-01T00:00:00.000Z",
+      retryPolicy: "NO_RETRY_NO_FALLBACK" as const,
+    };
+    const policyCore = {
+      schemaVersion: "qa-continuation-policy-v1" as const,
+      mode: "AUTO_CONTINUE_AFTER_QA_PASS" as const,
+      hardCriteria: ["IDENTITY" as const],
+      hardFailConfidence: "HIGH" as const,
+    };
+    expect(
+      createGenerationBatchInputSchema.parse({
+        engineVersion: "WORKFLOW_AGENT_V1",
+        generationPlanVersionId: "00000000-0000-4000-8000-000000000001",
+        previewHash: "a".repeat(64),
+        dependencyPolicyHash: "b".repeat(64),
+        targets: [
+          {
+            shotExecutionPlanId: "00000000-0000-4000-8000-000000000002",
+            planTemplateSha256: "c".repeat(64),
+            executionDisposition: "EXECUTE",
+          },
+        ],
+        costSnapshot: { ...costCore, snapshotHash: canonicalSha256(costCore) },
+        continuationPolicy: { ...policyCore, policyHash: canonicalSha256(policyCore) },
+        confirmed: true,
+      }),
+    ).toMatchObject({ engineVersion: "WORKFLOW_AGENT_V1" });
+    expect(
+      createGenerationBatchInputSchema.parse({
+        generationPlanVersionId: "00000000-0000-4000-8000-000000000001",
+        providerProfileId: "fake-video-v1",
+        generationSpecIds: ["00000000-0000-4000-8000-000000000002"],
+        previewHash: "d".repeat(64),
+        confirmed: true,
+      }),
+    ).not.toHaveProperty("engineVersion");
+    expect(() =>
+      createGenerationBatchInputSchema.parse({
+        engineVersion: "WORKFLOW_AGENT_V1",
+        unsafeEndpoint: "https://private",
+      }),
+    ).toThrow();
   });
 });

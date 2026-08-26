@@ -126,7 +126,7 @@ export class CodexManagerLocalVideoQaProvider implements VideoQaProvider {
               {
                 type: "input_text",
                 text:
-                  "Review the five labeled approved reference images against the three labeled generated still frames. " +
+                  "Review the available labeled approved reference images against the three labeled generated still frames. " +
                   "Return only the strict QA structure. Assess only visible still-frame evidence. " +
                   "Motion quality and audio meaning must remain NOT_ASSESSABLE. " +
                   "Objects already visible in any approved reference are permitted scene elements and must not be flagged as unexpected. " +

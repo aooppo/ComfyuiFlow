@@ -129,8 +129,11 @@ export class GenerationExecutionService {
     const shots: PreviewShot[] = [];
     for (const spec of specs) {
       const blockers: string[] = [];
-      const capability = spec.capabilityRequirements as Record<string, unknown>;
+      const positivePrompt = spec.positivePrompt ?? "";
+      const capability = (spec.capabilityRequirements ?? {}) as Record<string, unknown>;
       if (
+        spec.contractVersion !== "generation-spec-v1" ||
+        !positivePrompt ||
         spec.durationSeconds !== 4 ||
         capability.durationSeconds !== 4 ||
         capability.aspectRatio !== "PORTRAIT_9_16" ||
@@ -159,7 +162,7 @@ export class GenerationExecutionService {
 
       let compiledPromptHash: string | null = null;
       let targetHash: string | null = null;
-      let promptSummary = spec.positivePrompt.slice(0, 2_000);
+      let promptSummary = positivePrompt.slice(0, 2_000);
       let resolvedSlots = slotResult.slots;
       const continuity = continuityPlan?.shots.get(spec.ordinal) ?? null;
       if (continuityPlan && !continuity) blockers.push("KEYFRAME_SCOPE_CHANGED");
@@ -178,7 +181,7 @@ export class GenerationExecutionService {
       }
       if (resolvedSlots.length === 5) {
         const prompt = compileH3GenerationPrompt({
-          positivePrompt: spec.positivePrompt,
+          positivePrompt: spec.positivePrompt ?? "",
           sceneName: slotResult.names.scene,
           productName: slotResult.names.product,
           characterName: slotResult.names.character,
@@ -193,7 +196,7 @@ export class GenerationExecutionService {
               retryRequirements: input.retryRequirements,
             })
           : prompt.sha256;
-        promptSummary = spec.positivePrompt.slice(0, 2_000);
+        promptSummary = spec.positivePrompt?.slice(0, 2_000) ?? "";
         if (input.retryRequirements)
           promptSummary = `${promptSummary}\n\n重试要求：${input.retryRequirements}`.slice(
             0,
@@ -453,7 +456,11 @@ export class GenerationExecutionService {
     };
   }
 
-  async createBatch(rawInput: CreateGenerationBatchInput, idempotencyKey: string): Promise<any> {
+  async createBatch(
+    rawInput: CreateGenerationBatchInput,
+    idempotencyKey: string,
+    expectedPlanRowVersion?: number,
+  ): Promise<any> {
     if (!idempotencyKey.trim())
       throw this.error("PRECONDITION_REQUIRED", "Idempotency-Key is required", 428);
     const input = createGenerationBatchInputSchema.parse(rawInput);
@@ -467,6 +474,11 @@ export class GenerationExecutionService {
           409,
         );
       return this.getBatch(existing.id);
+    }
+    if ("engineVersion" in input) {
+      if (expectedPlanRowVersion === undefined)
+        throw this.error("PRECONDITION_REQUIRED", "If-Match is required", 428);
+      return this.createWorkflowAgentBatch(input, idempotencyKey, expectedPlanRowVersion);
     }
     const built = await this.buildPreview(input.generationPlanVersionId, {
       providerProfileId: input.providerProfileId,
@@ -577,12 +589,407 @@ export class GenerationExecutionService {
     return this.getBatch(batchId);
   }
 
+  private async createWorkflowAgentBatch(
+    input: Extract<CreateGenerationBatchInput, { engineVersion: "WORKFLOW_AGENT_V1" }>,
+    idempotencyKey: string,
+    expectedPlanRowVersion: number,
+  ) {
+    const { snapshotHash: submittedCostHash, ...costCore } = input.costSnapshot;
+    if (canonicalSha256(costCore) !== submittedCostHash)
+      throw this.error("PREVIEW_STALE", "Cost snapshot changed; review it again", 409);
+    const { policyHash: submittedPolicyHash, ...policyCore } = input.continuationPolicy;
+    if (canonicalSha256(policyCore) !== submittedPolicyHash)
+      throw this.error("PREVIEW_STALE", "Continuation policy changed; review it again", 409);
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + input.expiresInSeconds * 1_000);
+    if (Date.parse(input.costSnapshot.pricingExpiresAt) <= expiresAt.getTime())
+      throw this.error("COST_UNAVAILABLE", "Pricing expires before this authorization", 409);
+    const batchId = randomUUID();
+    await this.client.$transaction(
+      async (tx) => {
+        const version = await tx.generationPlanVersion.findUnique({
+          where: { id: input.generationPlanVersionId },
+          include: {
+            generationPlan: { include: { project: true, storyboard: true } },
+            shotExecutionPlans: {
+              where: { id: { in: input.targets.map((target) => target.shotExecutionPlanId) } },
+              include: { generationSpec: true, implementation: true },
+            },
+          },
+        });
+        if (!version)
+          throw this.error(
+            "GENERATION_PLAN_VERSION_NOT_FOUND",
+            "Generation plan version was not found",
+            404,
+          );
+        const plan = version.generationPlan;
+        if (plan.project.status !== "ACTIVE")
+          throw this.error("PROJECT_ARCHIVED", "Restore this project before generation", 409);
+        if (plan.storyboard.status !== "ACTIVE")
+          throw this.error("STORYBOARD_ARCHIVED", "Restore this storyboard before generation", 409);
+        if (
+          plan.rowVersion !== expectedPlanRowVersion ||
+          plan.headVersionId !== version.id ||
+          plan.approvedVersionId !== version.id
+        )
+          throw this.error("GENERATION_PLAN_STALE", "The approved Shot Plan changed", 412);
+        if (version.shotExecutionPlans.length !== input.targets.length)
+          throw this.error(
+            "GENERATION_TARGET_INVALID",
+            "Every selected Workflow Plan must belong to this Shot Plan version",
+            422,
+          );
+        const submittedById = new Map(
+          input.targets.map((target) => [target.shotExecutionPlanId, target]),
+        );
+        const orderedPlans = [...version.shotExecutionPlans].sort(
+          (left, right) =>
+            left.generationSpec.ordinal - right.generationSpec.ordinal ||
+            left.id.localeCompare(right.id),
+        );
+        const reusedArtifactIds = input.targets.flatMap((target) =>
+          target.executionDisposition === "REUSE_ARTIFACT" ? [target.sourceArtifactId] : [],
+        );
+        const reusedArtifacts =
+          reusedArtifactIds.length > 0
+            ? await tx.generatedArtifact.findMany({
+                where: { id: { in: reusedArtifactIds } },
+                include: {
+                  generationJob: {
+                    include: { generationBatchTarget: { include: { shotExecutionPlan: true } } },
+                  },
+                  reviewFrames: true,
+                },
+              })
+            : [];
+        const reusedById = new Map(reusedArtifacts.map((artifact) => [artifact.id, artifact]));
+        for (const shotPlan of orderedPlans) {
+          const submitted = submittedById.get(shotPlan.id);
+          if (!submitted || submitted.planTemplateSha256 !== shotPlan.planTemplateSha256)
+            throw this.error(
+              "EXECUTION_PLAN_SHA_MISMATCH",
+              "A Workflow Plan changed after preview",
+              409,
+            );
+          if (
+            shotPlan.lifecycleStatus !== "DRAFT" ||
+            !["READY", "TRIAL"].includes(shotPlan.planningOutcome)
+          )
+            throw this.error(
+              "PRE_DISPATCH_BLOCKED",
+              "Every Workflow Plan must be a current READY or TRIAL draft",
+              409,
+            );
+          if (
+            !shotPlan.implementation ||
+            !shotPlan.executorType ||
+            !shotPlan.adapterId ||
+            !shotPlan.adapterVersion
+          )
+            throw this.error(
+              "ADAPTER_NOT_IMPLEMENTED",
+              "A Workflow Plan has no executable adapter",
+              409,
+            );
+          const payload = shotPlan.payloadJson as Record<string, any>;
+          if (payload.dependencyPolicyHash !== input.dependencyPolicyHash)
+            throw this.error("PREVIEW_STALE", "Dependency policy changed after preview", 409);
+          if (
+            payload.implementationId !== shotPlan.implementation.implementationKey ||
+            payload.implementationVersion !== shotPlan.implementation.version ||
+            payload.adapterId !== shotPlan.adapterId ||
+            payload.adapterVersion !== shotPlan.adapterVersion
+          )
+            throw this.error(
+              "EXECUTION_PLAN_SHA_MISMATCH",
+              "Frozen implementation identity does not match the plan",
+              409,
+            );
+          if (submitted.executionDisposition === "REUSE_ARTIFACT") {
+            const artifact = reusedById.get(submitted.sourceArtifactId);
+            const sourceTarget = artifact?.generationJob.generationBatchTarget;
+            const sourcePlan = sourceTarget?.shotExecutionPlan;
+            if (
+              !artifact ||
+              artifact.projectId !== version.projectId ||
+              artifact.status !== "TECHNICALLY_VALID" ||
+              artifact.detectedMimeType !== "video/mp4" ||
+              !sourcePlan ||
+              sourcePlan.requirementsHash !== shotPlan.requirementsHash ||
+              sourcePlan.planTemplateSha256 !== shotPlan.planTemplateSha256 ||
+              !sourceTarget.materializedExecutionSha256
+            )
+              throw this.error(
+                "GENERATION_TARGET_INVALID",
+                "The exact artifact is not reusable for this frozen Workflow Plan",
+                409,
+              );
+            const dependencyFrames = artifact.reviewFrames.filter(
+              (frame) =>
+                frame.role === "FINAL" && frame.extractorVersion === "dependency-final-frame-v1",
+            );
+            if (dependencyFrames.length !== 1)
+              throw this.error(
+                "UPSTREAM_ARTIFACT_NOT_READY",
+                "Reusable artifact dependency frame is unavailable",
+                409,
+              );
+          }
+        }
+        const selectedHashes = new Set(orderedPlans.map((shotPlan) => shotPlan.planTemplateSha256));
+        for (const shotPlan of orderedPlans) {
+          const payload = shotPlan.payloadJson as Record<string, any>;
+          for (const binding of Array.isArray(payload.inputBindings) ? payload.inputBindings : []) {
+            if (
+              binding?.type === "PREVIOUS_SHOT_FINAL_FRAME" &&
+              !selectedHashes.has(binding.sourceShotExecutionPlanSha256)
+            )
+              throw this.error(
+                "UPSTREAM_ARTIFACT_NOT_READY",
+                "A required upstream Workflow Plan is outside the confirmed scope",
+                409,
+              );
+          }
+        }
+        const executableTargets = input.targets.filter(
+          (target) => target.executionDisposition === "EXECUTE",
+        );
+        const executablePlanIds = new Set(
+          executableTargets.map((target) => target.shotExecutionPlanId),
+        );
+        const executablePlans = orderedPlans.filter((shotPlan) =>
+          executablePlanIds.has(shotPlan.id),
+        );
+        const qaCost = (
+          shotPlan: (typeof executablePlans)[number],
+          field: "qaEstimatedCostMicros" | "qaMaximumCostMicros",
+        ) => {
+          const pricing = (shotPlan.payloadJson as Record<string, any>).pricing;
+          const value = pricing?.[field];
+          if (value === undefined) return 0n;
+          if (!Number.isSafeInteger(value) || value < 0)
+            throw this.error("COST_UNAVAILABLE", "QA pricing is invalid", 409);
+          return BigInt(value);
+        };
+        const estimatedCostMicrosBigInt = executablePlans.reduce(
+          (sum, shotPlan) =>
+            sum + (shotPlan.estimatedCostMicros ?? 0n) + qaCost(shotPlan, "qaEstimatedCostMicros"),
+          0n,
+        );
+        const maximumCostMicrosBigInt = executablePlans.reduce(
+          (sum, shotPlan) =>
+            sum + (shotPlan.maximumCostMicros ?? 0n) + qaCost(shotPlan, "qaMaximumCostMicros"),
+          0n,
+        );
+        const estimatedCostMicros = Number(estimatedCostMicrosBigInt);
+        const maximumCostMicros = Number(maximumCostMicrosBigInt);
+        const currencies = new Set(executablePlans.map((shotPlan) => shotPlan.currency));
+        const pricingExpiries = executablePlans
+          .map((shotPlan) => {
+            const pricing = (shotPlan.payloadJson as Record<string, any>).pricing;
+            const generationExpiry = pricing?.expiresAt;
+            const qaExpiry = pricing?.qaExpiresAt ?? generationExpiry;
+            if (typeof generationExpiry !== "string" || typeof qaExpiry !== "string") return null;
+            return new Date(
+              Math.min(Date.parse(generationExpiry), Date.parse(qaExpiry)),
+            ).toISOString();
+          })
+          .filter((value): value is string => typeof value === "string")
+          .sort();
+        if (
+          executablePlans.some(
+            (shotPlan) =>
+              shotPlan.estimatedCostMicros === null ||
+              shotPlan.maximumCostMicros === null ||
+              shotPlan.currency === null,
+          ) ||
+          currencies.size > 1 ||
+          pricingExpiries.length !== executablePlans.length
+        )
+          throw this.error(
+            "COST_UNAVAILABLE",
+            "Every executable Workflow Plan requires current exact pricing",
+            409,
+          );
+        if (
+          !Number.isSafeInteger(estimatedCostMicros) ||
+          !Number.isSafeInteger(maximumCostMicros) ||
+          estimatedCostMicrosBigInt !== BigInt(input.costSnapshot.estimatedCostMicros) ||
+          maximumCostMicrosBigInt !== BigInt(input.costSnapshot.maximumCostMicros) ||
+          (executablePlans.length > 0 &&
+            ([...currencies][0] !== input.costSnapshot.currency ||
+              pricingExpiries[0] !== input.costSnapshot.pricingExpiresAt)) ||
+          executableTargets.length !== input.costSnapshot.generationCalls ||
+          executableTargets.length !== input.costSnapshot.qaCalls
+        )
+          throw this.error("PREVIEW_STALE", "Batch cost or call scope changed after preview", 409);
+        if (
+          plan.project.maximumGenerationCostMicros !== null &&
+          maximumCostMicrosBigInt > plan.project.maximumGenerationCostMicros
+        )
+          throw this.error(
+            "BATCH_COST_LIMIT_EXCEEDED",
+            "Batch maximum cost exceeds the Project limit",
+            409,
+          );
+        if (
+          plan.project.generationCostCurrency &&
+          plan.project.generationCostCurrency !== input.costSnapshot.currency
+        )
+          throw this.error(
+            "BATCH_COST_LIMIT_EXCEEDED",
+            "Batch currency does not match the Project limit",
+            409,
+          );
+        if (plan.project.continuationMode !== input.continuationPolicy.mode)
+          throw this.error("PREVIEW_STALE", "QA continuation policy changed after preview", 409);
+        const canonicalTargets = orderedPlans.map((shotPlan) => {
+          const submitted = submittedById.get(shotPlan.id)!;
+          return {
+            shotExecutionPlanId: shotPlan.id,
+            planTemplateSha256: shotPlan.planTemplateSha256,
+            executionDisposition: submitted.executionDisposition,
+            ...(submitted.executionDisposition === "REUSE_ARTIFACT"
+              ? { sourceArtifactId: submitted.sourceArtifactId }
+              : {}),
+          };
+        });
+        const previewHash = canonicalSha256({
+          engineVersion: "WORKFLOW_AGENT_V1",
+          generationPlanVersionId: version.id,
+          dependencyPolicyHash: input.dependencyPolicyHash,
+          targets: canonicalTargets,
+          costSnapshot: input.costSnapshot,
+          continuationPolicy: input.continuationPolicy,
+        });
+        if (previewHash !== input.previewHash)
+          throw this.error("PREVIEW_STALE", "Workflow preview changed before confirmation", 409);
+        const scopeHash = canonicalSha256({
+          previewHash,
+          dependencyPolicyHash: input.dependencyPolicyHash,
+          targets: canonicalTargets,
+          maximumGenerationCalls: executableTargets.length,
+          maximumAiQaCalls: executableTargets.length,
+          maximumCostMicros,
+          continuationPolicyHash: input.continuationPolicy.policyHash,
+          retryPolicy: "NO_RETRY_NO_FALLBACK",
+        });
+        await tx.generationBatch.create({
+          data: {
+            id: batchId,
+            projectId: version.projectId,
+            generationPlanVersionId: version.id,
+            engineVersion: "WORKFLOW_AGENT_V1",
+            estimatedCostMicros,
+            maximumCostMicros,
+            currency: input.costSnapshot.currency,
+            pricingSnapshotHash: input.costSnapshot.snapshotHash,
+            continuationPolicyHash: input.continuationPolicy.policyHash,
+            previewHash,
+            scopeHash,
+            idempotencyKey,
+          },
+        });
+        for (const shotPlan of orderedPlans) {
+          const submitted = submittedById.get(shotPlan.id)!;
+          const targetId = randomUUID();
+          await tx.generationBatchTarget.create({
+            data: {
+              id: targetId,
+              projectId: version.projectId,
+              generationBatchId: batchId,
+              generationSpecId: shotPlan.generationSpecId,
+              ordinal: shotPlan.generationSpec.ordinal,
+              targetHash: canonicalSha256({
+                planTemplateSha256: shotPlan.planTemplateSha256,
+                executionDisposition: submitted.executionDisposition,
+                sourceArtifactId:
+                  submitted.executionDisposition === "REUSE_ARTIFACT"
+                    ? submitted.sourceArtifactId
+                    : null,
+              }),
+              referencesHash: shotPlan.requirementsHash,
+              shotExecutionPlanId: shotPlan.id,
+              executionDisposition: submitted.executionDisposition,
+              ...(submitted.executionDisposition === "REUSE_ARTIFACT"
+                ? { sourceArtifactId: submitted.sourceArtifactId }
+                : {}),
+            },
+          });
+          if (submitted.executionDisposition === "EXECUTE") {
+            const generationJobId = randomUUID();
+            await tx.generationJob.create({
+              data: {
+                id: generationJobId,
+                projectId: version.projectId,
+                generationBatchId: batchId,
+                generationBatchTargetId: targetId,
+                providerIdempotencyKey: generationJobId,
+              },
+            });
+          }
+        }
+        const frozen = await tx.shotExecutionPlan.updateMany({
+          where: {
+            id: { in: orderedPlans.map((shotPlan) => shotPlan.id) },
+            lifecycleStatus: "DRAFT",
+          },
+          data: { lifecycleStatus: "FROZEN", frozenAt: now },
+        });
+        if (frozen.count !== orderedPlans.length)
+          throw this.error(
+            "EXECUTION_PLAN_SHA_MISMATCH",
+            "Workflow Plans changed while confirming",
+            409,
+          );
+        await tx.executionAuthorization.create({
+          data: {
+            id: randomUUID(),
+            projectId: version.projectId,
+            generationBatchId: batchId,
+            scopeHash,
+            maximumGenerationCalls: executableTargets.length,
+            maximumAiQaCalls: executableTargets.length,
+            maximumCostMicros,
+            currency: input.costSnapshot.currency,
+            pricingSnapshotHash: input.costSnapshot.snapshotHash,
+            confirmedAt: now,
+            expiresAt,
+          },
+        });
+      },
+      { isolationLevel: "Serializable" },
+    );
+    return this.getBatch(batchId);
+  }
+
   async assertContinuityCurrent(batchId: string) {
     const batch = await this.client.generationBatch.findUnique({
       where: { id: batchId },
       include: {
         generationPlanVersion: { include: { generationPlan: true } },
-        targets: { orderBy: { ordinal: "asc" } },
+        targets: {
+          orderBy: { ordinal: "asc" },
+          include: {
+            shotExecutionPlan: {
+              select: {
+                id: true,
+                planningOutcome: true,
+                planTemplateSha256: true,
+                implementation: {
+                  select: {
+                    implementationKey: true,
+                    version: true,
+                    providerProfileId: true,
+                    modelProfileId: true,
+                    executorType: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
     if (!batch)
@@ -620,7 +1027,19 @@ export class GenerationExecutionService {
       where: { id: batchId },
       include: {
         authorization: { include: { consumptions: true } },
-        targets: { orderBy: { ordinal: "asc" } },
+        targets: {
+          orderBy: { ordinal: "asc" },
+          include: {
+            sourceArtifact: {
+              include: {
+                technicalChecks: true,
+                reviewFrames: true,
+                aiQaRuns: { include: { result: true } },
+                humanQaDecisions: { orderBy: { createdAt: "desc" } },
+              },
+            },
+          },
+        },
         jobs: {
           include: {
             generationBatchTarget: true,
@@ -640,7 +1059,46 @@ export class GenerationExecutionService {
     });
     if (!batch)
       throw this.error("GENERATION_TARGET_INVALID", "Generation batch was not found", 404);
-    return this.serialize(batch);
+    const finalOwnerReview = {
+      schemaVersion: "final-owner-review-v1" as const,
+      ready: batch.targets.every((target) => {
+        const job = batch.jobs.find((candidate) => candidate.generationBatchTargetId === target.id);
+        const artifact =
+          target.sourceArtifact ??
+          job?.artifacts.find((candidate) => candidate.status === "TECHNICALLY_VALID") ??
+          null;
+        return Boolean(
+          artifact?.technicalChecks.some((check) => check.status === "PASS") &&
+          artifact.humanQaDecisions.length === 0,
+        );
+      }),
+      ownerDecisionRequired: true as const,
+      items: batch.targets.map((target) => {
+        const job = batch.jobs.find((candidate) => candidate.generationBatchTargetId === target.id);
+        const artifact =
+          target.sourceArtifact ??
+          job?.artifacts.find((candidate) => candidate.status === "TECHNICALLY_VALID") ??
+          null;
+        const qa = artifact?.aiQaRuns.find((run) => run.status === "COMPLETED")?.result ?? null;
+        const human = artifact?.humanQaDecisions[0] ?? null;
+        return {
+          ordinal: target.ordinal,
+          generationSpecId: target.generationSpecId,
+          executionDisposition: target.executionDisposition,
+          artifactId: artifact?.id ?? null,
+          technicalStatus: artifact?.technicalChecks.some((check) => check.status === "PASS")
+            ? "PASS"
+            : artifact
+              ? "FAILED"
+              : "PENDING",
+          aiQaStatus: qa?.overallStatus ?? null,
+          continuationDecision: qa?.continuationDecision ?? null,
+          humanDecision: human?.decision ?? null,
+          ownerDecisionRequired: !human,
+        };
+      }),
+    };
+    return { ...this.serialize(batch), finalOwnerReview };
   }
 
   async getLatestBatchForPlanVersion(generationPlanVersionId: string): Promise<any | null> {
@@ -662,6 +1120,7 @@ export class GenerationExecutionService {
     jobId: string,
     operation: "GENERATION_SUBMIT" | "AI_QA_REVIEW",
     requestHash: string,
+    reservation?: { reservedCostMicros?: number; materializedPlanSha256?: string },
   ): Promise<{ id: string }> {
     return this.client.$transaction(
       async (tx) => {
@@ -691,6 +1150,18 @@ export class GenerationExecutionService {
             : authorization.maximumAiQaCalls;
         if (count >= maximum)
           throw this.error("AUTHORIZATION_CONSUMED", "Execution call budget is exhausted", 409);
+        const requestedReservation = reservation?.reservedCostMicros ?? 0;
+        if (!Number.isSafeInteger(requestedReservation) || requestedReservation < 0)
+          throw this.error("COST_UNAVAILABLE", "The operation cost reservation is invalid", 409);
+        const reservedTotal = authorization.consumptions.reduce(
+          (sum, item) => sum + (item.reservedCostMicros ?? 0n),
+          0n,
+        );
+        if (
+          authorization.maximumCostMicros !== null &&
+          reservedTotal + BigInt(requestedReservation) > authorization.maximumCostMicros
+        )
+          throw this.error("BATCH_COST_LIMIT_EXCEEDED", "Execution cost budget is exhausted", 409);
         try {
           return await tx.authorizationConsumption.create({
             data: {
@@ -701,6 +1172,12 @@ export class GenerationExecutionService {
               generationJobId: job.id,
               operation,
               requestHash,
+              ...(reservation?.reservedCostMicros !== undefined
+                ? { reservedCostMicros: reservation.reservedCostMicros }
+                : {}),
+              ...(reservation?.materializedPlanSha256
+                ? { materializedPlanSha256: reservation.materializedPlanSha256 }
+                : {}),
             },
           });
         } catch (error) {
@@ -868,6 +1345,8 @@ export class GenerationExecutionService {
                 "compiledPrompt",
                 "slotManifestJson",
                 "claimOwner",
+                "providerTaskId",
+                "executionInputSnapshotJson",
               ].includes(key),
           )
           .map(([key, item]) => [key, this.serialize(item)]),

@@ -2,12 +2,33 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ComfyUiClient, WorkflowRegistry } from "@comfyuiflow/comfyui-bridge";
 import { loadProjectEnvFile, loadRuntimeConfig } from "@comfyuiflow/spike-core";
-import { prisma } from "@comfyuiflow/project-core";
+import {
+  GENERIC_H3_WORKFLOW_ID,
+  GENERIC_H3_WORKFLOW_SHA256,
+  LocalContentStorage,
+  prisma,
+  resolveStorageRoot,
+} from "@comfyuiflow/project-core";
+import { createPrismaExecutionPlanStore } from "./execution-plan-store.js";
 import { createComfyUiMcpServer } from "./server.js";
 
 loadProjectEnvFile();
 
 const config = loadRuntimeConfig();
+const sourceStorageRoot = resolveStorageRoot(
+  process.env.PROJECT_ASSET_STORAGE_DIR ?? "./var/project-assets",
+);
+const generatedStorageRoot = resolveStorageRoot(
+  process.env.PROJECT_GENERATED_STORAGE_DIR ?? "./var/project-generated",
+);
+const executionPlanStore = createPrismaExecutionPlanStore({
+  prisma,
+  sourceStorage: new LocalContentStorage({ root: sourceStorageRoot }),
+  generatedStorage: new LocalContentStorage({ root: generatedStorageRoot }),
+  workflowId: GENERIC_H3_WORKFLOW_ID,
+  workflowSha256: GENERIC_H3_WORKFLOW_SHA256,
+  workflowConstraints: { durationSeconds: 4, width: 768, height: 1344, fps: 24 },
+});
 const server = createComfyUiMcpServer({
   client: new ComfyUiClient(config.comfyuiBaseUrl, {
     ...(config.comfyOrgApiKey ? { comfyOrgApiKey: config.comfyOrgApiKey } : {}),
@@ -16,7 +37,11 @@ const server = createComfyUiMcpServer({
   registry: new WorkflowRegistry(config.workflowRegistryPath),
   liveEnabled: config.comfyuiLiveEnabled,
   dataRoot: config.spikeDataDir,
-  allowedInputRoots: [process.env.PROJECT_ASSET_STORAGE_DIR ?? "./var/project-assets"],
+  allowedInputRoots: [sourceStorageRoot, generatedStorageRoot],
+  executionPlanStore,
+  executionWorkflowId: GENERIC_H3_WORKFLOW_ID,
+  executionAdapterId: "comfyui-partner-h3-reference",
+  executionAdapterVersion: "1.0.0",
   async verifyProjectAuthorization(input) {
     const consumption = await prisma.authorizationConsumption.findFirst({
       where: {

@@ -65,6 +65,11 @@ describe("MCP readiness tools", () => {
         "comfyui_list_workflows",
         "comfyui_check_readiness",
         "comfyui_get_queue",
+        "comfyui_get_node_catalog",
+        "comfyui_get_node_info",
+        "comfyui_validate_graph",
+        "comfyui_check_graph_readiness",
+        "comfyui_submit_execution_plan",
       ]),
     );
     const result = await client.callTool({
@@ -72,6 +77,17 @@ describe("MCP readiness tools", () => {
       arguments: { workflowId: "ready-video" },
     });
     expect(result.structuredContent).toMatchObject({ ready: true, generationCalls: 0 });
+    const catalog = await client.callTool({ name: "comfyui_get_node_catalog", arguments: {} });
+    const catalogContent = catalog.structuredContent as Record<string, unknown>;
+    expect(catalogContent).toMatchObject({ runtimeVersion: "0.33.2", generationCalls: 0 });
+    const node = await client.callTool({
+      name: "comfyui_get_node_info",
+      arguments: { className: "LoadImage", catalogSha256: catalogContent.catalogSha256 },
+    });
+    expect(node.structuredContent).toMatchObject({
+      node: { className: "LoadImage" },
+      generationCalls: 0,
+    });
     expect(fake.counts["POST /prompt"] ?? 0).toBe(0);
     await client.close();
     await server.close();

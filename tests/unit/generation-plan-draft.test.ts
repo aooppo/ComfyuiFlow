@@ -60,4 +60,19 @@ describe("whole-film warning draft selection", () => {
     ]);
     expect(selection).toMatchObject({ eligible: false, missingOrdinals: [1], sourceSetHash: null });
   });
+
+  it("uses an exact frozen reuse artifact instead of a newer attempt", () => {
+    const selection = computeDraftSelection(crypto.randomUUID(), [
+      {
+        id: crypto.randomUUID(),
+        ordinal: 1,
+        frozenReuseArtifactId: "reused",
+        artifacts: [
+          artifact("reused", "2026-08-25T01:00:00.000Z", "PASS", "PASS"),
+          artifact("newer", "2026-08-25T02:00:00.000Z", "PASS", "PASS"),
+        ],
+      },
+    ]);
+    expect(selection.sources[0]?.artifactId).toBe("reused");
+  });
 });

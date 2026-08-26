@@ -19,6 +19,23 @@ export const createDirectorRunSchema = directorPreviewInputSchema.extend({
   idempotencyKey: z.string().trim().min(8).max(160),
 });
 
+export const repairDirectorActionSchema = z.enum(["REWRITE_SHOT", "SPLIT_SHOT"]);
+
+export const repairDirectorPreviewInputSchema = z
+  .object({
+    proposalHash: z.string().regex(/^[a-f0-9]{64}$/),
+    impactHash: z.string().regex(/^[a-f0-9]{64}$/),
+    action: repairDirectorActionSchema,
+    profileId: directorProfileIdSchema.default("fake-storyboard-v2"),
+    selectedAssetVersionFileIds: z.array(z.string().uuid()).min(1).max(9).optional(),
+  })
+  .strict();
+
+export const createRepairDirectorRunSchema = repairDirectorPreviewInputSchema.extend({
+  previewHash: z.string().regex(/^[a-f0-9]{64}$/),
+  idempotencyKey: z.string().trim().min(8).max(160),
+});
+
 export const rejectDirectorProposalSchema = z
   .object({
     note: z.string().trim().max(2_000).optional(),
@@ -54,6 +71,14 @@ export const adoptDirectorProposalSchema = z
   })
   .strict();
 
+export const adoptWorkflowRepairProposalSchema = adoptDirectorProposalSchema.extend({
+  proposalHash: z.string().regex(/^[a-f0-9]{64}$/),
+  impactHash: z.string().regex(/^[a-f0-9]{64}$/),
+});
+
 export type DirectorPreviewInput = z.infer<typeof directorPreviewInputSchema>;
 export type CreateDirectorRunInput = z.infer<typeof createDirectorRunSchema>;
 export type AdoptDirectorProposalInput = z.infer<typeof adoptDirectorProposalSchema>;
+export type RepairDirectorPreviewInput = z.infer<typeof repairDirectorPreviewInputSchema>;
+export type CreateRepairDirectorRunInput = z.infer<typeof createRepairDirectorRunSchema>;
+export type AdoptWorkflowRepairProposalInput = z.infer<typeof adoptWorkflowRepairProposalSchema>;

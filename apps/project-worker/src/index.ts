@@ -14,8 +14,11 @@ import {
 import {
   AnalysisWorker,
   ComfyUiMcpGenerationProvider,
+  ComfyUiExecutionPlanAdapter,
   FakeGenerationProvider,
+  GenerationAdapterRegistry,
   GenerationWorker,
+  LegacyGenerationProviderAdapter,
   StoryboardDirectorWorker,
   prisma,
   type ComfyUiMcpToolClient,
@@ -35,6 +38,7 @@ const mcpEnvironmentKeys = [
   "SPIKE_DATA_DIR",
   "WORKFLOW_REGISTRY_PATH",
   "PROJECT_ASSET_STORAGE_DIR",
+  "PROJECT_GENERATED_STORAGE_DIR",
   "DATABASE_URL",
 ] as const;
 
@@ -58,6 +62,7 @@ async function main() {
   const analysisWorker = new AnalysisWorker(providerFromEnvironment());
   const generationProfile = process.env.GENERATION_PROVIDER_PROFILE ?? "fake-video-v1";
   let closeMcp: (() => Promise<void>) | undefined;
+  let executionPlanMcp: ComfyUiMcpToolClient | undefined;
   const generationProvider =
     generationProfile === "fake-video-v1"
       ? new FakeGenerationProvider()
@@ -83,13 +88,33 @@ async function main() {
               return (response.structuredContent ?? {}) as any;
             },
           };
+          executionPlanMcp = mcp;
           return new ComfyUiMcpGenerationProvider(mcp);
         })();
   const qaProvider =
     generationProfile === "fake-video-v1"
       ? new FakeVideoQaProvider()
       : new CodexManagerLocalVideoQaProvider();
-  const generationWorker = new GenerationWorker(generationProvider, qaProvider);
+  const adapters = new GenerationAdapterRegistry([
+    new LegacyGenerationProviderAdapter(generationProvider),
+    ...(generationProfile === "minimax-h3-4s-v1"
+      ? [
+          new ComfyUiExecutionPlanAdapter(
+            "comfyui-partner-h3-reference",
+            "1.0.0",
+            executionPlanMcp!,
+          ),
+        ]
+      : []),
+  ]);
+  const generationWorker = new GenerationWorker(
+    generationProvider,
+    qaProvider,
+    prisma,
+    undefined,
+    undefined,
+    adapters,
+  );
   const directorWorker = new StoryboardDirectorWorker();
   let stopping = false;
   const stop = () => {

@@ -75,4 +75,14 @@ describe("plan assembly source selection", () => {
     expect(first.sourceSetHash).toBe(second.sourceSetHash);
     expect(invalid).toMatchObject({ eligible: false, missingOrdinals: [1] });
   });
+
+  it("uses an exact frozen reuse artifact instead of a newer owner-PASS attempt", () => {
+    const value = spec(1, [
+      artifact("reused", "2026-08-25T09:00:00.000Z", "PASS"),
+      artifact("newer", "2026-08-25T10:00:00.000Z", "PASS"),
+    ]);
+    value.frozenReuseArtifactId = "reused";
+    const selection = computeAssemblySelection("10000000-0000-4000-8000-000000000001", [value]);
+    expect(selection.sources[0]?.artifactId).toBe("reused");
+  });
 });

@@ -105,6 +105,14 @@ an intentional single turn. The Shot Plan page restores the latest batch after r
 progress every two seconds, and blocks duplicate confirmation while an active or consumed paused
 batch exists.
 
+The development supervisor verifies the local database/migrations and loopback ComfyUI health. If
+`COMFYUI_INSTALL_DIR` names an existing install, it may start that install, but never installs or
+modifies nodes, models, configuration, or packages. Cleanup targets only its owned processes.
+
+Project-scoped generation readiness returns safe business blockers only. Rollback first sets
+`REAL_GENERATION_ENABLED=false`, then `PROJECT_GENERATION_ENGINE=legacy-v1`; historical Workflow
+Agent plans and review evidence remain readable, while submitted work remains query/reconcile-only.
+
 Generated videos are served from the separate ignored `PROJECT_GENERATED_STORAGE_DIR`. The UI keeps
 task IDs and raw technical evidence collapsed, while showing progress, playback, three review
 frames, technical facts, advisory AI QA, and explicit Owner PASS/FAIL. Cancellation never promises

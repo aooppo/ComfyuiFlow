@@ -21,7 +21,7 @@ describe.runIf(enabled)("Storyboard Director V2 PostgreSQL", () => {
     service = new core.StoryboardDirectorService(client, storage, {});
     worker = new core.StoryboardDirectorWorker(client, undefined, storage);
     await client.$executeRawUnsafe(
-      'TRUNCATE TABLE "StoryboardDirectorProposalDecision", "StoryboardDirectorProposal", "StoryboardDirectorAttempt", "StoryboardDirectorAuthorization", "StoryboardDirectorInputReference", "StoryboardDecision", "ShotAssetBinding", "AssetResolutionManifest", "ShotAssetRequirement", "StoryboardShot", "StoryboardDirectorRun", "StoryboardVersion", "Storyboard", "AssetVersionFile", "ProductionAssetVersion", "ProductionAsset", "Asset", "StoredObject", "Project" CASCADE',
+      'TRUNCATE TABLE "GenerationImplementationEvidence", "ShotExecutionPlan", "GenerationImplementation", "StoryboardDirectorProposalDecision", "StoryboardDirectorProposal", "StoryboardDirectorAttempt", "StoryboardDirectorAuthorization", "StoryboardDirectorInputReference", "StoryboardDecision", "ShotAssetBinding", "AssetResolutionManifest", "ShotAssetRequirement", "StoryboardShot", "StoryboardDirectorRun", "StoryboardVersion", "Storyboard", "AssetVersionFile", "ProductionAssetVersion", "ProductionAsset", "Asset", "StoredObject", "Project" CASCADE',
     );
     const project = await client.project.create({
       data: { name: "Director QA", targetAspectRatio: "PORTRAIT_9_16" },
@@ -178,6 +178,194 @@ describe.runIf(enabled)("Storyboard Director V2 PostgreSQL", () => {
     expect(
       await client.storyboardDirectorRun.findUniqueOrThrow({ where: { id: run.id } }),
     ).toMatchObject({ providerCallCount: 0 });
+  });
+  it("adopts one Fake split repair with stable keys, revalidated bindings, and partial invalidation", async () => {
+    const core = await import("@comfyuiflow/project-core");
+    const project = await client.project.findFirstOrThrow();
+    const storyboards = new core.StoryboardService(client, { phase2BindingsEnabled: true });
+    const generationPlans = new core.GenerationPlanService(client);
+    const repairService = new core.WorkflowRepairService(client);
+    const board = await storyboards.create(project.id, {
+      title: "Repair branch",
+      creativeBrief: "Repair only the blocked middle Shot",
+    });
+    const generated = await storyboards.generate(board.id, board.rowVersion);
+    const sourceVersion = await storyboards.getVersion(generated.headVersionId!);
+    const assetPreview = await storyboards.previewAssets(sourceVersion.id);
+    const selections = assetPreview.results.map((entry: any) => ({
+      requirementId: entry.requirementId,
+      assetVersionFileIds: entry.result.eligible.map((candidate: any) => candidate.bindingId),
+    }));
+    await storyboards.resolveAssets(sourceVersion.id, {
+      candidateResultHash: assetPreview.resultHash,
+      selections,
+    });
+    await storyboards.decide(sourceVersion.id, generated.rowVersion, randomUUID(), {
+      decision: "APPROVED",
+    });
+    const generationPlan = await generationPlans.create(sourceVersion.id, randomUUID());
+    await generationPlans.decide(
+      generationPlan.headVersionId!,
+      generationPlan.rowVersion,
+      randomUUID(),
+      { decision: "APPROVED" },
+    );
+    const loadedPlan = await generationPlans.get(generationPlan.id);
+    const specs = loadedPlan.headVersion!.specs;
+    const implementation = await client.generationImplementation.create({
+      data: {
+        id: randomUUID(),
+        implementationKey: `repair-test-${randomUUID()}`,
+        version: "1.0.0",
+        providerProfileId: "fake-video-v1",
+        modelProfileId: "fake-video-v1",
+        executorType: "DIRECT_PROVIDER_API",
+        adapterId: "repair-test-adapter",
+        adapterVersion: "1.0.0",
+        registrySha256: "1".repeat(64),
+        capabilitySnapshotHash: "2".repeat(64),
+        constraintsSnapshotHash: "3".repeat(64),
+        patternSnapshotHash: "4".repeat(64),
+        runtimeSnapshotHash: "5".repeat(64),
+        compilerSnapshotHash: "6".repeat(64),
+        status: "READY",
+      },
+    });
+    const shotPlans = [] as any[];
+    for (const [index, spec] of specs.entries()) {
+      const payload = {
+        schemaVersion: "shot-execution-plan-draft-v1",
+        blockerCodes: index === 1 ? ["UNSUPPORTED_REQUIREMENTS"] : [],
+        inputBindings:
+          index === 2
+            ? [
+                {
+                  type: "PREVIOUS_SHOT_FINAL_FRAME",
+                  sourceShotKey: specs[1]!.shotKey,
+                  inputSlot: "first_frame",
+                },
+              ]
+            : [],
+      };
+      shotPlans.push(
+        await client.shotExecutionPlan.create({
+          data: {
+            id: randomUUID(),
+            projectId: project.id,
+            generationPlanVersionId: loadedPlan.headVersion!.id,
+            generationSpecId: spec.id,
+            implementationId: index === 1 ? null : implementation.id,
+            executorType: index === 1 ? null : implementation.executorType,
+            adapterId: index === 1 ? null : implementation.adapterId,
+            adapterVersion: index === 1 ? null : implementation.adapterVersion,
+            planningInputHash: String(index + 1).repeat(64),
+            requirementsHash: String(index + 4).repeat(64),
+            capabilitySnapshotHash: String(index + 7).repeat(64),
+            payloadJson: payload,
+            planTemplateSha256: core.canonicalSha256(payload),
+            planningOutcome: index === 1 ? "BLOCKED" : "READY",
+            blockerCode: index === 1 ? "UNSUPPORTED_REQUIREMENTS" : null,
+          },
+        }),
+      );
+    }
+    const repair = await repairService.preview(shotPlans[1]!.id);
+    expect(repair.externalCalls).toBe(0);
+    const split = repair.proposals.find((proposal: any) => proposal.action === "SPLIT_SHOT")!;
+    const directorPreview = await service.previewRepair(shotPlans[1]!.id, {
+      proposalHash: split.proposalHash,
+      impactHash: repair.impactHash,
+      action: "SPLIT_SHOT",
+      profileId: "fake-storyboard-v2",
+    });
+    const currentBoard = await client.storyboard.findUniqueOrThrow({ where: { id: board.id } });
+    const run = await service.confirmRepair(shotPlans[1]!.id, currentBoard.rowVersion, {
+      proposalHash: split.proposalHash,
+      impactHash: repair.impactHash,
+      action: "SPLIT_SHOT",
+      profileId: "fake-storyboard-v2",
+      selectedAssetVersionFileIds: directorPreview.references.map(
+        (reference: any) => reference.assetVersionFileId,
+      ),
+      previewHash: directorPreview.previewHash,
+      idempotencyKey: randomUUID(),
+    });
+    await worker.processNext("repair-worker");
+    const completed = await service.getRun(run.id);
+    expect(completed).toMatchObject({
+      status: "COMPLETED",
+      runKind: "SHOT_REPAIR",
+      providerCallCount: 0,
+    });
+    expect(completed.attempts).toHaveLength(1);
+    const proposal = await service.getProposal(completed.proposal!.id);
+    const normalized = proposal.normalizedProposalJson as any;
+    expect(normalized.shots).toHaveLength(2);
+    expect(normalized.shots.map((shot: any) => shot.shotKey)).toEqual([
+      expect.stringMatching(/^[a-f0-9-]{36}$/),
+      expect.stringMatching(/^[a-f0-9-]{36}$/),
+    ]);
+    expect(new Set(normalized.shots.map((shot: any) => shot.shotKey)).size).toBe(2);
+    const beforeStale = await client.storyboard.findUniqueOrThrow({ where: { id: board.id } });
+    await expect(
+      service.adoptRepair(proposal.id, beforeStale.rowVersion, {
+        idempotencyKey: randomUUID(),
+        proposalHash: "f".repeat(64),
+        impactHash: repair.impactHash,
+        narrativeSummary: normalized.narrativeSummary,
+        shots: normalized.shots,
+      }),
+    ).rejects.toMatchObject({ code: "REPAIR_PROPOSAL_STALE" });
+    expect(
+      (await client.storyboard.findUniqueOrThrow({ where: { id: board.id } })).headVersionId,
+    ).toBe(beforeStale.headVersionId);
+    const adopted = await service.adoptRepair(proposal.id, beforeStale.rowVersion, {
+      idempotencyKey: randomUUID(),
+      proposalHash: proposal.outputHash,
+      impactHash: repair.impactHash,
+      narrativeSummary: normalized.narrativeSummary,
+      shots: normalized.shots,
+    });
+    expect(adopted).toMatchObject({
+      storyboardVersionAppended: true,
+      externalCalls: 0,
+      generationAuthorized: false,
+      affectedShotKeys: [specs[1]!.shotKey, specs[2]!.shotKey],
+    });
+    const repairedBoard = await client.storyboard.findUniqueOrThrow({
+      where: { id: board.id },
+      include: {
+        headVersion: {
+          include: {
+            shots: { include: { requirements: true }, orderBy: { ordinal: "asc" } },
+            manifest: { include: { bindings: true } },
+          },
+        },
+      },
+    });
+    expect(repairedBoard.approvedVersionId).toBeNull();
+    expect(repairedBoard.headVersion?.parentVersionId).toBe(sourceVersion.id);
+    expect(repairedBoard.headVersion?.shots).toHaveLength(4);
+    expect(repairedBoard.headVersion?.shots[0]?.shotKey).toBe(specs[0]!.shotKey);
+    expect(repairedBoard.headVersion?.shots[3]?.shotKey).toBe(specs[2]!.shotKey);
+    expect(repairedBoard.headVersion?.shots.slice(1, 3).map((shot) => shot.shotKey)).toEqual(
+      normalized.shots.map((shot: any) => shot.shotKey),
+    );
+    expect(repairedBoard.headVersion?.manifest?.policyVersion).toBe(
+      "repair-binding-revalidation-v1",
+    );
+    expect(repairedBoard.headVersion?.manifest?.bindings.length).toBeGreaterThan(0);
+    expect(
+      await client.shotExecutionPlan.findUniqueOrThrow({ where: { id: shotPlans[0]!.id } }),
+    ).toMatchObject({ lifecycleStatus: "DRAFT" });
+    for (const plan of shotPlans.slice(1)) {
+      expect(
+        await client.shotExecutionPlan.findUniqueOrThrow({ where: { id: plan.id } }),
+      ).toMatchObject({
+        lifecycleStatus: "INVALIDATED",
+        invalidationCode: "STORYBOARD_REPAIR_ADOPTED",
+      });
+    }
   });
   it("marks an expired consumed lease ambiguous without retrying", async () => {
     const board = await client.storyboard.findFirstOrThrow({ include: { headVersion: true } });

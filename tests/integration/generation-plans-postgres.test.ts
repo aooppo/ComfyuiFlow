@@ -283,6 +283,6 @@ describe.runIf(enabled)("Generation Plan PostgreSQL history", () => {
 
 async function reset(client: ProjectPrisma) {
   await client.$executeRawUnsafe(
-    'TRUNCATE TABLE "GenerationPlanDecision", "GenerationSpecReference", "GenerationSpec", "GenerationPlanVersion", "GenerationPlan", "StoryboardDecision", "ShotAssetBinding", "AssetResolutionManifest", "ShotAssetRequirement", "StoryboardShot", "StoryboardDirectorRun", "StoryboardVersion", "Storyboard", "Project" CASCADE',
+    'TRUNCATE TABLE "GenerationImplementationEvidence", "ShotExecutionPlan", "GenerationImplementation", "GenerationPlanDecision", "GenerationSpecReference", "GenerationSpec", "GenerationPlanVersion", "GenerationPlan", "StoryboardDecision", "ShotAssetBinding", "AssetResolutionManifest", "ShotAssetRequirement", "StoryboardShot", "StoryboardDirectorRun", "StoryboardVersion", "Storyboard", "Project" CASCADE',
   );
 }

@@ -12,7 +12,7 @@ import {
   compileShotPositivePrompt,
   hashCanonical,
 } from "@comfyuiflow/spike-core";
-import { AmbiguousSubmissionError } from "@comfyuiflow/comfyui-bridge";
+import { AmbiguousSubmissionError, ComfyUiExecutionPlanService } from "@comfyuiflow/comfyui-bridge";
 
 describe("one-shot live safety", () => {
   const provenance = {
@@ -357,5 +357,67 @@ describe("one-shot live safety", () => {
       open: false,
       reason: "OWNER_FAIL",
     });
+  });
+
+  it("blocks a disabled Workflow Agent plan before staging while allowing original-task status", async () => {
+    const jobId = randomUUID();
+    const promptId = randomUUID();
+    const identity = {
+      executionPlanId: randomUUID(),
+      executionPlanSha256: "1".repeat(64),
+      generationJobId: jobId,
+      authorizationConsumptionId: randomUUID(),
+      materializedExecutionSha256: "2".repeat(64),
+    };
+    const record = {
+      ...identity,
+      lifecycleStatus: "FROZEN",
+      executorType: "COMFYUI_GRAPH",
+      generationJobStatus: "RUNNING",
+      authorizationOperation: "GENERATION_SUBMIT",
+      authorizationGenerationJobId: jobId,
+      authorizationMaterializedPlanSha256: identity.materializedExecutionSha256,
+      workflowId: "ready-video",
+      workflowSha256: "3".repeat(64),
+      providerTaskId: promptId,
+      compiledPrompt: "safe prompt",
+      durationSeconds: 4,
+      width: 768,
+      height: 1344,
+      fps: 24,
+      outputPrefix: "comfyuiflow/project/plan/shot-01",
+      inputs: [
+        { role: "SCENE", localPath: "/server-only/scene.png", sha256: "4".repeat(64) },
+        {
+          role: "CHARACTER_FULL_BODY",
+          localPath: "/server-only/character.png",
+          sha256: "5".repeat(64),
+        },
+      ],
+    } as const;
+    const stageInput = vi.fn();
+    const status = vi.fn(async () => ({
+      promptId,
+      status: "IN_PROGRESS",
+      outputCount: 0,
+      artifacts: [],
+    }));
+    const service = new ComfyUiExecutionPlanService({
+      store: {
+        loadForSubmission: async () => record as any,
+        loadSubmitted: async () => record as any,
+      },
+      execution: {
+        assertLiveEnabled: () => {
+          throw new Error("ComfyUI LIVE is disabled");
+        },
+        stageInput,
+        status,
+      } as any,
+      recheckReadiness: async () => ({ ready: true, blockers: [] }),
+    });
+    await expect(service.submit(identity)).rejects.toThrow("LIVE is disabled");
+    expect(stageInput).not.toHaveBeenCalled();
+    await expect(service.status(jobId)).resolves.toMatchObject({ promptId, status: "IN_PROGRESS" });
   });
 });

@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { WorkflowRegistry } from "@comfyuiflow/comfyui-bridge";
@@ -48,6 +49,8 @@ describe("MiniMax H3 reference-to-video workflow", () => {
   });
 
   it("binds scene, product, and three character views as ordered H3 references", async () => {
+    const sourcePath = join(process.cwd(), "workflows", "minimax-h3-project-shot-4s-v1.api.json");
+    const sourceBefore = await readFile(sourcePath);
     const prompt = await registry.materialize(projectWorkflowId, workflowHash, {
       character: "comfyuiflow/character.png",
       scene: "comfyuiflow/scene.png",
@@ -59,6 +62,7 @@ describe("MiniMax H3 reference-to-video workflow", () => {
       width: 768,
       height: 1344,
       fps: 24,
+      outputPrefix: "comfyuiflow/project-safe/plan-safe/shot-01",
     });
 
     expect(prompt["1"]).toMatchObject({ inputs: { image: "comfyuiflow/scene.png" } });
@@ -84,7 +88,14 @@ describe("MiniMax H3 reference-to-video workflow", () => {
     expect((prompt["6"] as any).inputs["model.prompt"]).toContain("subject_definitions:");
     expect(prompt["7"]).toMatchObject({
       class_type: "SaveVideo",
-      inputs: { video: ["6", 0], format: "mp4", codec: "auto" },
+      inputs: {
+        video: ["6", 0],
+        format: "mp4",
+        codec: "auto",
+        filename_prefix: "comfyuiflow/project-safe/plan-safe/shot-01",
+      },
     });
+    expect(await readFile(sourcePath)).toEqual(sourceBefore);
+    expect((await registry.load(projectWorkflowId)).actualHash).toBe(workflowHash);
   });
 });
