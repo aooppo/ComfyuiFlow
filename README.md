@@ -196,6 +196,14 @@ The default content root is ignored `var/project-assets`; change it with
 rewritten. See [`apps/project-web/README.md`](./apps/project-web/README.md) for validation and data
 lifecycle details.
 
+### Capability Pack（Feature 018）
+
+在同一个本地页面可导入已审核的 Capability Pack。先在忽略的 `.env` 设置一个仅本机知道的
+`CAPABILITY_PUBLICATION_ADMIN_TOKEN`，重启项目 Web，再输入该口令。页面先生成并展示 canonical
+digest，复核模型、运行目标、节点白名单和参数范围后，才会导入为 `TRIAL`。它不会连接 ComfyUI、调用
+模型或发起视频生成。一个兼容 Pack 可以复用同一 ComfyUI MCP/provider；不兼容既有受限配方的节点拓扑
+才需要开发发布新的 compiler profile。
+
 ## Phase 2 Asset Understanding
 
 Phase 2 keeps physical source files, reusable creative identities, and AI observations distinct:

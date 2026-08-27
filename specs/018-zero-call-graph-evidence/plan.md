@@ -30,6 +30,8 @@ Add a server-owned, zero-call preflight path for each persisted `MaterializedGra
 
 Re-check after implementation: required; any route must remain server-owned and pricing/authorization remain independent.
 
+| VI. Controlled Capability Publication | PASS | A local-admin endpoint canonicalizes a reviewed JSON Pack, freezes server-owned provider/adapter/compiler/validator refs, appends a `TRIAL` receipt, and cannot generate. |
+
 ## Design
 
 ### Validation flow
@@ -93,4 +95,51 @@ packages/*/test/ and apps/comfyui-mcp/test/
 
 ## Complexity Tracking
 
-No constitution violations or new service boundaries are required.
+The extension adds one local-admin API/receipt boundary but does not add a provider, runtime, or
+generation-execution boundary.
+
+## Capability Pack extension
+
+### Boundary and lifecycle
+
+```text
+reviewed Pack JSON -> server canonical digest -> append-only TRIAL registry + receipt
+Shot intent -> registered constrained compiler -> GenerationSpec + frozen graph
+frozen graph -> existing Feature 018 zero-call preflight -> independent authorization path
+```
+
+The administrator approves a capability configuration once, not individual graphs. `TRIAL` means
+the configuration may be planned and technically preflighted but its first paid/real execution
+requires a distinct Owner Trial-scope authorization. `READY` continues to require per-action
+Owner authorization and never derives authority from import or preflight.
+
+### Pack contract
+
+Pack v1 is strict JSON. It carries model identity, `runtimeTargetRef`, a known compiler profile,
+a constrained fixed-recipe binding, allowed intent modes, parameter envelope, sorted node
+allowlist, and a canonical digest assertion. It does not carry a provider/adapter/validator ref,
+endpoint, secret, code or raw graph. The server provides and freezes those shared executable
+references. Each Pack derives a capability-scoped RuntimeContract identity, so H3, Seedance and a
+local MiniMax H3 can use the same ComfyUI MCP provider without sharing a contract row.
+
+The built-in `reference-video-v1` compiler has a fixed two-node topology. A Pack may choose the
+two node classes and named inputs but may not provide node identifiers or links. A model requiring
+a different topology needs a separately released compiler profile; a compatible model needs only
+a new Pack import.
+
+### Persistence and API
+
+`CapabilityPublicationReceipt` stores the exact Pack JSON/digest, actor label and foreign keys to
+the three derived registry records. It has unique digest constraints plus the existing append-only
+trigger. `POST /api/admin/capability-packs` requires the server-configured local administrator
+token and inserts the full registration transaction. `PUT` only canonicalizes JSON for review,
+while `GET` lists receipt facts. All three report zero external calls; no endpoint accepts a graph
+or any authorization state.
+
+### Verification
+
+Unit tests cover strict Pack parsing, canonical digest failure, secret/raw graph rejection,
+server-owned reference freezing, append-only import orchestration, bounded Graph Intent compilation,
+compiler node escape, and Test A-ready frozen planning. The production build type-checks the UI and
+route. Database migration and Prisma generation are validated locally; no database, ComfyUI or
+provider connection is required.

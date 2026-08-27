@@ -1,19 +1,11 @@
 <!--
 Sync Impact Report
-- Version change: 2.0.0 -> 3.0.0
+- Version change: 3.0.0 -> 3.1.0
 - Modified principles:
-  - I. Prove the Video Path First -> I. One Dynamic Capability Mainline.
-  - II. Separate Creative Intelligence from Generation: execution now freezes capability identities
-    rather than depending on a GenerationProvider abstraction.
-  - III. Provider-Neutral Contracts and Honest Capabilities: RuntimeContract is a first-class,
-    evidence-scoped capability identity.
-  - IV. Zero-Call Defaults and Bounded Live Execution: retained with independent video and AI-QA
-    authorization, price, expiry, and consumption boundaries.
-  - V. Durable Provenance and Verification: canonical append-only Generation lineage replaces all
-    historical generation record families.
-- Added sections: Canonical Data Reset and Recovery in MVP Technical Constraints.
-- Removed sections: legacy GenerationProvider execution and dual-read compatibility.
-- Deferred items: none
+  - None.
+- Added sections: VI. 受控 Capability 发布。
+- Removed sections: none.
+- Deferred items: Pack cryptographic signing and ZIP audit attachments are not part of v1.
 -->
 # ComfyuiFlow Constitution
 
@@ -90,6 +82,23 @@ decision, trigger a retry, or trigger assembly.
 
 Rationale: reproducibility and failure recovery require immutable lineage, not overwritten state.
 
+### VI. 受控 Capability 发布
+只有服务端拥有的本地管理员 release action 可以追加 `CapabilityProfile`、
+`RuntimeContract` 和 `GenerationImplementation`。它必须接受带版本、经过审核的 manifest，重新
+计算并验证 canonical digest。provider、adapter、compiler 版本及 validator 引用必须由服务端冻结；
+模型、运行目标、受限 Compiler binding 和 RuntimeContract 节点白名单可以来自 manifest，但必须在
+schema、受限 compiler 及后续零调用 runtime catalog 校验中闭合。它必须拒绝 secret、endpoint、path、
+任意代码、raw graph 和未知字段，并以不可变 receipt 原子追加 accepted 记录。浏览器输入只是未受信任
+候选项；特权 database administrator 仍在产品 threat model 之外。
+
+发布绝不构成 LIVE authorization、provider submission、`READY` promotion 或 human quality
+approval。新发布的 `TRIAL` implementation 只能被独立定义的 zero-call planning 或
+technical-preflight action 使用，以冻结 `GenerationSpec` 和 graph。`READY` promotion 仍由原则
+III 管理，所有 external execution 仍由原则 IV 管理。
+
+理由：registry 是可执行的 control-plane data。不可变、经过校验的发布可防止浏览器或临时数据库
+写入变为未经审核的 provider、graph 或 secret channel。
+
 ## MVP Technical Constraints
 
 - The product is a local, single-user TypeScript modular monolith: Next.js Web/API, a standalone
@@ -146,4 +155,4 @@ changes, MINOR for new principles or materially expanded policy, and PATCH for n
 clarification. Compliance MUST be reviewed before implementation begins and again during
 convergence.
 
-**Version**: 3.0.0 | **Ratified**: 2026-08-23 | **Last Amended**: 2026-08-27
+**Version**: 3.1.0 | **Ratified**: 2026-08-23 | **Last Amended**: 2026-08-27

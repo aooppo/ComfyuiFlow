@@ -131,6 +131,7 @@ model CapabilityProfile {
   createdAt        DateTime                   @default(now()) @db.Timestamptz(6)
   runtimeContracts RuntimeContract[]
   implementations  GenerationImplementation[]
+  publicationReceipts CapabilityPublicationReceipt[]
 
   @@unique([ref, version])
 }
@@ -167,8 +168,25 @@ model GenerationImplementation {
   capabilityProfile   CapabilityProfile @relation(fields: [capabilityProfileId], references: [id], onDelete: Restrict)
   runtimeContract     RuntimeContract   @relation(fields: [runtimeContractId], references: [id], onDelete: Restrict)
   specs               GenerationSpec[]
+  publicationReceipts CapabilityPublicationReceipt[]
 
   @@unique([ref, version])
+}
+
+model CapabilityPublicationReceipt {
+  id                  String                   @id @default(uuid()) @db.Uuid
+  actorRef            String                   @db.VarChar(160)
+  manifestJson        Json
+  manifestSha256      String                   @unique @db.Char(64)
+  capabilityProfileId String                   @db.Uuid
+  implementationId    String                   @db.Uuid
+  receiptDigest       String                   @unique @db.Char(64)
+  createdAt           DateTime                 @default(now()) @db.Timestamptz(6)
+  capabilityProfile   CapabilityProfile        @relation(fields: [capabilityProfileId], references: [id], onDelete: Restrict)
+  implementation      GenerationImplementation @relation(fields: [implementationId], references: [id], onDelete: Restrict)
+
+  @@index([capabilityProfileId, createdAt])
+  @@index([implementationId, createdAt])
 }
 
 model ShotGenerationRequirement {

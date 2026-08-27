@@ -40,3 +40,12 @@
 ## Phase 6: Convergence
 
 - [x] T013 Validate that the declared graph output is a runtime-declared output node, and cover rejection with a zero-call test per FR-002 / SC-001 (partial).
+
+## Phase 7: Capability Pack 与动态 Graph 扩展
+
+- [x] T014 为 Capability Pack v1 编写 canonical digest、严格 schema、禁止 raw graph/secret 与节点排序的零调用单元测试，文件：`tests/unit/capability-pack.test.ts`。
+- [x] T015 在 `packages/project-core/src/capability-pack.ts` 实现纯本地 Capability Pack 解析与校验，并从 `packages/project-core/src/index.ts` 导出；不得访问数据库、ComfyUI、worker 或 provider。
+- [x] T016 [P] 为受限 Graph Intent 和通用 Compiler Profile 编写单元测试，文件：`tests/unit/graph-intent.test.ts`。
+- [x] T017 实现受限 Graph Intent schema 和确定性通用编译器入口，文件：`packages/project-core/src/graph-intent.ts`。
+- [x] T018 设计并实现 Capability Pack 的不可变导入 receipt、`TRIAL` registry transaction 与本地运维 UI；需要数据库迁移、API/UI/权限测试，且不得提交生成。
+- [x] T019 将每 Shot Graph Intent -> Compiler -> Test A 可持久化的 GenerationSpec/frozen graph 串联，并证明无需运维逐图审批；保留独立 Owner Trial-scope/按次授权边界。既有 Feature 018 preflight 在 graph 持久化后消费该身份。

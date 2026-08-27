@@ -52,6 +52,27 @@ An operator can read the immutable technical result for a graph and see the grap
 1. **Given** a completed preflight, **When** the operator inspects its evidence, **Then** the result identifies the graph, contract, runtime facts, catalog fingerprint, validator, outcome, and safe diagnostics.
 2. **Given** a caller attempts to alter prior evidence, **When** the write is attempted, **Then** the datastore rejects it.
 
+---
+
+### User Story 4 - Import a compatible Capability Pack and plan a dynamic graph (Priority: P1)
+
+本地管理员可以导入经过审核的 Capability Pack JSON，以追加一个 `TRIAL` capability；随后 Shot
+Planner/AI 只能输出受限 Graph Intent，由服务端已发布的 compiler profile 生成该 Shot 的新 frozen
+graph。运维不必逐张审批 graph，且导入或规划不得调用 ComfyUI、模型或 provider。
+
+**Independent Test**: 对一份有正确 canonical digest 的 Pack，服务端产生不可变 `TRIAL` registry
+registration 与 receipt。对合法的 Shot Intent，服务端可产生 frozen graph identity；raw graph、secret、
+未知字段、未注册 compiler、越界参数或白名单外节点必须在任何外部调用前失败。
+
+**Acceptance Scenarios**:
+
+1. **Given** 本地管理员已复核 Pack，**When** 先请求 canonical digest 再导入，**Then** 服务端只追加
+   receipt、CapabilityProfile、RuntimeContract 和 `TRIAL` implementation，不产生 generation。
+2. **Given** 已导入的兼容 Pack，**When** AI 为一个 Shot 产生合法 Intent，**Then** server-owned compiler
+   生成并冻结该 Shot 的 graph，后续 Feature 018 preflight 可按其 digest 校验。
+3. **Given** 一个新的 `TRIAL` Pack，**When** graph 通过 zero-call preflight，**Then** 它仍需要独立的
+   Owner Trial-scope authorization；当 capability 是 `READY` 时，仍需要该次 action-time authorization。
+
 ### Edge Cases
 
 - A catalog response lacks one or more required node definitions.
@@ -59,6 +80,7 @@ An operator can read the immutable technical result for a graph and see the grap
 - A catalog changes after a PASS, including one that keeps the same node class names but changes schemas.
 - Preflight transport or malformed runtime responses must create safe failure evidence and never fall through to `/prompt`.
 - Repeated preflight checks are preserved as separate evidence; no historic PASS is overwritten.
+- Capability Pack v1 不能包含任意拓扑、node ID、link、代码、凭据、endpoint 或模型权重。
 
 ## Requirements _(mandatory)_
 
@@ -72,12 +94,20 @@ An operator can read the immutable technical result for a graph and see the grap
 - **FR-006**: The system MUST recheck that the current runtime facts still match the evidence at submission time and fail closed before staging or submitting when they do not.
 - **FR-007**: The system MUST provide a server-owned preflight operation and a read-only evidence lookup without returning credentials, filesystem paths, endpoint URLs, or raw secrets.
 - **FR-008**: The system MUST retain separate action-time authorization and provider pricing gates; technical preflight alone MUST NOT authorize generation.
+- **FR-009**: 服务端 MUST 为 Capability Pack v1 重新计算 canonical SHA-256，并拒绝 digest 不符、未知字段、secret、raw graph、未排序节点白名单和受限 binding 之外的内容。
+- **FR-010**: 本地管理员入口 MUST 只追加不可变 receipt、CapabilityProfile、RuntimeContract 和 `TRIAL` GenerationImplementation；导入不联系 runtime、ComfyUI 或 provider，且不创建 authorization、batch 或 attempt。
+- **FR-011**: 每个 Shot MUST 先被解析为受限 Graph Intent；只有 server-owned、已注册 compiler profile 可以把它编译为 graph。Pack 可以配置固定 recipe 的节点类和输入名，但不能提供 raw graph、任意 node ID 或 links。
+- **FR-012**: 图编译 MUST 冻结 Pack digest、Intent digest、GenerationSpec 与 graph SHA；编译图必须完全属于 RuntimeContract 节点白名单，并可交给 FR-001 的既有 preflight。
+- **FR-013**: `TRIAL` graph 的首次真实执行 MUST 保持独立 Owner Trial-scope authorization；`READY` graph 仍 MUST 保持独立按次 action-time authorization。导入、摘要、编译、冻结及预检均不得授权或提交生成。
 
 ### Key Entities
 
 - **Graph Validation Evidence**: Immutable outcome of validating one frozen graph against one observed runtime and node catalog.
 - **Frozen Graph Snapshot**: The canonical per-generation-spec graph whose digest identifies the exact graph evaluated and submitted.
 - **Runtime Contract**: The allowed node classes and identity the graph must satisfy.
+- **Capability Pack**: 经过摘要校验的模型/运行目标/受限 recipe 配置；服务端从它派生独立的 registry record 和 receipt。
+- **Graph Intent**: AI 可为单个 Shot 提供的受限 prompt、素材引用、时长、比例等数据；它不是 graph。
+- **Capability Publication Receipt**: 记录 Pack digest、操作人和所派生 registry identity 的 append-only 导入事实。
 
 ## Success Criteria _(mandatory)_
 
@@ -87,15 +117,19 @@ An operator can read the immutable technical result for a graph and see the grap
 - **SC-002**: Automated tests demonstrate that no authorization, attempt, or consumption can be created for a graph without matching PASS evidence.
 - **SC-003**: Automated tests demonstrate that a changed graph digest or runtime catalog prevents submission before any input staging or `/prompt` call.
 - **SC-004**: Every persisted evidence row is traceable to one frozen graph digest and runtime-contract digest, and database mutation attempts are rejected.
+- **SC-005**: 自动化测试证明 Pack digest、严格 schema、server-owned ref freeze、`TRIAL` receipt 与 Graph Intent 编译路径均为零外部调用，且不返回已授权生成。
+- **SC-006**: 自动化测试证明一份兼容 Pack 可在不重新部署应用的前提下生成不同 Shot 的 frozen graph；非法 Intent 或 compiler 输出在 preflight 前失败关闭。
 
 ## Assumptions
 
 - A ComfyUI runtime exposes `/system_stats` and `/object_info` read-only endpoints.
 - The existing capability registry remains the sole source of allowed RuntimeContract node classes.
 - Runtime preflight can run while the generation worker is stopped; no real provider credentials or paid calls are needed for automated verification.
+- `runtimeTargetRef` 是部署目标身份；每个 Pack 派生自己唯一的 RuntimeContract identity，因此多个模型可以共用同一 ComfyUI MCP/provider 而各自拥有节点合同。
 
 ## Clarification Record
 
 - The feature validates persisted, server-owned frozen graphs only; it does not accept browser, worker, or LLM raw graphs.
 - "Current" evidence means an exact graph SHA and runtime-contract digest match, plus a submission-time catalog fingerprint recheck. No time-to-live is introduced because no expiry policy is currently published.
 - Runtime transport failures are recorded as safe FAIL evidence where a graph identity is available; they do not permit a batch or submission.
+- Capability Pack v1 是 JSON；ZIP 仅可作为未来审核附件容器，不是执行载荷。当前管理员口令由 `CAPABILITY_PUBLICATION_ADMIN_TOKEN` 在服务端部署配置，绝不持久化或返回。

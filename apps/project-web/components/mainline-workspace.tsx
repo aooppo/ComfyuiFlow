@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CapabilityPublicationPanel } from "./capability-publication-panel";
 
 type Capability = { ref: string; version: string; runtimeRef: { id: string; version: string } };
 
@@ -61,6 +62,7 @@ export function MainlineWorkspace({ projectId }: { projectId?: string }) {
         </p>
         {projectId ? <p>Project: {projectId}</p> : null}
       </section>
+      <CapabilityPublicationPanel />
     </main>
   );
 }
