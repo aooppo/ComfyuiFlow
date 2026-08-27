@@ -9,6 +9,15 @@ export interface FrozenMainlineExecutionRecord {
   runtimeRef: { id: string; version: string };
   runtimeContractDigest: string;
   graphSha256: string;
+  graphValidationEvidence: {
+    id: string;
+    outcome: "PASS";
+    graphSha256: string;
+    runtimeContractDigest: string;
+    runtimeFingerprintSha256: string;
+    nodeCatalogSha256: string;
+  };
+  runtimeNodeClasses: string[];
   graph: Readonly<Record<string, unknown>>;
   inputs: Array<{ localPath: string; sha256: string; stagedInputName: string }>;
 }
@@ -47,6 +56,15 @@ function assertIdentity(
   if (hashCanonical(record.graph) !== record.graphSha256)
     throw new Error("MAINLINE_FROZEN_GRAPH_DIGEST_MISMATCH");
   if (
+    record.graphValidationEvidence.outcome !== "PASS" ||
+    record.graphValidationEvidence.graphSha256 !== record.graphSha256 ||
+    record.graphValidationEvidence.runtimeContractDigest !== record.runtimeContractDigest ||
+    !/^[a-f0-9]{64}$/.test(record.graphValidationEvidence.nodeCatalogSha256) ||
+    !/^[a-f0-9]{64}$/.test(record.graphValidationEvidence.runtimeFingerprintSha256) ||
+    !record.runtimeNodeClasses.length
+  )
+    throw new Error("MAINLINE_GRAPH_EVIDENCE_STALE_OR_MISSING");
+  if (
     record.inputs.length > 15 ||
     new Set(record.inputs.map((item) => item.stagedInputName)).size !== record.inputs.length
   )
@@ -61,6 +79,9 @@ export class ComfyUiMainlineExecutionService {
       recheckRuntimeContract(input: {
         runtimeRef: { id: string; version: string };
         runtimeContractDigest: string;
+        graphSha256: string;
+        evidence: FrozenMainlineExecutionRecord["graphValidationEvidence"];
+        nodeClasses: string[];
       }): Promise<{ ready: boolean; blockers: string[] }>;
     },
   ) {}
@@ -73,6 +94,9 @@ export class ComfyUiMainlineExecutionService {
     const readiness = await this.dependencies.recheckRuntimeContract({
       runtimeRef: record.runtimeRef,
       runtimeContractDigest: record.runtimeContractDigest,
+      graphSha256: record.graphSha256,
+      evidence: record.graphValidationEvidence,
+      nodeClasses: record.runtimeNodeClasses,
     });
     if (!readiness.ready)
       throw new Error(`MAINLINE_RUNTIME_BLOCKED:${readiness.blockers.join(",")}`);

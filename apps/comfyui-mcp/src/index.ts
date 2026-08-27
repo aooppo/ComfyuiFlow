@@ -4,9 +4,16 @@ import {
   allowlistedNodeInfo,
   captureNodeCatalog,
   ComfyUiClient,
+  preflightZeroCallGraph,
+  runtimeFingerprintForSystemStats,
 } from "@comfyuiflow/comfyui-bridge";
 import { loadProjectEnvFile, loadRuntimeConfig } from "@comfyuiflow/spike-core";
-import { LocalContentStorage, prisma, resolveStorageRoot } from "@comfyuiflow/project-core";
+import {
+  GraphValidationEvidenceService,
+  LocalContentStorage,
+  prisma,
+  resolveStorageRoot,
+} from "@comfyuiflow/project-core";
 import { createPrismaMainlineExecutionStore } from "./execution-plan-store.js";
 import { createComfyUiMcpServer } from "./server.js";
 
@@ -22,6 +29,7 @@ const client = new ComfyUiClient(config.comfyuiBaseUrl, {
   ...(config.comfyOrgApiKey ? { comfyOrgApiKey: config.comfyOrgApiKey } : {}),
   ...(config.comfyOrgAuthToken ? { comfyOrgAuthToken: config.comfyOrgAuthToken } : {}),
 });
+const graphValidationEvidence = new GraphValidationEvidenceService(prisma);
 const server = createComfyUiMcpServer({
   client,
   liveEnabled: config.comfyuiLiveEnabled,
@@ -31,6 +39,14 @@ const server = createComfyUiMcpServer({
     sourceStorage: new LocalContentStorage({ root: sourceStorageRoot }),
     generatedStorage: new LocalContentStorage({ root: generatedStorageRoot }),
   }),
+  async preflightMainlineGraph(graphSnapshotId) {
+    return graphValidationEvidence.preflight(graphSnapshotId, (snapshot) =>
+      preflightZeroCallGraph(client, snapshot),
+    );
+  },
+  async listMainlineGraphValidationEvidence(graphSnapshotId) {
+    return { evidence: await graphValidationEvidence.list(graphSnapshotId) };
+  },
   async recheckMainlineRuntimeContract(input) {
     const contracts = await prisma.$queryRawUnsafe<Array<{ nodeClassesJson: unknown }>>(
       `SELECT "nodeClassesJson" FROM "RuntimeContract" WHERE "ref" = $1 AND "version" = $2 AND "digest" = $3`,
@@ -39,14 +55,35 @@ const server = createComfyUiMcpServer({
       input.runtimeContractDigest,
     );
     const nodeClasses = Array.isArray(contracts[0]?.nodeClassesJson)
-      ? contracts[0]!.nodeClassesJson.map(String)
+      ? contracts[0]!.nodeClassesJson.filter((item): item is string => typeof item === "string")
       : [];
-    if (!nodeClasses.length) return { ready: false, blockers: ["RUNTIME_CONTRACT_NOT_FOUND"] };
-    const catalog = await captureNodeCatalog(client, nodeClasses);
+    if (!nodeClasses.length || JSON.stringify(nodeClasses) !== JSON.stringify(input.nodeClasses))
+      return { ready: false, blockers: ["RUNTIME_CONTRACT_NOT_FOUND_OR_CHANGED"] };
+    let catalog;
+    let runtimeFingerprintSha256: string;
+    try {
+      [catalog, runtimeFingerprintSha256] = await Promise.all([
+        captureNodeCatalog(client, nodeClasses),
+        client.getSystemStats().then(runtimeFingerprintForSystemStats),
+      ]);
+    } catch {
+      return { ready: false, blockers: ["RUNTIME_FACTS_UNAVAILABLE"] };
+    }
     const missing = nodeClasses.filter((className) => !allowlistedNodeInfo(catalog, className));
     return {
-      ready: missing.length === 0,
-      blockers: missing.map((item) => `NODE_CLASS_UNAVAILABLE:${item}`),
+      ready:
+        missing.length === 0 &&
+        catalog.catalogSha256 === input.evidence.nodeCatalogSha256 &&
+        runtimeFingerprintSha256 === input.evidence.runtimeFingerprintSha256,
+      blockers: [
+        ...missing.map((item) => `NODE_CLASS_UNAVAILABLE:${item}`),
+        ...(catalog.catalogSha256 === input.evidence.nodeCatalogSha256
+          ? []
+          : ["NODE_CATALOG_CHANGED"]),
+        ...(runtimeFingerprintSha256 === input.evidence.runtimeFingerprintSha256
+          ? []
+          : ["RUNTIME_FACTS_CHANGED"]),
+      ],
     };
   },
 });

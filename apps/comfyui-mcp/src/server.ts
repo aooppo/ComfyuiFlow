@@ -16,7 +16,19 @@ export interface ComfyUiMcpDependencies {
   recheckMainlineRuntimeContract?(input: {
     runtimeRef: { id: string; version: string };
     runtimeContractDigest: string;
+    graphSha256: string;
+    evidence: {
+      id: string;
+      outcome: "PASS";
+      graphSha256: string;
+      runtimeContractDigest: string;
+      runtimeFingerprintSha256: string;
+      nodeCatalogSha256: string;
+    };
+    nodeClasses: string[];
   }): Promise<{ ready: boolean; blockers: string[] }>;
+  preflightMainlineGraph?(graphSnapshotId: string): Promise<object>;
+  listMainlineGraphValidationEvidence?(graphSnapshotId: string): Promise<object>;
 }
 
 function result(value: unknown) {
@@ -41,6 +53,33 @@ export function createComfyUiMcpServer(dependencies: ComfyUiMcpDependencies): Mc
           recheckRuntimeContract: dependencies.recheckMainlineRuntimeContract,
         })
       : null;
+
+  server.registerTool(
+    "preflight_mainline_graph",
+    {
+      description:
+        "Validate one persisted frozen graph with read-only ComfyUI runtime facts; never submits generation",
+      inputSchema: { graphSnapshotId: z.string().uuid() },
+      annotations: { readOnlyHint: true, destructiveHint: false },
+    },
+    async ({ graphSnapshotId }) => {
+      if (!dependencies.preflightMainlineGraph) throw new Error("GRAPH_PREFLIGHT_UNAVAILABLE");
+      return result(await dependencies.preflightMainlineGraph(graphSnapshotId));
+    },
+  );
+  server.registerTool(
+    "get_mainline_graph_validation_evidence",
+    {
+      description: "Read immutable safe technical evidence for one persisted frozen graph",
+      inputSchema: { graphSnapshotId: z.string().uuid() },
+      annotations: { readOnlyHint: true, destructiveHint: false },
+    },
+    async ({ graphSnapshotId }) => {
+      if (!dependencies.listMainlineGraphValidationEvidence)
+        throw new Error("GRAPH_VALIDATION_EVIDENCE_UNAVAILABLE");
+      return result(await dependencies.listMainlineGraphValidationEvidence(graphSnapshotId));
+    },
+  );
 
   server.registerTool(
     "get_generation_attempt_status",

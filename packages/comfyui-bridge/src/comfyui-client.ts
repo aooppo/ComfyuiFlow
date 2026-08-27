@@ -84,6 +84,9 @@ export class ComfyUiClient {
   async getObjectInfo(): Promise<Record<string, unknown>> {
     return (await this.json("/object_info")) as Record<string, unknown>;
   }
+  async getSystemStats(): Promise<Record<string, unknown>> {
+    return (await this.json("/system_stats")) as Record<string, unknown>;
+  }
   async stageInput(path: string): Promise<StagedInput> {
     const form = new FormData();
     form.append("image", new Blob([new Uint8Array(await readFile(path))]), basename(path));

@@ -18,6 +18,15 @@ function frozen() {
     runtimeRef: { id: "runtime.comfyui-mcp", version: "1.0.0" },
     runtimeContractDigest: "d".repeat(64),
     graphSha256: canonicalSha256(graph),
+    graphValidationEvidence: {
+      id: "00000000-0000-4000-8000-000000000004",
+      outcome: "PASS" as const,
+      graphSha256: canonicalSha256(graph),
+      runtimeContractDigest: "d".repeat(64),
+      runtimeFingerprintSha256: "e".repeat(64),
+      nodeCatalogSha256: "f".repeat(64),
+    },
+    runtimeNodeClasses: ["LoadImage"],
     graph,
     outputNodeId: "1",
     outputMediaKey: "video",
@@ -80,6 +89,28 @@ describe("generation mainline MCP boundary", () => {
     expect(submitFrozenGraph).not.toHaveBeenCalled();
   });
 
+  it("blocks stale graph evidence before staging or submission", async () => {
+    const record = frozen();
+    const stageFrozenInput = vi.fn();
+    const submitFrozenGraph = vi.fn();
+    const service = new ComfyUiMainlineExecutionService({
+      store: { loadForSubmission: async () => record, loadSubmitted: async () => record },
+      execution: { assertLiveEnabled: vi.fn(), stageFrozenInput, submitFrozenGraph } as any,
+      recheckRuntimeContract: async () => ({ ready: false, blockers: ["NODE_CATALOG_CHANGED"] }),
+    });
+    await expect(
+      service.submit({
+        attemptId: record.attemptId,
+        adapterRef: record.adapterRef,
+        runtimeRef: record.runtimeRef,
+        runtimeContractDigest: record.runtimeContractDigest,
+        graphSha256: record.graphSha256,
+      }),
+    ).rejects.toThrow("MAINLINE_RUNTIME_BLOCKED:NODE_CATALOG_CHANGED");
+    expect(stageFrozenInput).not.toHaveBeenCalled();
+    expect(submitFrozenGraph).not.toHaveBeenCalled();
+  });
+
   it("exposes only identity and digest fields at the submission boundary", async () => {
     const source = await readFile("apps/comfyui-mcp/src/server.ts", "utf8");
     const start = source.indexOf('"submit_generation_attempt"');
@@ -88,5 +119,15 @@ describe("generation mainline MCP boundary", () => {
     expect(tool).toContain("runtimeContractDigest");
     expect(tool).toContain("graphSha256");
     expect(tool).not.toMatch(/materializedGraph:\s*z|rawGraph|graphJson|nodeMap|localPath/);
+  });
+
+  it("offers server-owned graph preflight and read-only evidence lookup without raw graph input", async () => {
+    const source = await readFile("apps/comfyui-mcp/src/server.ts", "utf8");
+    const start = source.indexOf('"preflight_mainline_graph"');
+    const end = source.indexOf('"get_generation_attempt_status"', start);
+    const tools = source.slice(start, end);
+    expect(tools).toContain('"get_mainline_graph_validation_evidence"');
+    expect(tools).toContain("graphSnapshotId: z.string().uuid()");
+    expect(tools).not.toMatch(/graphJson|rawGraph|outcome:\s*z/);
   });
 });

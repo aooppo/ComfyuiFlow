@@ -37,8 +37,32 @@ export class GenerationLifecycleService {
     if (new Set(input.targetSpecIds).size !== input.targetSpecIds.length)
       throw new Error("DUPLICATE_TARGET_SPEC");
     if (!input.idempotencyKey.trim()) throw new Error("IDEMPOTENCY_KEY_REQUIRED");
+    for (const specId of input.targetSpecIds) uuid(specId, "GENERATION_SPEC_ID");
     const digest = canonicalSha256(input.planPayload);
     return this.prisma.$transaction(async (tx) => {
+      const evidence = await tx.$queryRawUnsafe<
+        Array<{
+          generationSpecId: string;
+          graphSha256: string;
+          runtimeContractDigest: string;
+          evidenceId: string | null;
+        }>
+      >(
+        `SELECT s."id" AS "generationSpecId", g."graphSha256", r."digest" AS "runtimeContractDigest",
+                (SELECT e."id" FROM "GraphValidationEvidence" e
+                 WHERE e."graphSnapshotId" = g."id" AND e."graphSha256" = g."graphSha256"
+                   AND e."runtimeContractDigest" = r."digest" AND e."outcome" = 'PASS'
+                   AND e."nodeCatalogSha256" IS NOT NULL
+                 ORDER BY e."createdAt" DESC, e."id" DESC LIMIT 1) AS "evidenceId"
+         FROM "GenerationSpec" s
+         JOIN "RuntimeContract" r ON r."id" = s."runtimeContractId"
+         JOIN "MaterializedGraphSnapshot" g ON g."generationSpecId" = s."id"
+         WHERE s."id" = ANY($1::uuid[]) AND g."runtimeContractDigest" = r."digest"`,
+        input.targetSpecIds,
+      );
+      if (evidence.length !== input.targetSpecIds.length) throw new Error("FROZEN_SPEC_NOT_FOUND");
+      if (evidence.some((row) => !row.evidenceId))
+        throw new Error("GRAPH_TECHNICAL_EVIDENCE_REQUIRED");
       const insertedPlan = await tx.$queryRawUnsafe<Array<{ id: string }>>(
         `INSERT INTO "GenerationPlan" ("projectId", "payloadJson", "digest") VALUES ($1, $2::jsonb, $3)
          ON CONFLICT ("projectId", "digest") DO NOTHING RETURNING "id"`,
@@ -87,13 +111,15 @@ export class GenerationLifecycleService {
             runtimeRef: Json;
             runtimeContractDigest: string;
             graphSha256: string;
+            graphValidationEvidenceId: string;
           }>
         >(
           `WITH target AS (
              INSERT INTO "GenerationTarget" ("generationBatchId", "generationSpecId", "ordinal") VALUES ($1, $2, $3) RETURNING "id"
-           ) SELECT target."id", i."adapterRef", jsonb_build_object('id', r."ref", 'version', r."version") AS "runtimeRef", r."digest" AS "runtimeContractDigest", g."graphSha256"
+           ) SELECT target."id", i."adapterRef", jsonb_build_object('id', r."ref", 'version', r."version") AS "runtimeRef", r."digest" AS "runtimeContractDigest", g."graphSha256", e."id" AS "graphValidationEvidenceId"
            FROM target JOIN "GenerationSpec" s ON s."id" = $2 JOIN "GenerationImplementation" i ON i."id" = s."implementationId"
-           JOIN "RuntimeContract" r ON r."id" = s."runtimeContractId" JOIN "MaterializedGraphSnapshot" g ON g."generationSpecId" = s."id"`,
+           JOIN "RuntimeContract" r ON r."id" = s."runtimeContractId" JOIN "MaterializedGraphSnapshot" g ON g."generationSpecId" = s."id"
+           JOIN LATERAL (SELECT "id" FROM "GraphValidationEvidence" WHERE "graphSnapshotId" = g."id" AND "graphSha256" = g."graphSha256" AND "runtimeContractDigest" = r."digest" AND "outcome" = 'PASS' AND "nodeCatalogSha256" IS NOT NULL ORDER BY "createdAt" DESC, "id" DESC LIMIT 1) e ON true`,
           batch[0]!.id,
           specId,
           ordinal + 1,
@@ -101,13 +127,14 @@ export class GenerationLifecycleService {
         const row = target[0];
         if (!row) throw new Error("FROZEN_SPEC_NOT_FOUND");
         const attempt = await tx.$queryRawUnsafe<Array<{ id: string }>>(
-          `INSERT INTO "GenerationAttempt" ("generationTargetId", "adapterRef", "runtimeRef", "runtimeContractDigest", "graphSha256")
-           VALUES ($1, $2::jsonb, $3::jsonb, $4, $5) RETURNING "id"`,
+          `INSERT INTO "GenerationAttempt" ("generationTargetId", "adapterRef", "runtimeRef", "runtimeContractDigest", "graphSha256", "graphValidationEvidenceId")
+           VALUES ($1, $2::jsonb, $3::jsonb, $4, $5, $6) RETURNING "id"`,
           row.id,
           JSON.stringify(row.adapterRef),
           JSON.stringify(row.runtimeRef),
           row.runtimeContractDigest,
           row.graphSha256,
+          row.graphValidationEvidenceId,
         );
         await tx.$executeRawUnsafe(
           `INSERT INTO "GenerationAttemptEvent" ("attemptId", "state", "code") VALUES ($1, 'QUEUED', 'BATCH_CREATED')`,

@@ -6,5 +6,6 @@ export * from "./generation-mainline-store.js";
 export * from "./generation-planning-service.js";
 export * from "./generation-worker.js";
 export * from "./generation-lifecycle-service.js";
+export * from "./graph-validation-evidence-service.js";
 export * from "./live-test-a-preview-service.js";
 export * from "./local-storage.js";

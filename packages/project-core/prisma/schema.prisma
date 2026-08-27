@@ -50,6 +50,11 @@ enum OwnerDecisionType {
   RISK_ACCEPTED
 }
 
+enum GraphValidationOutcome {
+  PASS
+  FAIL
+}
+
 model Project {
   id              String                      @id @default(uuid()) @db.Uuid
   name            String                      @db.VarChar(240)
@@ -234,6 +239,26 @@ model MaterializedGraphSnapshot {
   createdAt             DateTime       @default(now()) @db.Timestamptz(6)
   generationSpec        GenerationSpec @relation(fields: [generationSpecId], references: [id], onDelete: Restrict)
   referencePlan         ReferencePlan  @relation(fields: [referencePlanId], references: [id], onDelete: Restrict)
+  validationEvidence    GraphValidationEvidence[]
+}
+
+model GraphValidationEvidence {
+  id                       String                 @id @default(uuid()) @db.Uuid
+  graphSnapshotId          String                 @db.Uuid
+  graphSha256              String                 @db.Char(64)
+  runtimeContractDigest    String                 @db.Char(64)
+  runtimeFingerprintSha256 String?                @db.Char(64)
+  nodeCatalogSha256        String?                @db.Char(64)
+  validatorRef             String                 @db.VarChar(160)
+  validatorVersion         String                 @db.VarChar(80)
+  outcome                  GraphValidationOutcome
+  diagnosticsJson          Json
+  createdAt                DateTime               @default(now()) @db.Timestamptz(6)
+  graphSnapshot            MaterializedGraphSnapshot @relation(fields: [graphSnapshotId], references: [id], onDelete: Restrict)
+  attempts                 GenerationAttempt[]
+
+  @@index([graphSnapshotId, outcome, createdAt])
+  @@index([graphSha256, runtimeContractDigest, outcome, createdAt])
 }
 
 model GenerationPlan {
@@ -296,12 +321,14 @@ model GenerationAttempt {
   runtimeRef            Json
   runtimeContractDigest String                     @db.Char(64)
   graphSha256           String                     @db.Char(64)
+  graphValidationEvidenceId String?                @db.Uuid
   state                 GenerationAttemptState     @default(QUEUED)
   providerTaskId        String?                    @unique @db.VarChar(500)
   terminalCode          String?                    @db.VarChar(160)
   createdAt             DateTime                   @default(now()) @db.Timestamptz(6)
   updatedAt             DateTime                   @default(now()) @db.Timestamptz(6)
   generationTarget      GenerationTarget           @relation(fields: [generationTargetId], references: [id], onDelete: Restrict)
+  graphValidationEvidence GraphValidationEvidence? @relation(fields: [graphValidationEvidenceId], references: [id], onDelete: Restrict)
   events                GenerationAttemptEvent[]
   consumptions          AuthorizationConsumption[]
   artifact              GenerationArtifact?

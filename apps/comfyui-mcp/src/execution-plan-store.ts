@@ -12,6 +12,12 @@ export function createPrismaMainlineExecutionStore(input: {
     runtimeRef: { id: string; version: string };
     runtimeContractDigest: string;
     graphSha256: string;
+    graphValidationEvidenceId: string;
+    evidenceGraphSha256: string;
+    evidenceRuntimeContractDigest: string;
+    evidenceRuntimeFingerprintSha256: string;
+    evidenceNodeCatalogSha256: string;
+    runtimeNodeClasses: unknown;
     graphJson: Record<string, unknown>;
     outputNodeId: string;
     outputMediaKey: string;
@@ -21,10 +27,13 @@ export function createPrismaMainlineExecutionStore(input: {
   };
   const load = async (attemptId: string) => {
     const rows = await input.prisma.$queryRawUnsafe<Row[]>(
-      `SELECT a."id", a."adapterRef", a."runtimeRef", a."runtimeContractDigest", a."graphSha256", g."graphJson", g."outputNodeId", g."outputMediaKey", e."state", e."taskId", r."payloadJson"->'inputs' AS "inputs"
+      `SELECT a."id", a."adapterRef", a."runtimeRef", a."runtimeContractDigest", a."graphSha256", a."graphValidationEvidenceId", v."graphSha256" AS "evidenceGraphSha256", v."runtimeContractDigest" AS "evidenceRuntimeContractDigest", v."runtimeFingerprintSha256" AS "evidenceRuntimeFingerprintSha256", v."nodeCatalogSha256" AS "evidenceNodeCatalogSha256", c."nodeClassesJson" AS "runtimeNodeClasses", g."graphJson", g."outputNodeId", g."outputMediaKey", e."state", e."taskId", r."payloadJson"->'inputs' AS "inputs"
        FROM "GenerationAttempt" a
        JOIN "GenerationTarget" t ON t."id" = a."generationTargetId"
        JOIN "MaterializedGraphSnapshot" g ON g."generationSpecId" = t."generationSpecId"
+       JOIN "GenerationSpec" s ON s."id" = t."generationSpecId"
+       JOIN "RuntimeContract" c ON c."id" = s."runtimeContractId" AND c."digest" = a."runtimeContractDigest"
+       JOIN "GraphValidationEvidence" v ON v."id" = a."graphValidationEvidenceId" AND v."graphSnapshotId" = g."id" AND v."outcome" = 'PASS' AND v."runtimeFingerprintSha256" IS NOT NULL AND v."nodeCatalogSha256" IS NOT NULL
        JOIN "ReferencePlan" r ON r."id" = g."referencePlanId"
        JOIN LATERAL (SELECT "state", "taskId" FROM "GenerationAttemptEvent" WHERE "attemptId" = a."id" ORDER BY "createdAt" DESC LIMIT 1) e ON true
        WHERE a."id" = $1`,
@@ -41,6 +50,17 @@ export function createPrismaMainlineExecutionStore(input: {
       runtimeRef: row.runtimeRef,
       runtimeContractDigest: row.runtimeContractDigest,
       graphSha256: row.graphSha256,
+      graphValidationEvidence: {
+        id: row.graphValidationEvidenceId,
+        outcome: "PASS" as const,
+        graphSha256: row.evidenceGraphSha256,
+        runtimeContractDigest: row.evidenceRuntimeContractDigest,
+        runtimeFingerprintSha256: row.evidenceRuntimeFingerprintSha256,
+        nodeCatalogSha256: row.evidenceNodeCatalogSha256,
+      },
+      runtimeNodeClasses: Array.isArray(row.runtimeNodeClasses)
+        ? row.runtimeNodeClasses.filter((value): value is string => typeof value === "string")
+        : [],
       graph: row.graphJson,
       outputNodeId: row.outputNodeId,
       outputMediaKey: row.outputMediaKey,
