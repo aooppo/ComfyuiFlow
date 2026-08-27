@@ -5,6 +5,7 @@ import process from "node:process";
 const root = process.cwd();
 const ignored = new Set([
   ".git",
+  ".env",
   ".next",
   ".next-build",
   "node_modules",
