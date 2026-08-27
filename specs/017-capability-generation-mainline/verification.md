@@ -125,3 +125,11 @@ commit, exact Preview, and a fresh Owner action-time confirmation.
   or substituted from historical configuration.
 - Feature 017 was committed as `4c64bce` after the complete verification suite and reset/browser
   acceptance. The commit is amended below when this final verification note is staged.
+
+## Fresh Runtime Preflight (Blocked, Zero-Call)
+
+- A direct read-only probe of the configured local ComfyUI `/system_stats` and `/object_info`
+  endpoints returned connection failure on loopback port 8188. No generation endpoint was called.
+- `COMFYUI_INSTALL_DIR` is blank, so there is no declared existing local runtime that the product
+  may start for a health check. This independently confirms the Test A runtime-health gate is not
+  currently satisfiable, alongside the missing released implementation and current price facts.
