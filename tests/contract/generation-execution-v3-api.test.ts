@@ -152,6 +152,7 @@ describe("Generation execution V3 API", () => {
     expect(`${retryPreviewRoute}\n${retryAuthorizeRoute}`).toContain("v3QaReadiness");
     expect(service).toContain("V3 QA health check is unavailable");
     expect(review).toContain("V3 QA health check is unavailable");
+    expect(review).toContain('isolationLevel: "Serializable"');
     expect(`${previewRoute}\n${batchRoute}`).not.toMatch(
       /workflowJson|rawGraph|credential|apiKey|endpoint|filesystemPath/,
     );

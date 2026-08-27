@@ -75,37 +75,61 @@ export class CapabilityReviewServiceV3 {
     });
     if (!artifact)
       throw new ProjectAssetError("ARTIFACT_INVALID", "Capability V3 artifact was not found", 404);
-    const existing = await this.client.generationOwnerDecisionV3Record.findUnique({
-      where: { idempotencyKey: request.idempotencyKey },
-    });
-    if (existing) {
-      if (existing.artifactId !== artifactId || existing.decision !== request.decision)
-        throw new ProjectAssetError("IDEMPOTENCY_CONFLICT", "Decision key was already used", 409);
-      return this.decisionView(existing);
-    }
-    const effective = await this.client.generationOwnerDecisionV3Record.findFirst({
-      where: { artifactId },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    });
-    if (effective)
-      throw new ProjectAssetError(
-        "OWNER_DECISION_ALREADY_FINAL",
-        "This Artifact already has an effective terminal Owner decision",
-        409,
+    try {
+      return await this.client.$transaction(
+        async (tx) => {
+          const existing = await tx.generationOwnerDecisionV3Record.findUnique({
+            where: { idempotencyKey: request.idempotencyKey },
+          });
+          if (existing) {
+            if (existing.artifactId !== artifactId || existing.decision !== request.decision)
+              throw new ProjectAssetError(
+                "IDEMPOTENCY_CONFLICT",
+                "Decision key was already used",
+                409,
+              );
+            return this.decisionView(existing);
+          }
+          const effective = await tx.generationOwnerDecisionV3Record.findFirst({
+            where: { artifactId },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          });
+          if (effective)
+            throw new ProjectAssetError(
+              "OWNER_DECISION_ALREADY_FINAL",
+              "This Artifact already has an effective terminal Owner decision",
+              409,
+            );
+          const decision = await tx.generationOwnerDecisionV3Record.create({
+            data: {
+              id: randomUUID(),
+              projectId: artifact.projectId,
+              artifactId,
+              decision: request.decision,
+              reasonCode: request.reasonCode ?? null,
+              notes: request.notes ?? null,
+              actorRef: request.actorRef,
+              idempotencyKey: request.idempotencyKey,
+            },
+          });
+          return this.decisionView(decision);
+        },
+        { isolationLevel: "Serializable" },
       );
-    const decision = await this.client.generationOwnerDecisionV3Record.create({
-      data: {
-        id: randomUUID(),
-        projectId: artifact.projectId,
-        artifactId,
-        decision: request.decision,
-        reasonCode: request.reasonCode ?? null,
-        notes: request.notes ?? null,
-        actorRef: request.actorRef,
-        idempotencyKey: request.idempotencyKey,
-      },
-    });
-    return this.decisionView(decision);
+    } catch (error) {
+      if (error instanceof ProjectAssetError) throw error;
+      const effective = await this.client.generationOwnerDecisionV3Record.findFirst({
+        where: { artifactId },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      });
+      if (effective)
+        throw new ProjectAssetError(
+          "OWNER_DECISION_ALREADY_FINAL",
+          "This Artifact already has an effective terminal Owner decision",
+          409,
+        );
+      throw error;
+    }
   }
 
   async getArtifactView(artifactId: string) {
