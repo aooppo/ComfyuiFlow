@@ -36,3 +36,7 @@
 - T007-T009 depend on T002 and T004.
 - T010 depends on T004.
 - T011 follows all implementation and tests; T012 follows T011.
+
+## Phase 6: Convergence
+
+- [x] T013 Validate that the declared graph output is a runtime-declared output node, and cover rejection with a zero-call test per FR-002 / SC-001 (partial).

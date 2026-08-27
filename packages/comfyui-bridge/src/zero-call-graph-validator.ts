@@ -128,6 +128,22 @@ export function validateZeroCallComfyUiGraph(
     diagnostics.push(diagnostic("GRAPH_SIZE_INVALID", "Graph has an invalid number of nodes."));
 
   const catalogByClass = new Map(catalog.nodes.map((node) => [node.className, node]));
+  if (Object.hasOwn(graph, options.outputNodeId)) {
+    const output = graph[options.outputNodeId];
+    const outputClass =
+      output && typeof output === "object" && !Array.isArray(output)
+        ? (output as Record<string, unknown>).class_type
+        : undefined;
+    const outputInfo = catalogByClass.get(typeof outputClass === "string" ? outputClass : "");
+    if (!outputInfo?.isOutputNode)
+      diagnostics.push(
+        diagnostic(
+          "OUTPUT_NODE_NOT_DECLARED",
+          "Declared output node is not marked as an output node by the runtime.",
+          options.outputNodeId,
+        ),
+      );
+  }
   const edges: Array<[string, string]> = [];
   for (const nodeId of nodeIds) {
     const rawNode = graph[nodeId];

@@ -21,6 +21,7 @@ const objectInfo = {
   SaveImage: {
     input: { required: { images: ["IMAGE"], filename_prefix: ["STRING"] } },
     output: [],
+    output_node: true,
   },
 };
 
@@ -52,6 +53,18 @@ describe("zero-call graph validator", () => {
     expect(result.diagnostics.map((item) => item.code)).toEqual(
       expect.arrayContaining(["GRAPH_SHA_MISMATCH", "UNSAFE_INPUT_LITERAL"]),
     );
+  });
+
+  it("rejects a declared output that the runtime catalog does not mark as an output node", () => {
+    const catalog = normalizeNodeCatalog(objectInfo, ["LoadImage", "SaveImage"]);
+    const result = validateZeroCallComfyUiGraph(graph, catalog, {
+      expectedGraphSha256: graphSha256,
+      outputNodeId: "1",
+      outputMediaKey: "images",
+    });
+    expect(result.valid).toBe(false);
+    expect(result.generationCalls).toBe(0);
+    expect(result.diagnostics.map((item) => item.code)).toContain("OUTPUT_NODE_NOT_DECLARED");
   });
 
   it("uses only runtime GET endpoints during a passing preflight", async () => {

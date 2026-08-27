@@ -12,6 +12,7 @@ export interface NormalizedNodeInput {
 
 export interface NormalizedNodeInfo {
   className: string;
+  isOutputNode: boolean;
   inputs: NormalizedNodeInput[];
   outputs: string[];
 }
@@ -90,6 +91,7 @@ function normalizeNode(className: string, raw: unknown): NormalizedNodeInfo {
     : [];
   return {
     className,
+    isOutputNode: record.output_node === true,
     inputs: [
       ...normalizeInputGroup(input.required, true),
       ...normalizeInputGroup(input.optional, false),
