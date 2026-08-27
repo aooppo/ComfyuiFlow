@@ -67,6 +67,100 @@ describe("zero-call graph validator", () => {
     expect(result.diagnostics.map((item) => item.code)).toContain("OUTPUT_NODE_NOT_DECLARED");
   });
 
+  it("validates selected remote-H3 dynamic inputs without a generation call", () => {
+    const h3Graph = {
+      "1": { class_type: "LoadImage", inputs: { image: "comfyuiflow/staged/reference-1.png" } },
+      "2": {
+        class_type: "MinimaxHailuo03ReferenceNode",
+        inputs: {
+          model: "MiniMax H3",
+          "model.prompt": "A red ceramic cup on a table.",
+          "model.resolution": "2K",
+          "model.ratio": "16:9",
+          "model.duration": 4,
+          "model.reference_images.image_1": ["1", 0],
+          seed: 887034974,
+          watermark: false,
+        },
+      },
+      "3": {
+        class_type: "SaveVideo",
+        inputs: {
+          video: ["2", 0],
+          filename_prefix: "comfyuiflow/generated",
+          format: "mp4",
+          codec: "auto",
+        },
+      },
+    };
+    const h3ObjectInfo = {
+      LoadImage: { input: { required: { image: [[]] } }, output: ["IMAGE"] },
+      MinimaxHailuo03ReferenceNode: {
+        input: {
+          required: {
+            model: [
+              "COMFY_DYNAMICCOMBO_V3",
+              {
+                options: [
+                  {
+                    key: "MiniMax H3",
+                    inputs: {
+                      required: {
+                        prompt: ["STRING"],
+                        resolution: [["768P", "2K"]],
+                        ratio: [["16:9", "9:16"]],
+                        duration: ["INT", { min: 4, max: 15 }],
+                        reference_images: [
+                          "COMFY_AUTOGROW_V3",
+                          {
+                            template: {
+                              input: { required: { reference_image: ["IMAGE"] } },
+                              names: ["image_1"],
+                              min: 0,
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+            seed: ["INT", { min: 0, max: 4294967295 }],
+            watermark: ["BOOLEAN"],
+          },
+        },
+        output: ["VIDEO"],
+      },
+      SaveVideo: {
+        input: {
+          required: {
+            video: ["VIDEO"],
+            filename_prefix: ["STRING"],
+            format: [["auto", "mp4"]],
+            codec: ["COMFY_DYNAMICCOMBO_V3"],
+          },
+        },
+        output: ["VIDEO"],
+        output_node: true,
+      },
+    };
+    const result = validateZeroCallComfyUiGraph(
+      h3Graph,
+      normalizeNodeCatalog(h3ObjectInfo, [
+        "LoadImage",
+        "MinimaxHailuo03ReferenceNode",
+        "SaveVideo",
+      ]),
+      {
+        expectedGraphSha256: canonicalSha256(h3Graph),
+        outputNodeId: "3",
+        outputMediaKey: "videos",
+      },
+    );
+    expect(result).toMatchObject({ valid: true, diagnostics: [], generationCalls: 0 });
+  });
+
   it("uses only runtime GET endpoints during a passing preflight", async () => {
     const requests: string[] = [];
     const fetch = vi.fn(async (url: RequestInfo | URL) => {

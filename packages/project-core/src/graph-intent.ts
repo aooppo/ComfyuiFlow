@@ -13,6 +13,8 @@ const graphIntentSchema = z
     imageAssetIds: z.array(assetId).max(32),
     durationSeconds: z.number().int().positive(),
     ratio: z.string().regex(/^\d+:\d+$/),
+    resolution: z.string().min(1).max(40).optional(),
+    seed: z.number().int().min(0).max(4_294_967_295).optional(),
   })
   .strict();
 
@@ -38,15 +40,77 @@ export interface GraphCompilerProfile {
   ): Readonly<Record<string, unknown>>;
 }
 
-export const builtInGraphCompilerProfileIds = ["reference-video-v1"] as const;
+export interface GraphCompilationContext {
+  /** Server-derived ComfyUI staging names, ordered to the frozen image asset IDs. */
+  readonly imageStagedInputNames?: readonly string[];
+}
 
-/**
- * This reviewed v1 recipe has a fixed two-node topology. A Pack configures
- * node classes and input names only; it cannot supply node IDs, links, or raw
- * graph JSON. Compatible new models can therefore be added by Pack alone.
- */
+export const builtInGraphCompilerProfileIds = [
+  "h3-reference-video-v1",
+  "reference-video-v1",
+] as const;
+
+const safeStagedInputName = /^comfyuiflow\/staged\/[A-Za-z0-9][A-Za-z0-9_.-]{0,220}$/;
+
+function compileH3ReferenceVideoGraph(
+  pack: ParsedCapabilityPack,
+  intent: GraphIntent,
+  context: GraphCompilationContext = {},
+): Readonly<Record<string, unknown>> {
+  const stagedNames = context.imageStagedInputNames;
+  if (!stagedNames || stagedNames.length !== intent.imageAssetIds.length)
+    throw new Error("H3_FROZEN_STAGING_CONTEXT_MISMATCH");
+  if (
+    new Set(stagedNames).size !== stagedNames.length ||
+    !stagedNames.every((name) => safeStagedInputName.test(name))
+  )
+    throw new Error("H3_FROZEN_STAGING_NAME_INVALID");
+  if (intent.resolution !== "2K" || intent.seed === undefined)
+    throw new Error("H3_INTENT_SETTINGS_REQUIRED");
+
+  const graph: Record<string, unknown> = {};
+  stagedNames.forEach((name, index) => {
+    graph[String(index + 1)] = { class_type: "LoadImage", inputs: { image: name } };
+  });
+  const h3NodeId = String(stagedNames.length + 1);
+  const outputNodeId = String(stagedNames.length + 2);
+  graph[h3NodeId] = {
+    class_type: pack.compilerBinding.modelNode.classType,
+    inputs: {
+      model: "MiniMax H3",
+      [pack.compilerBinding.modelNode.promptInput]: intent.prompt,
+      "model.resolution": intent.resolution,
+      [pack.compilerBinding.modelNode.ratioInput]: intent.ratio,
+      [pack.compilerBinding.modelNode.durationSecondsInput]: intent.durationSeconds,
+      ...Object.fromEntries(
+        stagedNames.map((_, index) => [
+          `model.reference_images.image_${index + 1}`,
+          [String(index + 1), 0],
+        ]),
+      ),
+      seed: intent.seed,
+      watermark: false,
+    },
+  };
+  graph[outputNodeId] = {
+    class_type: pack.compilerBinding.outputNode.classType,
+    inputs: {
+      [pack.compilerBinding.outputNode.videoInput]: [h3NodeId, 0],
+      filename_prefix: "comfyuiflow/generated",
+      format: "mp4",
+      codec: "auto",
+    },
+  };
+  return graph;
+}
+
 export function builtInGraphCompilerProfiles(): readonly GraphCompilerProfile[] {
   return [
+    {
+      id: "h3-reference-video-v1",
+      // GraphIntentCompiler supplies the server-only staging context.
+      compile: ({ pack, intent }) => compileH3ReferenceVideoGraph(pack, intent),
+    },
     {
       id: "reference-video-v1",
       compile: ({ pack, intent }) => {
@@ -92,6 +156,10 @@ export function parseGraphIntent(input: unknown, pack: ParsedCapabilityPack): Gr
   if (!envelope.ratios.includes(intent.ratio)) {
     throw new Error("GRAPH_INTENT_RATIO_NOT_ALLOWED");
   }
+  if (envelope.resolutions && !intent.resolution)
+    throw new Error("GRAPH_INTENT_RESOLUTION_REQUIRED");
+  if (intent.resolution && !envelope.resolutions?.includes(intent.resolution))
+    throw new Error("GRAPH_INTENT_RESOLUTION_NOT_ALLOWED");
   return Object.freeze(intent);
 }
 
@@ -107,20 +175,34 @@ export class GraphIntentCompiler {
     this.profiles = profileMap;
   }
 
-  compile(pack: ParsedCapabilityPack, input: unknown): CompiledGraph {
+  compile(
+    pack: ParsedCapabilityPack,
+    input: unknown,
+    context: GraphCompilationContext = {},
+  ): CompiledGraph {
     const intent = parseGraphIntent(input, pack);
     const profile = this.profiles.get(pack.compilerProfile);
     if (!profile) throw new Error("COMPILER_PROFILE_NOT_REGISTERED");
 
-    const graph = profile.compile({ pack, intent });
+    const graph =
+      profile.id === "h3-reference-video-v1"
+        ? compileH3ReferenceVideoGraph(pack, intent, context)
+        : profile.compile({ pack, intent });
     assertGraphOnlyUsesRequiredNodes(graph, pack.requiredNodes);
+    const outputNodeIds = Object.entries(graph)
+      .filter(
+        ([, node]) =>
+          isPlainObject(node) && node.class_type === pack.compilerBinding.outputNode.classType,
+      )
+      .map(([nodeId]) => nodeId);
+    if (outputNodeIds.length !== 1) throw new Error("COMPILER_PROFILE_OUTPUT_NODE_AMBIGUOUS");
     return Object.freeze({
       compilerProfile: profile.id,
       intentDigest: canonicalSha256(intent),
       graph: Object.freeze(graph),
       graphSha256: canonicalSha256(graph),
       output: Object.freeze({
-        nodeId: "2",
+        nodeId: outputNodeIds[0]!,
         mediaKey: pack.compilerBinding.outputNode.outputMediaKey,
       }),
     });

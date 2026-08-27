@@ -9,8 +9,9 @@ const forbidden = [
   /WorkflowRegistry/,
   /capability-v3/i,
   /fake-video-v1/i,
-  /minimax-h3/i,
-  /hailuo/i,
+  /legacy-h3/i,
+  /fixed-h3/i,
+  /hailuo03-reference-dynamic/i,
 ];
 
 async function trackedSource() {

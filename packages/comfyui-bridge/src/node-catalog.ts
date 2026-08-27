@@ -8,6 +8,11 @@ export interface NormalizedNodeInput {
   options?: Array<string | number | boolean>;
   minimum?: number;
   maximum?: number;
+  /** Safe, bounded fields activated by a selected Comfy dynamic-combo option. */
+  dynamicOptions?: Array<{
+    key: string | number | boolean;
+    inputs: NormalizedNodeInput[];
+  }>;
 }
 
 export interface NormalizedNodeInfo {
@@ -30,7 +35,7 @@ const unsafeMetadataKey =
   /(secret|token|password|credential|api[_-]?key|endpoint|base[_-]?url|path|directory|folder)/i;
 
 function scalarOptions(value: unknown): Array<string | number | boolean> | undefined {
-  if (!Array.isArray(value)) return undefined;
+  if (!Array.isArray(value) || value.length === 0) return undefined;
   const values = value.filter(
     (item): item is string | number | boolean =>
       typeof item === "string" || typeof item === "number" || typeof item === "boolean",
@@ -48,6 +53,96 @@ function normalizedType(value: unknown): {
   return { type: "UNKNOWN" };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function inputMetadata(rawDefinition: unknown) {
+  const tuple = Array.isArray(rawDefinition) ? rawDefinition : [rawDefinition];
+  return {
+    tuple,
+    metadata: isRecord(tuple[1]) ? tuple[1] : {},
+  };
+}
+
+function normalizedDynamicInputs(
+  value: unknown,
+  required: boolean,
+  prefix = "",
+): NormalizedNodeInput[] {
+  if (!isRecord(value)) return [];
+  const result: NormalizedNodeInput[] = [];
+  for (const [name, rawDefinition] of Object.entries(value).sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
+    if (!safeNodeClass.test(name) || unsafeMetadataKey.test(name)) continue;
+    const { tuple, metadata } = inputMetadata(rawDefinition);
+    const fullName = prefix ? `${prefix}.${name}` : name;
+    const type = normalizedType(tuple[0]);
+    const template = isRecord(metadata.template) ? metadata.template : null;
+    const templateInput = template && isRecord(template.input) ? template.input : null;
+    const names = Array.isArray(template?.names)
+      ? template.names.filter(
+          (item): item is string => typeof item === "string" && safeNodeClass.test(item),
+        )
+      : [];
+    if (type.type.startsWith("COMFY_AUTOGROW") && names.length && templateInput) {
+      const templateFields = [
+        ...normalizedDynamicInputs(templateInput.required, true),
+        ...normalizedDynamicInputs(templateInput.optional, false),
+      ];
+      for (const item of names) {
+        result.push(
+          ...templateFields.map((field) => ({
+            ...field,
+            required:
+              typeof template?.min === "number" && template.min > 0 ? field.required : false,
+            name:
+              templateFields.length === 1
+                ? `${fullName}.${item}`
+                : `${fullName}.${item}.${field.name}`,
+          })),
+        );
+      }
+      continue;
+    }
+    result.push({ name: fullName, required, ...type, ...limits(metadata) });
+  }
+  return result;
+}
+
+function dynamicOptions(rawDefinition: unknown) {
+  const { metadata } = inputMetadata(rawDefinition);
+  const options = Array.isArray(metadata.options) ? metadata.options : [];
+  const normalized = options.flatMap((option) => {
+    if (!isRecord(option) || !["string", "number", "boolean"].includes(typeof option.key))
+      return [];
+    const inputs = isRecord(option.inputs) ? option.inputs : null;
+    if (!inputs) return [];
+    return [
+      {
+        key: option.key as string | number | boolean,
+        inputs: [
+          ...normalizedDynamicInputs(inputs.required, true),
+          ...normalizedDynamicInputs(inputs.optional, false),
+        ],
+      },
+    ];
+  });
+  return normalized.length > 0 && normalized.length <= 100 ? normalized : undefined;
+}
+
+function limits(options: Record<string, unknown>) {
+  const minimum =
+    typeof options.min === "number" && Number.isFinite(options.min) ? options.min : undefined;
+  const maximum =
+    typeof options.max === "number" && Number.isFinite(options.max) ? options.max : undefined;
+  return {
+    ...(minimum !== undefined ? { minimum } : {}),
+    ...(maximum !== undefined ? { maximum } : {}),
+  };
+}
+
 function normalizeInputGroup(value: unknown, required: boolean): NormalizedNodeInput[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) return [];
   const result: NormalizedNodeInput[] = [];
@@ -55,22 +150,15 @@ function normalizeInputGroup(value: unknown, required: boolean): NormalizedNodeI
     ([a], [b]) => a.localeCompare(b),
   )) {
     if (!safeNodeClass.test(name) || unsafeMetadataKey.test(name)) continue;
-    const tuple = Array.isArray(rawDefinition) ? rawDefinition : [rawDefinition];
+    const { tuple, metadata: options } = inputMetadata(rawDefinition);
     const type = normalizedType(tuple[0]);
-    const options =
-      tuple[1] && typeof tuple[1] === "object" && !Array.isArray(tuple[1])
-        ? (tuple[1] as Record<string, unknown>)
-        : {};
-    const minimum =
-      typeof options.min === "number" && Number.isFinite(options.min) ? options.min : undefined;
-    const maximum =
-      typeof options.max === "number" && Number.isFinite(options.max) ? options.max : undefined;
+    const dynamic = dynamicOptions(rawDefinition);
     result.push({
       name,
       required,
       ...type,
-      ...(minimum !== undefined ? { minimum } : {}),
-      ...(maximum !== undefined ? { maximum } : {}),
+      ...limits(options),
+      ...(dynamic ? { dynamicOptions: dynamic } : {}),
     });
   }
   return result;

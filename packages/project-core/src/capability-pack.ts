@@ -45,6 +45,7 @@ const unsignedPackSchema = z
           .array(z.string().regex(/^\d+:\d+$/))
           .min(1)
           .max(16),
+        resolutions: z.array(z.string().min(1).max(40)).min(1).max(16).optional(),
       })
       .strict(),
     requiredNodes: z.array(nodeClass).min(1).max(100),
@@ -91,6 +92,42 @@ function validateUnsignedPack(parsed: z.infer<typeof unsignedPackSchema>) {
     throw new Error("CAPABILITY_PACK_INTENT_MODES_NOT_SORTED_UNIQUE");
   if (!isSortedUnique(parsed.parameterEnvelope.ratios))
     throw new Error("CAPABILITY_PACK_RATIOS_NOT_SORTED_UNIQUE");
+  if (parsed.parameterEnvelope.resolutions && !isSortedUnique(parsed.parameterEnvelope.resolutions))
+    throw new Error("CAPABILITY_PACK_RESOLUTIONS_NOT_SORTED_UNIQUE");
+  if (parsed.compilerProfile === "h3-reference-video-v1") validateH3ReferencePack(parsed);
+}
+
+/** The remote H3 topology is application code, never Pack-supplied graph data. */
+function validateH3ReferencePack(parsed: z.infer<typeof unsignedPackSchema>) {
+  const binding = parsed.compilerBinding;
+  const isExactBinding =
+    binding.modelNode.classType === "MinimaxHailuo03ReferenceNode" &&
+    binding.modelNode.promptInput === "model.prompt" &&
+    binding.modelNode.durationSecondsInput === "model.duration" &&
+    binding.modelNode.ratioInput === "model.ratio" &&
+    binding.outputNode.classType === "SaveVideo" &&
+    binding.outputNode.videoInput === "video" &&
+    binding.outputNode.outputMediaKey === "videos";
+  if (!isExactBinding) throw new Error("CAPABILITY_PACK_H3_BINDING_INVALID");
+  if (
+    parsed.model.id !== "model.minimax-h3" ||
+    parsed.model.version !== "1.0.0" ||
+    parsed.model.availabilityKey !== "minimax-h3-partner"
+  )
+    throw new Error("CAPABILITY_PACK_H3_MODEL_INVALID");
+  if (!sameValues(parsed.requiredNodes, ["LoadImage", "MinimaxHailuo03ReferenceNode", "SaveVideo"]))
+    throw new Error("CAPABILITY_PACK_H3_NODES_INVALID");
+  if (!sameValues(parsed.allowedIntentModes, ["reference-video"]))
+    throw new Error("CAPABILITY_PACK_H3_INTENT_MODES_INVALID");
+  if (
+    parsed.parameterEnvelope.images.min < 1 ||
+    parsed.parameterEnvelope.images.max > 9 ||
+    parsed.parameterEnvelope.durationSeconds[0] < 4 ||
+    parsed.parameterEnvelope.durationSeconds[1] > 15 ||
+    !parsed.parameterEnvelope.ratios.includes("16:9") ||
+    !sameValues(parsed.parameterEnvelope.resolutions ?? [], ["2K"])
+  )
+    throw new Error("CAPABILITY_PACK_H3_ENVELOPE_INVALID");
 }
 
 function withoutExpectedDigest(input: unknown): unknown {
@@ -102,4 +139,8 @@ function withoutExpectedDigest(input: unknown): unknown {
 
 function isSortedUnique(values: readonly string[]) {
   return values.every((value, index) => index === 0 || values[index - 1]! < value);
+}
+
+function sameValues(left: readonly string[], right: readonly string[]) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }

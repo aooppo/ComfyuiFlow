@@ -37,6 +37,37 @@ const pack = parseCapabilityPack({
   expectedManifestSha256: canonicalSha256(unsignedPack),
 });
 
+const h3UnsignedPack = {
+  schemaVersion: 1,
+  packId: "minimax-h3-reference-video",
+  packVersion: "1.0.0",
+  runtimeTargetRef: { id: "runtime.comfy-partner", version: "1.0.0" },
+  model: { id: "model.minimax-h3", version: "1.0.0", availabilityKey: "minimax-h3-partner" },
+  compilerProfile: "h3-reference-video-v1",
+  compilerBinding: {
+    modelNode: {
+      classType: "MinimaxHailuo03ReferenceNode",
+      promptInput: "model.prompt",
+      durationSecondsInput: "model.duration",
+      ratioInput: "model.ratio",
+    },
+    outputNode: { classType: "SaveVideo", videoInput: "video", outputMediaKey: "videos" },
+  },
+  allowedIntentModes: ["reference-video"],
+  parameterEnvelope: {
+    images: { min: 1, max: 9 },
+    durationSeconds: [4, 15],
+    ratios: ["16:9"],
+    resolutions: ["2K"],
+  },
+  requiredNodes: ["LoadImage", "MinimaxHailuo03ReferenceNode", "SaveVideo"],
+};
+
+const h3Pack = parseCapabilityPack({
+  ...h3UnsignedPack,
+  expectedManifestSha256: canonicalSha256(h3UnsignedPack),
+});
+
 const profile: GraphCompilerProfile = {
   id: "reference-video-v1",
   compile: ({ intent }) => ({
@@ -86,5 +117,64 @@ describe("Graph Intent compiler", () => {
     expect(() => escapingCompiler.compile(pack, validIntent)).toThrow(
       "COMPILER_PROFILE_EMITTED_NODE_OUTSIDE_CAPABILITY_CONTRACT",
     );
+  });
+
+  it("compiles the reviewed remote H3 topology only with matching frozen staging context", () => {
+    const imageAssetIds = [
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003",
+      "00000000-0000-4000-8000-000000000004",
+      "00000000-0000-4000-8000-000000000005",
+    ];
+    const compiled = new GraphIntentCompiler(builtInGraphCompilerProfiles()).compile(
+      h3Pack,
+      {
+        schemaVersion: 1,
+        mode: "reference-video",
+        prompt: "Five product references, no readable text or watermark.",
+        imageAssetIds,
+        durationSeconds: 4,
+        ratio: "16:9",
+        resolution: "2K",
+        seed: 887034974,
+      },
+      {
+        imageStagedInputNames: imageAssetIds.map(
+          (_, index) => `comfyuiflow/staged/reference-${index + 1}.png`,
+        ),
+      },
+    );
+
+    expect(compiled.graph).toMatchObject({
+      "6": {
+        class_type: "MinimaxHailuo03ReferenceNode",
+        inputs: {
+          model: "MiniMax H3",
+          "model.resolution": "2K",
+          "model.ratio": "16:9",
+          "model.duration": 4,
+          seed: 887034974,
+          watermark: false,
+        },
+      },
+      "7": {
+        class_type: "SaveVideo",
+        inputs: { filename_prefix: "comfyuiflow/generated", format: "mp4", codec: "auto" },
+      },
+    });
+    expect(compiled.output).toEqual({ nodeId: "7", mediaKey: "videos" });
+    expect(() =>
+      new GraphIntentCompiler(builtInGraphCompilerProfiles()).compile(h3Pack, {
+        schemaVersion: 1,
+        mode: "reference-video",
+        prompt: "test",
+        imageAssetIds,
+        durationSeconds: 4,
+        ratio: "16:9",
+        resolution: "2K",
+        seed: 887034974,
+      }),
+    ).toThrow("H3_FROZEN_STAGING_CONTEXT_MISMATCH");
   });
 });

@@ -84,6 +84,10 @@ function isLink(value: unknown): value is [string | number, number] {
   );
 }
 
+function isScalar(value: unknown): value is string | number | boolean {
+  return ["string", "number", "boolean"].includes(typeof value);
+}
+
 function compatible(sourceType: string, targetType: string): boolean {
   return (
     sourceType === targetType ||
@@ -169,7 +173,27 @@ export function validateZeroCallComfyUiGraph(
         ? (node.inputs as Record<string, unknown>)
         : {};
     const fields = new Map(nodeInfo.inputs.map((field) => [field.name, field]));
-    for (const field of nodeInfo.inputs.filter((item) => item.required))
+    for (const selector of nodeInfo.inputs.filter((field) => field.dynamicOptions?.length)) {
+      const selection = inputs[selector.name];
+      if (!isScalar(selection)) continue;
+      const option = selector.dynamicOptions?.find((item) => Object.is(item.key, selection));
+      if (!option) {
+        diagnostics.push(
+          diagnostic(
+            "DYNAMIC_OPTION_INVALID",
+            "Dynamic node option is not declared by the runtime schema.",
+            `${nodeId}.${selector.name}`,
+          ),
+        );
+        continue;
+      }
+      for (const field of option.inputs)
+        fields.set(`${selector.name}.${field.name}`, {
+          ...field,
+          name: `${selector.name}.${field.name}`,
+        });
+    }
+    for (const field of [...fields.values()].filter((item) => item.required))
       if (!Object.hasOwn(inputs, field.name))
         diagnostics.push(
           diagnostic(

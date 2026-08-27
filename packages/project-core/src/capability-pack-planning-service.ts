@@ -5,7 +5,11 @@ import type {
   FrozenGenerationSpec,
   MaterializedGraphSnapshot,
 } from "./generation-planning-service.js";
-import type { CompiledGraph, GraphIntentCompiler } from "./graph-intent.js";
+import type {
+  CompiledGraph,
+  GraphCompilationContext,
+  GraphIntentCompiler,
+} from "./graph-intent.js";
 
 export interface CapabilityPackPlanningResult {
   readonly generationSpec: FrozenGenerationSpec;
@@ -28,6 +32,7 @@ export function planCapabilityPackGraph(input: {
   implementationRef: CapabilityRef;
   intent: unknown;
   compiler: GraphIntentCompiler;
+  compilationContext?: GraphCompilationContext;
 }): CapabilityPackPlanningResult {
   const implementation = input.registry.resolveImplementation(input.implementationRef);
   const runtime = input.registry.resolveRuntime(implementation.runtimeRef);
@@ -41,7 +46,7 @@ export function planCapabilityPackGraph(input: {
   if (!sameValues(runtime.nodeClasses, input.pack.requiredNodes))
     throw new Error("CAPABILITY_PACK_RUNTIME_CONTRACT_MISMATCH");
 
-  const compiledGraph = input.compiler.compile(input.pack, input.intent);
+  const compiledGraph = input.compiler.compile(input.pack, input.intent, input.compilationContext);
   const generationSpec = freezeGenerationSpec(input.registry, input.implementationRef, {
     capabilityPackManifestSha256: input.pack.manifestSha256,
     graphIntentDigest: compiledGraph.intentDigest,

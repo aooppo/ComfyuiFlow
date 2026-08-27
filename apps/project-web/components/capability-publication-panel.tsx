@@ -4,27 +4,28 @@ import { useState } from "react";
 
 const template = {
   schemaVersion: 1,
-  packId: "seedance-reference-video",
+  packId: "minimax-h3-reference-video",
   packVersion: "1.0.0",
   runtimeTargetRef: { id: "runtime.comfy-partner", version: "1.0.0" },
-  model: { id: "seedance-video", version: "2.0.0", availabilityKey: "seedance-v2" },
-  compilerProfile: "reference-video-v1",
+  model: { id: "model.minimax-h3", version: "1.0.0", availabilityKey: "minimax-h3-partner" },
+  compilerProfile: "h3-reference-video-v1",
   compilerBinding: {
     modelNode: {
-      classType: "SeedanceVideoNode",
-      promptInput: "prompt",
-      durationSecondsInput: "duration",
-      ratioInput: "ratio",
+      classType: "MinimaxHailuo03ReferenceNode",
+      promptInput: "model.prompt",
+      durationSecondsInput: "model.duration",
+      ratioInput: "model.ratio",
     },
     outputNode: { classType: "SaveVideo", videoInput: "video", outputMediaKey: "videos" },
   },
-  allowedIntentModes: ["reference-video", "text-to-video"],
+  allowedIntentModes: ["reference-video"],
   parameterEnvelope: {
-    images: { min: 0, max: 9 },
+    images: { min: 1, max: 9 },
     durationSeconds: [4, 15],
-    ratios: ["16:9", "9:16"],
+    ratios: ["16:9"],
+    resolutions: ["2K"],
   },
-  requiredNodes: ["SaveVideo", "SeedanceVideoNode"],
+  requiredNodes: ["LoadImage", "MinimaxHailuo03ReferenceNode", "SaveVideo"],
 };
 
 export function CapabilityPublicationPanel() {
