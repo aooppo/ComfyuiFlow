@@ -112,3 +112,16 @@ commit, exact Preview, and a fresh Owner action-time confirmation.
   rendered Frozen planning and Formal batch review, displayed an empty registered-capability state
   after the clean reset, and made zero ComfyUI, provider, or AI-QA calls. No retired controls or
   routes were reachable from the active page.
+
+## Test A Source Preparation and Preview Block
+
+- After reset, the approved SCENE bytes were copied from the separate original checkout into the
+  empty active content-addressed store and rehashed. Source and target both equal
+  `8edca81a57d2b1deaf2a79581557c8314baccf64c663485d627390272d5280a1`.
+- No Test A preview, authorization, batch, Worker start, ComfyUI submission, or AI-QA operation
+  was created. The exact preview is correctly blocked by current operational facts: the freshly
+  reset registry has no released implementation, the configured generation identity is retired,
+  generation is disabled, and generation/AI-QA price facts are missing. These cannot be inferred
+  or substituted from historical configuration.
+- Feature 017 was committed as `4c64bce` after the complete verification suite and reset/browser
+  acceptance. The commit is amended below when this final verification note is staged.

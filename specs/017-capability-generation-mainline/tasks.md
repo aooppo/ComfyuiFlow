@@ -72,7 +72,7 @@
 - [x] T030 Remove retired generation/V3 modules, migrations, production exports, tests, and route files while keeping Feature 016 evidence and fixed-H3 test evidence in `packages/`, `apps/`, and `tests/`
 - [ ] T031 Run formatter, lint, typecheck, full Vitest, PostgreSQL integration, Prisma validate, production build, secret scan, and `git diff --check`; record results in `specs/017-capability-generation-mainline/verification.md`
 - [x] T032 Perform LIVE-disabled browser acceptance and record provider/ComfyUI/AI-QA call counts in `specs/017-capability-generation-mainline/verification.md`
-- [ ] T033 Commit the cohesive Feature 017 schema/code/tests/specification set and confirm clean branch in `specs/017-capability-generation-mainline/verification.md`
+- [x] T033 Commit the cohesive Feature 017 schema/code/tests/specification set and confirm clean branch in `specs/017-capability-generation-mainline/verification.md`
 - [ ] T034 Keep Worker stopped; verify fresh Test A operational facts, create exact Preview, and stop for fresh action-time authorization in `specs/017-capability-generation-mainline/verification.md`
 
 ## Dependencies & Execution Order
