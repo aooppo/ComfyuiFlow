@@ -24,6 +24,13 @@ export class CapabilityV3QaService {
   ) {}
 
   async reviewAttempt(attemptId: string) {
+    const readiness = await this.provider.validateConfiguration();
+    if (!readiness.configured)
+      throw new ProjectAssetError(
+        "QA_PROVIDER_NOT_READY",
+        readiness.reason ?? "V3 AI QA provider is unavailable",
+        409,
+      );
     const existing = await this.client.aiQaRunV3Record.findUnique({ where: { attemptId } });
     if (existing) return this.view(existing);
     const attempt = await this.client.generationAttemptV3Record.findUnique({

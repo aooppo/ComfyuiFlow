@@ -1,9 +1,13 @@
+import { CodexManagerLocalVideoQaProvider } from "@comfyuiflow/ai-providers";
 import { GenerationExecutionService } from "@comfyuiflow/project-core";
 import { apiError, jsonBody } from "../../../lib/api";
 import { requiredGenerationPlanRowVersion } from "../../../lib/generation-plan-http";
 import { z } from "zod";
 
-const service = new GenerationExecutionService();
+const qaProvider = new CodexManagerLocalVideoQaProvider();
+const service = new GenerationExecutionService(undefined, undefined, process.env, {
+  v3QaReadiness: () => qaProvider.validateConfiguration(),
+});
 
 export async function GET(request: Request) {
   try {

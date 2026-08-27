@@ -32,9 +32,12 @@ export class CapabilityReviewServiceV3 {
       maxBytes: Number(process.env.PROJECT_GENERATED_MAX_BYTES || 500 * 1024 * 1024),
     }),
     private readonly environment: NodeJS.ProcessEnv = process.env,
+    private readonly options: {
+      v3QaReadiness?: () => Promise<{ configured: boolean; reason?: string }>;
+    } = {},
   ) {}
 
-  private v3QaPricing() {
+  private async v3QaPricing() {
     const providerId = this.environment.VIDEO_QA_PROVIDER_PROFILE ?? "";
     const modelId = this.environment.VIDEO_QA_MODEL_ID ?? "";
     const billingChannel = this.environment.VIDEO_QA_BILLING_CHANNEL ?? "";
@@ -46,13 +49,18 @@ export class CapabilityReviewServiceV3 {
       maximumCostMicros >= 0 &&
       Date.parse(effectiveAt) <= Date.now() &&
       Date.parse(expiresAt) > Date.now();
-    const configured =
+    const staticallyConfigured =
       this.environment.VIDEO_QA_LIVE_ENABLED === "true" &&
       providerId === "codexmanager-local" &&
       modelId === "gpt-5.4" &&
       Boolean(billingChannel) &&
       current &&
       Boolean(this.environment.CODEX_MANAGER_API_KEY);
+    const readiness = staticallyConfigured
+      ? await (this.options.v3QaReadiness?.() ??
+          Promise.resolve({ configured: false, reason: "V3 QA health check is unavailable" }))
+      : { configured: false, reason: "V3 QA configuration is incomplete" };
+    const configured = staticallyConfigured && readiness.configured;
     return {
       configured,
       maximumCostMicros: current ? maximumCostMicros : null,
@@ -204,7 +212,13 @@ export class CapabilityReviewServiceV3 {
       _max: { attemptNumber: true },
     });
     const nextAttemptNumber = (lineage._max.attemptNumber ?? 0) + 1;
-    const qa = this.v3QaPricing();
+    const qa = await this.v3QaPricing();
+    if (!qa.configured)
+      throw new ProjectAssetError(
+        "V3_AI_QA_NOT_READY",
+        "Current V3 AI QA configuration, health, or price is unavailable",
+        409,
+      );
     const core = {
       schemaVersion: "generation-retry-preview-v3" as const,
       projectId: artifact.projectId,
@@ -275,8 +289,12 @@ export class CapabilityReviewServiceV3 {
     }
     if (this.environment.PROJECT_GENERATION_LIVE_ENABLED !== "true")
       throw new ProjectAssetError("LIVE_DISABLED", "LIVE generation is disabled", 409);
-    const qa = this.v3QaPricing();
-    if (!qa.configured || retry.maximumAiQaCostMicros !== qa.maximumCostMicros)
+    const qa = await this.v3QaPricing();
+    if (
+      !qa.configured ||
+      (retry.maximumAiQaCostMicros === null ? null : Number(retry.maximumAiQaCostMicros)) !==
+        qa.maximumCostMicros
+    )
       throw new ProjectAssetError(
         "V3_AI_QA_NOT_READY",
         "Current V3 AI QA configuration or price is unavailable",
@@ -502,29 +520,39 @@ export class CapabilityReviewServiceV3 {
       outputStorageKey: null,
       outputSha256: null,
       outputBytes: null,
+      outputFfprobe: null,
     });
-    await this.client.$transaction(async (tx) => {
-      await tx.generationAssemblyV3Record.create({
-        data: {
-          id,
-          projectId: storyboard.projectId,
-          storyboardVersionId,
-          inputDigest,
-          idempotencyKey,
-          state: "ASSEMBLING",
-          payloadJson: core as Prisma.InputJsonValue,
-        },
+    try {
+      await this.client.$transaction(async (tx) => {
+        await tx.generationAssemblyV3Record.create({
+          data: {
+            id,
+            projectId: storyboard.projectId,
+            storyboardVersionId,
+            inputDigest,
+            idempotencyKey,
+            state: "ASSEMBLING",
+            payloadJson: core as Prisma.InputJsonValue,
+          },
+        });
+        await tx.generationAssemblySourceV3Record.createMany({
+          data: sources.map((source) => ({
+            id: randomUUID(),
+            assemblyId: id,
+            artifactId: source.artifactId,
+            ordinal: source.ordinal,
+            sha256: source.sha256,
+          })),
+        });
       });
-      await tx.generationAssemblySourceV3Record.createMany({
-        data: sources.map((source) => ({
-          id: randomUUID(),
-          assemblyId: id,
-          artifactId: source.artifactId,
-          ordinal: source.ordinal,
-          sha256: source.sha256,
-        })),
+    } catch (error) {
+      if (!this.isUniqueViolation(error)) throw error;
+      const sameSources = await this.client.generationAssemblyV3Record.findUnique({
+        where: { inputDigest },
       });
-    });
+      if (!sameSources) throw error;
+      return GenerationAssemblyV3Schema.parse(sameSources.payloadJson);
+    }
     const directory = await mkdtemp(path.join(tmpdir(), "comfyuiflow-assembly-v3-"));
     try {
       const paths = await Promise.all(
@@ -569,12 +597,14 @@ export class CapabilityReviewServiceV3 {
         output,
       ]);
       const preserved = await this.storage.preserve(createReadStream(output));
+      const outputFfprobe = await this.probeAssemblyOutput(output);
       const completed = GenerationAssemblyV3Schema.parse({
         ...core,
         state: "COMPLETED",
         outputStorageKey: preserved.storageKey,
         outputSha256: preserved.sha256,
         outputBytes: preserved.byteSize,
+        outputFfprobe,
       });
       await this.client.generationAssemblyV3Record.update({
         where: { id },
@@ -583,6 +613,7 @@ export class CapabilityReviewServiceV3 {
           outputStorageKey: preserved.storageKey,
           outputSha256: preserved.sha256,
           outputByteSize: preserved.byteSize,
+          outputFfprobeJson: outputFfprobe as Prisma.InputJsonValue,
           payloadJson: completed as Prisma.InputJsonValue,
         },
       });
@@ -608,6 +639,39 @@ export class CapabilityReviewServiceV3 {
       assembly.outputStorageKey,
       assembly.outputSha256,
       Number(assembly.outputByteSize),
+    );
+  }
+
+  private async probeAssemblyOutput(output: string) {
+    const { stdout } = await execute("ffprobe", [
+      "-v",
+      "error",
+      "-print_format",
+      "json",
+      "-show_format",
+      "-show_streams",
+      output,
+    ]);
+    const raw = JSON.parse(stdout) as Record<string, any>;
+    const video = raw.streams?.find((stream: any) => stream.codec_type === "video");
+    const [numerator, denominator] = String(video?.avg_frame_rate ?? "0/1")
+      .split("/")
+      .map(Number);
+    return {
+      durationSeconds: Number(raw.format?.duration ?? video?.duration ?? 0),
+      width: Number(video?.width ?? 0),
+      height: Number(video?.height ?? 0),
+      fps: denominator ? numerator! / denominator : 0,
+      codec: String(video?.codec_name ?? "unknown"),
+      container: String(raw.format?.format_name ?? "unknown").split(",")[0]!,
+      probeVersion: "ffprobe-capability-v3" as const,
+    };
+  }
+
+  private isUniqueViolation(error: unknown) {
+    return (
+      (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") ||
+      (error instanceof Error && /P2002|unique/i.test(error.message))
     );
   }
 

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { AttemptArtifactV3 } from "@comfyuiflow/contracts";
 import type { ProjectPrisma } from "@comfyuiflow/project-core";
 
 const enabled = process.env.RUN_PROJECT_DB_TESTS === "1";
@@ -41,6 +42,13 @@ describe.runIf(enabled)("Capability workflow PostgreSQL foundation", () => {
        ORDER BY table_name`,
     );
     expect(tables).toHaveLength(30);
+    await expect(
+      client.$queryRawUnsafe<Array<{ name: string }>>(
+        `SELECT column_name AS name FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'GenerationAssemblyV3Record'
+           AND column_name = 'outputFfprobeJson'`,
+      ),
+    ).resolves.toEqual([{ name: "outputFfprobeJson" }]);
     await expect(
       client.$queryRawUnsafe(`SELECT COUNT(*)::int AS count FROM "GenerationSpec"`),
     ).resolves.toEqual([expect.objectContaining({ count: expect.any(Number) })]);
@@ -495,17 +503,22 @@ describe.runIf(enabled)("Capability workflow PostgreSQL foundation", () => {
     ).rejects.toThrow(/append-only/);
 
     const { GenerationExecutionService } = await import("@comfyuiflow/project-core");
-    const execution = new GenerationExecutionService(client, undefined, {
-      PROJECT_GENERATION_LIVE_ENABLED: "true",
-      VIDEO_QA_LIVE_ENABLED: "true",
-      VIDEO_QA_PROVIDER_PROFILE: "codexmanager-local",
-      VIDEO_QA_MODEL_ID: "gpt-5.4",
-      VIDEO_QA_BILLING_CHANNEL: "test",
-      VIDEO_QA_MAX_COST_MICROS: "10000",
-      VIDEO_QA_PRICE_EFFECTIVE_AT: "2026-08-01T00:00:00.000Z",
-      VIDEO_QA_PRICE_EXPIRES_AT: "2026-09-01T00:00:00.000Z",
-      CODEX_MANAGER_API_KEY: "test-only-key",
-    });
+    const execution = new GenerationExecutionService(
+      client,
+      undefined,
+      {
+        PROJECT_GENERATION_LIVE_ENABLED: "true",
+        VIDEO_QA_LIVE_ENABLED: "true",
+        VIDEO_QA_PROVIDER_PROFILE: "codexmanager-local",
+        VIDEO_QA_MODEL_ID: "gpt-5.4",
+        VIDEO_QA_BILLING_CHANNEL: "test",
+        VIDEO_QA_MAX_COST_MICROS: "10000",
+        VIDEO_QA_PRICE_EFFECTIVE_AT: "2026-08-01T00:00:00.000Z",
+        VIDEO_QA_PRICE_EXPIRES_AT: "2026-09-01T00:00:00.000Z",
+        CODEX_MANAGER_API_KEY: "test-only-key",
+      },
+      { v3QaReadiness: async () => ({ configured: true }) },
+    );
     const executionPreview = await execution.previewV3(automaticallyBound.planId, {
       schemaVersion: "capability-generation-execution-preview-request-v3",
       shotIds: [autoShot.id],
@@ -572,6 +585,7 @@ describe.runIf(enabled)("Capability workflow PostgreSQL foundation", () => {
     const { CapabilityGenerationWorkerV3 } = await import("@comfyuiflow/project-core");
     const submitIdentities: Array<{ attemptId: string }> = [];
     const artifactCalls: Array<{ attemptId: string }> = [];
+    const producedArtifacts: AttemptArtifactV3[] = [];
     const worker = new CapabilityGenerationWorkerV3(
       {
         submit: async (identity) => {
@@ -596,7 +610,7 @@ describe.runIf(enabled)("Capability workflow PostgreSQL foundation", () => {
       {
         process: async ({ attemptId }) => {
           artifactCalls.push({ attemptId });
-          return {
+          const artifact = {
             id: randomUUID(),
             attemptId,
             storageKey: "fake-transport/verified.mp4",
@@ -617,7 +631,9 @@ describe.runIf(enabled)("Capability workflow PostgreSQL foundation", () => {
             reviewFrames: [],
             aiQaStatus: "AI_QA_UNAVAILABLE",
             ownerDecision: null,
-          };
+          } satisfies AttemptArtifactV3;
+          producedArtifacts.push(artifact);
+          return artifact;
         },
       },
       client,
@@ -639,6 +655,88 @@ describe.runIf(enabled)("Capability workflow PostgreSQL foundation", () => {
       providerCallCount: 1,
       materializedGraphSha256: frozenGraph.materializedGraphSha256,
     });
+
+    const { CapabilityReviewServiceV3 } = await import("@comfyuiflow/project-core");
+    const review = new CapabilityReviewServiceV3(
+      client,
+      undefined,
+      {
+        PROJECT_GENERATION_LIVE_ENABLED: "true",
+        VIDEO_QA_LIVE_ENABLED: "true",
+        VIDEO_QA_PROVIDER_PROFILE: "codexmanager-local",
+        VIDEO_QA_MODEL_ID: "gpt-5.4",
+        VIDEO_QA_BILLING_CHANNEL: "test",
+        VIDEO_QA_MAX_COST_MICROS: "10000",
+        VIDEO_QA_PRICE_EFFECTIVE_AT: "2026-08-01T00:00:00.000Z",
+        VIDEO_QA_PRICE_EXPIRES_AT: "2026-09-01T00:00:00.000Z",
+        CODEX_MANAGER_API_KEY: "test-only-key",
+      },
+      { v3QaReadiness: async () => ({ configured: true }) },
+    );
+    const produced = producedArtifacts[0]!;
+    await client.generationArtifactV3Record.create({
+      data: {
+        id: produced.id,
+        projectId: project.id,
+        attemptId: produced.attemptId,
+        storageKey: produced.storageKey,
+        mediaType: produced.mediaType,
+        byteSize: produced.bytes,
+        sha256: produced.sha256,
+        technicalStatus: produced.technicalStatus,
+        technicalResultCode: produced.technicalResultCode,
+        ffprobeJson: produced.ffprobe as any,
+        reviewFramesJson: produced.reviewFrames as any,
+        aiQaStatus: produced.aiQaStatus,
+        payloadJson: produced as any,
+      },
+    });
+    const sourceArtifact = await client.generationArtifactV3Record.findUniqueOrThrow({
+      where: { id: produced.id },
+    });
+    await review.decide(sourceArtifact.id, {
+      schemaVersion: "owner-decision-create-request-v3",
+      decision: "FAIL",
+      reasonCode: "TEST_RETRY",
+      actorRef: "owner.test",
+      idempotencyKey: `owner-fail-${randomUUID()}`,
+    });
+    await expect(
+      review.decide(sourceArtifact.id, {
+        schemaVersion: "owner-decision-create-request-v3",
+        decision: "PASS",
+        actorRef: "owner.test",
+        idempotencyKey: `owner-pass-${randomUUID()}`,
+      }),
+    ).rejects.toMatchObject({ code: "OWNER_DECISION_ALREADY_FINAL" });
+    const retryPreview = await review.previewRetry(sourceArtifact.id);
+    expect(retryPreview).toMatchObject({
+      failedAttemptId: submitIdentities[0]!.attemptId,
+      nextAttemptNumber: 2,
+      maximumAiQaCalls: 1,
+    });
+    const retryAuthorized = await review.authorizeRetry(retryPreview.id, {
+      schemaVersion: "generation-retry-authorize-request-v3",
+      previewDigest: retryPreview.previewDigest,
+      idempotencyKey: `retry-${randomUUID()}`,
+      expiresInSeconds: 300,
+      confirmed: true,
+    });
+    const retryTargetId = retryAuthorized.targetId;
+    expect(retryTargetId).toBeDefined();
+    const retryTarget = await client.generationBatchTargetV3Record.findUniqueOrThrow({
+      where: { id: retryTargetId! },
+    });
+    expect(retryTarget).toMatchObject({ retryOfAttemptId: submitIdentities[0]!.attemptId });
+    await expect(worker.runOnce()).resolves.toMatchObject({ state: "SUBMITTED" });
+    const retryAttempt = await client.generationAttemptV3Record.findFirstOrThrow({
+      where: { generationBatchTargetId: retryTargetId! },
+    });
+    expect(retryAttempt).toMatchObject({
+      retryOfAttemptId: submitIdentities[0]!.attemptId,
+      attemptNumber: 2,
+    });
+    await expect(worker.runOnce()).resolves.toMatchObject({ state: "SUCCEEDED" });
 
     const ambiguousAuthorizationId = randomUUID();
     const ambiguousBatchId = randomUUID();

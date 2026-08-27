@@ -120,20 +120,38 @@ describe("Generation execution V3 API", () => {
   });
 
   it("keeps V1/V2 routes additive and excludes caller graphs, endpoints and credentials", async () => {
-    const [previewRoute, batchRoute, service] = await Promise.all([
-      readFile(
-        "apps/project-web/app/api/generation-plan-versions/[versionId]/execution-preview/route.ts",
-        "utf8",
-      ),
-      readFile("apps/project-web/app/api/generation-batches/route.ts", "utf8"),
-      readFile("packages/project-core/src/generation-execution-service.ts", "utf8"),
-    ]);
+    const [previewRoute, batchRoute, retryPreviewRoute, retryAuthorizeRoute, service, review] =
+      await Promise.all([
+        readFile(
+          "apps/project-web/app/api/generation-plan-versions/[versionId]/execution-preview/route.ts",
+          "utf8",
+        ),
+        readFile("apps/project-web/app/api/generation-batches/route.ts", "utf8"),
+        readFile(
+          "apps/project-web/app/api/capability-v3-artifacts/[artifactId]/retry-preview/route.ts",
+          "utf8",
+        ),
+        readFile(
+          "apps/project-web/app/api/capability-v3-retry-previews/[previewId]/authorize/route.ts",
+          "utf8",
+        ),
+        readFile("packages/project-core/src/generation-execution-service.ts", "utf8"),
+        readFile("packages/project-core/src/capability-review-service-v3.ts", "utf8"),
+      ]);
     expect(previewRoute).toContain("service.previewV3");
     expect(previewRoute).toContain("service.preview(");
     expect(batchRoute).toContain("service.createBatch");
     expect(service).toContain("generationBatchV3Record");
     expect(service).toContain('isolationLevel: "Serializable"');
     expect(service).toContain('PROJECT_GENERATION_LIVE_ENABLED !== "true"');
+    expect(`${previewRoute}\n${batchRoute}`).toContain("CodexManagerLocalVideoQaProvider");
+    expect(`${previewRoute}\n${batchRoute}`).toContain("v3QaReadiness");
+    expect(`${retryPreviewRoute}\n${retryAuthorizeRoute}`).toContain(
+      "CodexManagerLocalVideoQaProvider",
+    );
+    expect(`${retryPreviewRoute}\n${retryAuthorizeRoute}`).toContain("v3QaReadiness");
+    expect(service).toContain("V3 QA health check is unavailable");
+    expect(review).toContain("V3 QA health check is unavailable");
     expect(`${previewRoute}\n${batchRoute}`).not.toMatch(
       /workflowJson|rawGraph|credential|apiKey|endpoint|filesystemPath/,
     );

@@ -54,7 +54,10 @@ export class GenerationExecutionService {
     private readonly client: ProjectPrisma = prisma,
     private readonly storage: StorageProvider = new LocalContentStorage(),
     private readonly environment: NodeJS.ProcessEnv = process.env,
-    private readonly options: { allowTestFixtures?: boolean } = {},
+    private readonly options: {
+      allowTestFixtures?: boolean;
+      v3QaReadiness?: () => Promise<{ configured: boolean; reason?: string }>;
+    } = {},
   ) {}
 
   async preview(versionId: string, rawInput: GenerationExecutionPreviewInput) {
@@ -89,7 +92,7 @@ export class GenerationExecutionService {
     };
   }
 
-  private v3QaPricing() {
+  private async v3QaPricing() {
     const providerId = this.environment.VIDEO_QA_PROVIDER_PROFILE ?? "";
     const modelId = this.environment.VIDEO_QA_MODEL_ID ?? "";
     const billingChannel = this.environment.VIDEO_QA_BILLING_CHANNEL ?? "";
@@ -104,13 +107,18 @@ export class GenerationExecutionService {
       Date.parse(effectiveAt) <= Date.now() &&
       Number.isFinite(Date.parse(expiresAt)) &&
       Date.parse(expiresAt) > Date.now();
-    const configured =
+    const staticallyConfigured =
       live &&
       providerId === "codexmanager-local" &&
       modelId === "gpt-5.4" &&
       Boolean(billingChannel) &&
       priceCurrent &&
       Boolean(this.environment.CODEX_MANAGER_API_KEY);
+    const readiness = staticallyConfigured
+      ? await (this.options.v3QaReadiness?.() ??
+          Promise.resolve({ configured: false, reason: "V3 QA health check is unavailable" }))
+      : { configured: false, reason: "V3 QA configuration is incomplete" };
+    const configured = staticallyConfigured && readiness.configured;
     return {
       configured,
       maximumCostMicros: priceCurrent ? maximumCostMicros : null,
@@ -356,7 +364,7 @@ export class GenerationExecutionService {
         costPolicy: target.costPolicy,
       })),
     );
-    const qa = this.v3QaPricing();
+    const qa = await this.v3QaPricing();
     const qaBlockers = qa.configured ? [] : ["V3_AI_QA_NOT_READY"];
     const maximumTotalCostMicros =
       maximumCostMicros === null || qa.maximumCostMicros === null

@@ -491,9 +491,33 @@ packages/project-core/prisma/schema.prisma`; `pnpm typecheck`; `pnpm lint`; targ
   individually formatted.
 - The Phase 14 PostgreSQL listener on 5448 was not migrated, reset, queried for project data, or
   reused. Instead, a temporary container `comfyuiflow-016-postgres-test` on 5549 was initialized with
-  the blank `comfyuiflow_test` database, all 26 migrations were applied, and
+  the blank `comfyuiflow_test` database, all 27 migrations were applied, and
   `RUN_PROJECT_DB_TESTS=1 pnpm vitest run tests/integration/capability-workflow-postgres.test.ts`
   passed 6/6. The container was stopped with `--rm` immediately afterward. T130/T132–T137 remain
   open for dedicated V3 QA, retry/assembly concurrency, browser, performance, and full regression
   coverage.
 - External calls in this closure: Director 0, AI QA 0, ComfyUI `/prompt` 0, Hailuo/video Provider 0.
+
+## Dynamic V3 hardening follow-up - 2026-08-27 (zero-call)
+
+- A V3 execution Preview, Batch confirmation, Retry Preview, and Retry authorization now depend on a server-owned
+  `CodexManagerLocalVideoQaProvider.validateConfiguration()` readiness function. Complete static
+  configuration alone is insufficient; an unavailable health check produces the existing
+  `V3_AI_QA_NOT_READY` submission blocker before any Batch is created or retried. The QA service also checks
+  health before it reads lineage, consumes `AI_QA` authority, or invokes the review operation.
+- Retry execution now derives its Attempt number from the greatest number in the same
+  Project/GenerationSpec lineage, so a new Retry Target cannot reset an Attempt to 1. Retry QA-price
+  comparison normalizes persisted `BigInt` values before comparison. The PostgreSQL regression proves
+  Owner FAIL only, conflicting second Owner decision rejection, retry linkage, and Attempt 2.
+- The V3 UI contract verifies persisted Batch restoration, the active-only polling states
+  `QUEUED/RUNNING/SUBMITTED/RECONCILING`, one terminal refresh, and Retry Batch switch-over. The
+  QA-health unit test proves an unhealthy provider cannot read lineage or perform a QA call.
+- Checks passed: full `pnpm lint`; `pnpm test` (89 files / 328 passed, 10 explicit environment-gated
+  files / 41 tests skipped); production build; `pnpm typecheck`; Feature 016 PostgreSQL integration
+  test (6/6) after all 27 migrations on a blank temporary database; targeted QA/API/UI contract tests
+  (3 files / 7 tests); `pnpm secret:scan`; Prettier on changed files; and `git diff --check`.
+- The temporary `comfyuiflow-016-postgres-test` container on 5549 was stopped with `--rm`; the shared
+  Phase 14 database was not used. External calls: Director 0, AI QA 0, ComfyUI `/prompt` 0,
+  Hailuo/video Provider 0. T132 and T134-T138 remain open: Assembly source-digest concurrency coverage,
+  deeper QA immutable/ambiguity coverage, browser acceptance, performance, converge,
+  and the separately bounded LIVE preflight.

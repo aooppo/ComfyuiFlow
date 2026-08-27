@@ -940,6 +940,18 @@ export const GenerationAssemblyV3Schema = z
     outputStorageKey: z.string().trim().min(1).max(500).nullable(),
     outputSha256: CapabilitySha256Schema.nullable(),
     outputBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+    outputFfprobe: z
+      .object({
+        durationSeconds: z.number().nonnegative(),
+        width: z.number().int().positive(),
+        height: z.number().int().positive(),
+        fps: z.number().positive(),
+        codec: z.string().trim().min(1).max(80),
+        container: z.string().trim().min(1).max(80),
+        probeVersion: z.literal("ffprobe-capability-v3"),
+      })
+      .strict()
+      .nullable(),
   })
   .strict();
 

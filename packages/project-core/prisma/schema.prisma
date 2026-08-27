@@ -2670,6 +2670,7 @@ model GenerationAssemblyV3Record {
   outputStorageKey    String?  @unique @db.VarChar(500)
   outputSha256        String?  @db.Char(64)
   outputByteSize      BigInt?
+  outputFfprobeJson   Json?
   payloadJson         Json
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt

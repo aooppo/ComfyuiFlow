@@ -127,10 +127,11 @@ export class CapabilityGenerationWorkerV3 {
     const attemptId = randomUUID();
     const consumptionId = randomUUID();
     const providerTaskId = randomUUID();
-    const attemptNumber =
-      (await this.client.generationAttemptV3Record.count({
-        where: { generationBatchTargetId: target.id },
-      })) + 1;
+    const previousAttempt = await this.client.generationAttemptV3Record.aggregate({
+      where: { projectId: target.projectId, generationSpecId: target.generationSpecId },
+      _max: { attemptNumber: true },
+    });
+    const attemptNumber = (previousAttempt._max.attemptNumber ?? 0) + 1;
     const now = new Date();
     const consumption = AuthorizationConsumptionV3Schema.parse({
       id: consumptionId,

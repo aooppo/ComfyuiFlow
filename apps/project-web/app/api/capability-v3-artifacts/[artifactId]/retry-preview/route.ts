@@ -1,7 +1,11 @@
+import { CodexManagerLocalVideoQaProvider } from "@comfyuiflow/ai-providers";
 import { CapabilityReviewServiceV3 } from "@comfyuiflow/project-core";
 import { apiError } from "../../../../../lib/api";
 
-const service = new CapabilityReviewServiceV3();
+const qaProvider = new CodexManagerLocalVideoQaProvider();
+const service = new CapabilityReviewServiceV3(undefined, undefined, process.env, {
+  v3QaReadiness: () => qaProvider.validateConfiguration(),
+});
 type Context = { params: Promise<{ artifactId: string }> };
 
 export async function POST(_request: Request, context: Context) {

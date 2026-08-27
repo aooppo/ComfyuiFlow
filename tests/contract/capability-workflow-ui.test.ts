@@ -32,6 +32,23 @@ describe("Capability workflow owner UI", () => {
     expect(review).toContain("never auto-filled");
   });
 
+  it("restores the persisted V3 batch and polls only while it remains active", async () => {
+    const [planning, review, route] = await Promise.all([
+      readFile("apps/project-web/components/storyboards/workflow-planning-panel.tsx", "utf8"),
+      readFile("apps/project-web/components/storyboards/capability-v3-batch-review.tsx", "utf8"),
+      readFile(
+        "apps/project-web/app/api/storyboard-versions/[versionId]/workflow-plans/route.ts",
+        "utf8",
+      ),
+    ]);
+    expect(planning).toContain("workflow-plans");
+    expect(planning).toContain("value?.batch && setBatch");
+    expect(route).toContain("latestCapabilityBatchForStoryboardVersion");
+    expect(review).toContain('["QUEUED", "RUNNING", "SUBMITTED", "RECONCILING"]');
+    expect(review).toContain("terminalRefresh.current !== activeBatchId");
+    expect(review).toContain("setActiveBatchId(authorized.batchId)");
+  });
+
   it("removes owner-callable Fake controls while retaining explicit historical read labeling", async () => {
     const [editor, director, shotPlan] = await Promise.all([
       readFile("apps/project-web/components/storyboards/storyboard-editor.tsx", "utf8"),

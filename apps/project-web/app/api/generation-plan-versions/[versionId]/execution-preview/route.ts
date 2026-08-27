@@ -1,7 +1,11 @@
+import { CodexManagerLocalVideoQaProvider } from "@comfyuiflow/ai-providers";
 import { GenerationExecutionService } from "@comfyuiflow/project-core";
 import { apiError, jsonBody } from "../../../../../lib/api";
 
-const service = new GenerationExecutionService();
+const qaProvider = new CodexManagerLocalVideoQaProvider();
+const service = new GenerationExecutionService(undefined, undefined, process.env, {
+  v3QaReadiness: () => qaProvider.validateConfiguration(),
+});
 type Context = { params: Promise<{ versionId: string }> };
 
 export async function POST(request: Request, context: Context) {
