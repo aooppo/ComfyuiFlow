@@ -1,5 +1,5 @@
-import { ProjectWorkspace } from "../../../components/project-workspace";
+import { MainlineWorkspace } from "../../../components/mainline-workspace";
 
 export default async function ProjectPage({ params }: { params: Promise<{ projectId: string }> }) {
-  return <ProjectWorkspace projectId={(await params).projectId} />;
+  return <MainlineWorkspace projectId={(await params).projectId} />;
 }

@@ -21,7 +21,6 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p apps/project-web/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "spike": "tsx apps/spike-cli/src/index.ts",
     "mcp:comfyui": "tsx apps/comfyui-mcp/src/index.ts",
     "project:dev": "node scripts/project-dev.mjs",
     "project:web": "pnpm --filter @comfyuiflow/project-web dev",

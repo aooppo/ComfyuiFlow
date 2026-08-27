@@ -1,2 +1,0 @@
-ALTER TABLE "CapabilityGenerationImplementation"
-ADD COLUMN "evidencePolicy" VARCHAR(80) NOT NULL DEFAULT 'EXACT_VERSION_REAL_RESULT';

@@ -1,30 +1,15 @@
 import { fileURLToPath } from "node:url";
-import {
-  FakeAssetUnderstandingProvider,
-  CodexManagerLocalVideoQaProvider,
-  OpenAiAssetUnderstandingProvider,
-  type AiModelProvider,
-} from "@comfyuiflow/ai-providers";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import {
   getDefaultEnvironment,
   StdioClientTransport,
 } from "@modelcontextprotocol/sdk/client/stdio.js";
 import {
-  AnalysisWorker,
-  CapabilityGenerationWorkerV3,
-  CapabilityV3McpTransportClient,
-  CapabilityV3QaService,
-  ComfyUiMcpGenerationProvider,
-  ComfyUiExecutionPlanAdapter,
-  GenerationAdapterRegistry,
+  AdapterRegistry,
+  ComfyUiMcpAdapter,
   GenerationWorker,
-  LegacyGenerationProviderAdapter,
-  LocalCapabilityArtifactPipelineV3,
-  StoryboardDirectorWorker,
+  PrismaGenerationMainlineStore,
   prisma,
-  type ComfyUiMcpToolClient,
-  type GenerationProvider,
 } from "@comfyuiflow/project-core";
 import { loadProjectEnvFile } from "@comfyuiflow/spike-core";
 import { runWorkerLoop, workerPollInterval } from "./worker-loop.js";
@@ -39,7 +24,6 @@ const mcpEnvironmentKeys = [
   "COMFY_API_KEY",
   "COMFYUI_AUTH_TOKEN",
   "SPIKE_DATA_DIR",
-  "WORKFLOW_REGISTRY_PATH",
   "PROJECT_ASSET_STORAGE_DIR",
   "PROJECT_GENERATED_STORAGE_DIR",
   "DATABASE_URL",
@@ -54,106 +38,33 @@ function mcpChildEnvironment(): Record<string, string> {
   return environment;
 }
 
-function providerFromEnvironment(): AiModelProvider {
-  const provider = process.env.ASSET_UNDERSTANDING_PROVIDER ?? "fake";
-  if (provider === "fake") return new FakeAssetUnderstandingProvider();
-  if (provider === "openai") return new OpenAiAssetUnderstandingProvider();
-  throw new Error("ASSET_UNDERSTANDING_PROVIDER is not registered");
-}
-
-class DisabledGenerationProvider implements GenerationProvider {
-  readonly profileId = "minimax-h3-4s-v1" as const;
-
-  async preflight() {
-    return { ready: false, blockers: ["LIVE_DISABLED"] };
-  }
-
-  async submit(): Promise<never> {
-    throw new Error("LIVE_DISABLED");
-  }
-
-  async status() {
-    return "UNKNOWN" as const;
-  }
-
-  async retainArtifacts() {
-    return [];
-  }
-
-  async cancel() {
-    return { cancelled: false, remoteTerminationConfirmed: false };
-  }
-}
-
 async function main() {
-  const analysisWorker = new AnalysisWorker(providerFromEnvironment());
-  const generationProfile = process.env.GENERATION_PROVIDER_PROFILE ?? "disabled";
-  let closeMcp: (() => Promise<void>) | undefined;
-  let executionPlanMcp: ComfyUiMcpToolClient | undefined;
-  const generationProvider =
-    generationProfile !== "minimax-h3-4s-v1" ||
-    process.env.PROJECT_GENERATION_LIVE_ENABLED !== "true"
-      ? new DisabledGenerationProvider()
-      : await (async () => {
-          if (
-            generationProfile !== "minimax-h3-4s-v1" ||
-            process.env.PROJECT_GENERATION_LIVE_ENABLED !== "true"
-          )
-            throw new Error("LIVE generation profile is not enabled");
-          const client = new Client({ name: "comfyuiflow-project-worker", version: "0.1.0" });
-          const transport = new StdioClientTransport({
-            command: "pnpm",
-            args: ["--silent", "mcp:comfyui"],
-            cwd: workspaceRoot,
-            env: mcpChildEnvironment(),
-            stderr: "pipe",
-          });
-          await client.connect(transport);
-          closeMcp = () => client.close();
-          const mcp: ComfyUiMcpToolClient = {
-            async callTool(name, input) {
-              const response = await client.callTool({ name, arguments: input });
-              return (response.structuredContent ?? {}) as any;
-            },
-          };
-          executionPlanMcp = mcp;
-          return new ComfyUiMcpGenerationProvider(mcp);
-        })();
-  const qaProvider = new CodexManagerLocalVideoQaProvider();
-  const adapters = new GenerationAdapterRegistry([
-    new LegacyGenerationProviderAdapter(generationProvider),
-    ...(generationProfile === "minimax-h3-4s-v1"
-      ? [
-          new ComfyUiExecutionPlanAdapter(
-            "comfyui-partner-h3-reference",
-            "1.0.0",
-            executionPlanMcp!,
-          ),
-        ]
-      : []),
+  const client = new Client({ name: "comfyuiflow-project-worker", version: "1.0.0" });
+  const transport = new StdioClientTransport({
+    command: "pnpm",
+    args: ["--silent", "mcp:comfyui"],
+    cwd: workspaceRoot,
+    env: mcpChildEnvironment(),
+    stderr: "pipe",
+  });
+  await client.connect(transport);
+  const mcp = {
+    async callTool(name: string, input: Record<string, unknown>) {
+      const response = await client.callTool({ name, arguments: input });
+      return (response.structuredContent ?? {}) as Record<string, unknown>;
+    },
+  };
+  const adapters = new AdapterRegistry([
+    new ComfyUiMcpAdapter(
+      { id: "adapter.comfyui-mcp", version: "1.0.0" },
+      { id: "runtime.comfyui-mcp", version: "1.0.0" },
+      mcp,
+    ),
   ]);
   const generationWorker = new GenerationWorker(
-    generationProvider,
-    qaProvider,
-    prisma,
-    undefined,
-    undefined,
     adapters,
+    new PrismaGenerationMainlineStore(prisma),
   );
-  const capabilityWorker = executionPlanMcp
-    ? new CapabilityGenerationWorkerV3(
-        new CapabilityV3McpTransportClient(executionPlanMcp),
-        new LocalCapabilityArtifactPipelineV3(),
-        prisma,
-        process.env.VIDEO_QA_LIVE_ENABLED === "true"
-          ? new CapabilityV3QaService(qaProvider, prisma)
-          : undefined,
-      )
-    : null;
-  const directorWorker =
-    process.env.PROJECT_STORYBOARD_DIRECTOR_LIVE_ENABLED === "true"
-      ? new StoryboardDirectorWorker()
-      : null;
   let stopping = false;
   const stop = () => {
     stopping = true;
@@ -165,17 +76,10 @@ async function main() {
       once: process.env.PROJECT_WORKER_ONCE === "true",
       pollIntervalMs: workerPollInterval(process.env.PROJECT_WORKER_POLL_INTERVAL_MS),
       shouldStop: () => stopping,
-      runAnalysis: () => analysisWorker.runOnce(`project-worker:${process.pid}`),
-      runGeneration: async () =>
-        (capabilityWorker ? await capabilityWorker.runOnce() : null) ??
-        generationWorker.runOnce(`generation-worker:${process.pid}`),
-      runDirector: () =>
-        directorWorker
-          ? directorWorker.processNext(`storyboard-director-worker:${process.pid}`)
-          : Promise.resolve(null),
+      runGeneration: () => generationWorker.runOnce(),
       onResult: (operation, result) =>
         process.stdout.write(
-          `${JSON.stringify({ operation, result: result.status ?? "completed" })}\n`,
+          `${JSON.stringify({ operation, result: (result as { state?: string; status?: string }).state ?? (result as { status?: string }).status ?? "completed" })}\n`,
         ),
       onError: (error) =>
         process.stderr.write(
@@ -183,7 +87,7 @@ async function main() {
         ),
     });
   } finally {
-    await closeMcp?.();
+    await client.close();
     await prisma.$disconnect();
   }
 }

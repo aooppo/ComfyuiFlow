@@ -2,13 +2,8 @@ export interface WorkerLoopOptions {
   once: boolean;
   pollIntervalMs: number;
   shouldStop: () => boolean;
-  runAnalysis: () => Promise<unknown | null>;
   runGeneration: () => Promise<unknown | null>;
-  runDirector: () => Promise<unknown | null>;
-  onResult: (
-    operation: "asset_understanding_worker" | "generation_worker" | "storyboard_director_worker",
-    result: any,
-  ) => void;
+  onResult: (operation: "generation_worker", result: unknown) => void;
   onError: (error: unknown) => void;
   wait?: (milliseconds: number) => Promise<void>;
 }
@@ -23,12 +18,8 @@ export async function runWorkerLoop(options: WorkerLoopOptions) {
     options.wait ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
   do {
     try {
-      const analysis = await options.runAnalysis();
-      if (analysis) options.onResult("asset_understanding_worker", analysis);
       const generation = await options.runGeneration();
       if (generation) options.onResult("generation_worker", generation);
-      const director = await options.runDirector();
-      if (director) options.onResult("storyboard_director_worker", director);
     } catch (error) {
       options.onError(error);
     }

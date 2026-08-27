@@ -1,5 +1,8 @@
 # Verification: Simplified Gates and Capability-Driven Workflow
 
+> **Historical evidence — superseded by Feature 017 (2026-08-27).** Preserve this record without
+> deletion. It does not validate Feature 017's canonical mainline or any LIVE execution.
+
 ## Baseline Audit - 2026-08-26
 
 - Authoritative worktree: `/Users/tj/Documents/ChatGPT/ComfyuiFlow-phase14`.

@@ -1,11 +1,23 @@
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
-import {
-  ArtifactReferenceSchema,
-  JobStatusResultSchema,
-  type ArtifactReference,
-  type JobStatusResult,
-} from "@comfyuiflow/contracts";
+
+export interface ArtifactReference {
+  filename: string;
+  subfolder: string;
+  type: string;
+  nodeId: string;
+  mediaKey: string;
+}
+export interface JobStatusResult {
+  promptId: string;
+  status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "FAILED" | "CANCELLED" | "UNKNOWN";
+  outputCount: number;
+  artifacts: ArtifactReference[];
+  createTime?: unknown;
+  executionStartTime?: unknown;
+  executionEndTime?: unknown;
+  error?: unknown;
+}
 
 export class ComfyUiHttpError extends Error {
   constructor(
@@ -23,13 +35,11 @@ export interface ComfyUiClientOptions {
   comfyOrgApiKey?: string;
   comfyOrgAuthToken?: string;
 }
-
 export interface StagedInput {
   name: string;
   subfolder: string;
   type: "input";
 }
-
 export interface SubmitResult {
   promptId: string;
   queueNumber: number;
@@ -39,78 +49,44 @@ export interface SubmitResult {
 export class ComfyUiClient {
   private readonly timeoutMs: number;
   private readonly fetchImplementation: typeof fetch;
-  private readonly comfyOrgApiKey: string | undefined;
-  private readonly comfyOrgAuthToken: string | undefined;
-
   constructor(
     readonly baseUrl: string,
-    options: ComfyUiClientOptions = {},
+    private readonly options: ComfyUiClientOptions = {},
   ) {
     this.timeoutMs = options.timeoutMs ?? 3_000;
     this.fetchImplementation = options.fetch ?? fetch;
-    this.comfyOrgApiKey = options.comfyOrgApiKey;
-    this.comfyOrgAuthToken = options.comfyOrgAuthToken;
   }
-
-  hasComfyOrgCredential(): boolean {
-    return Boolean(this.comfyOrgAuthToken || this.comfyOrgApiKey);
+  hasComfyOrgCredential() {
+    return Boolean(this.options.comfyOrgAuthToken || this.options.comfyOrgApiKey);
   }
-
-  private async request(path: string, init: RequestInit = {}): Promise<Response> {
-    const signal = AbortSignal.timeout(this.timeoutMs);
+  private async request(path: string, init: RequestInit = {}) {
     try {
-      return await this.fetchImplementation(`${this.baseUrl}${path}`, { ...init, signal });
+      return await this.fetchImplementation(`${this.baseUrl}${path}`, {
+        ...init,
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
     } catch (error) {
       throw new ComfyUiHttpError(
         `ComfyUI request failed: ${error instanceof Error ? error.name : "transport error"}`,
       );
     }
   }
-
-  private async json(path: string, init: RequestInit = {}): Promise<unknown> {
+  private async json(path: string, init: RequestInit = {}) {
     const response = await this.request(path, init);
-    if (!response.ok) {
+    if (!response.ok)
       throw new ComfyUiHttpError(
         `ComfyUI returned HTTP ${response.status}`,
         response.status,
         response.status === 400 ? "PROVIDER_VALIDATION" : "TRANSPORT",
       );
-    }
     return response.json();
   }
-
-  async getSystemStats(): Promise<Record<string, unknown>> {
-    return (await this.json("/system_stats")) as Record<string, unknown>;
-  }
-
   async getObjectInfo(): Promise<Record<string, unknown>> {
     return (await this.json("/object_info")) as Record<string, unknown>;
   }
-
-  async listModels(folder: string): Promise<string[]> {
-    const value = await this.json(`/models/${encodeURIComponent(folder)}`);
-    return Array.isArray(value)
-      ? value.filter((item): item is string => typeof item === "string")
-      : [];
-  }
-
-  async getQueue(): Promise<{ running: string[]; pending: string[] }> {
-    const value = (await this.json("/queue")) as Record<string, unknown>;
-    const ids = (items: unknown): string[] =>
-      Array.isArray(items)
-        ? items
-            .map((item) =>
-              Array.isArray(item) && typeof item[1] === "string" ? item[1] : undefined,
-            )
-            .filter((item): item is string => Boolean(item))
-        : [];
-    return { running: ids(value.queue_running), pending: ids(value.queue_pending) };
-  }
-
   async stageInput(path: string): Promise<StagedInput> {
-    const bytes = await readFile(path);
     const form = new FormData();
-    form.append("image", new Blob([new Uint8Array(bytes)]), basename(path));
+    form.append("image", new Blob([new Uint8Array(await readFile(path))]), basename(path));
     form.append("type", "input");
     form.append("subfolder", "comfyuiflow/staged");
     form.append("overwrite", "false");
@@ -118,32 +94,32 @@ export class ComfyUiClient {
       string,
       unknown
     >;
-    if (typeof value.name !== "string" || typeof value.subfolder !== "string") {
+    if (typeof value.name !== "string" || typeof value.subfolder !== "string")
       throw new ComfyUiHttpError("ComfyUI upload response is invalid", 200, "PROVIDER_VALIDATION");
-    }
     return { name: value.name, subfolder: value.subfolder, type: "input" };
   }
-
-  async submitWorkflow(promptId: string, prompt: Record<string, unknown>): Promise<SubmitResult> {
+  async submitWorkflow(
+    promptId: string,
+    prompt: Readonly<Record<string, unknown>>,
+  ): Promise<SubmitResult> {
     const value = (await this.json("/prompt", {
       method: "POST",
-      headers: { "content-type": "application/json", "Comfy-Usage-Source": "comfyuiflow-spike" },
+      headers: { "content-type": "application/json", "Comfy-Usage-Source": "comfyuiflow" },
       body: JSON.stringify({
         prompt_id: promptId,
         prompt,
         extra_data: {
-          ...(this.comfyOrgAuthToken
-            ? { auth_token_comfy_org: this.comfyOrgAuthToken }
-            : this.comfyOrgApiKey
-              ? { api_key_comfy_org: this.comfyOrgApiKey }
+          ...(this.options.comfyOrgAuthToken
+            ? { auth_token_comfy_org: this.options.comfyOrgAuthToken }
+            : this.options.comfyOrgApiKey
+              ? { api_key_comfy_org: this.options.comfyOrgApiKey }
               : {}),
-          comfy_usage_source: "comfyuiflow-spike",
+          comfy_usage_source: "comfyuiflow",
         },
       }),
     })) as Record<string, unknown>;
-    if (value.prompt_id !== promptId || typeof value.number !== "number") {
+    if (value.prompt_id !== promptId || typeof value.number !== "number")
       throw new ComfyUiHttpError("ComfyUI submit response is invalid", 200, "PROVIDER_VALIDATION");
-    }
     return {
       promptId,
       queueNumber: value.number,
@@ -153,21 +129,14 @@ export class ComfyUiClient {
           : {},
     };
   }
-
   async getJobStatus(promptId: string): Promise<JobStatusResult> {
     const response = await this.request(`/api/jobs/${encodeURIComponent(promptId)}`);
-    if (response.status === 404) {
-      return JobStatusResultSchema.parse({
-        promptId,
-        status: "UNKNOWN",
-        outputCount: 0,
-        artifacts: [],
-      });
-    }
+    if (response.status === 404)
+      return { promptId, status: "UNKNOWN", outputCount: 0, artifacts: [] };
     if (!response.ok)
       throw new ComfyUiHttpError(`ComfyUI returned HTTP ${response.status}`, response.status);
     const value = (await response.json()) as Record<string, unknown>;
-    const statusMap: Record<string, JobStatusResult["status"]> = {
+    const map: Record<string, JobStatusResult["status"]> = {
       pending: "PENDING",
       in_progress: "IN_PROGRESS",
       completed: "COMPLETED",
@@ -175,51 +144,35 @@ export class ComfyUiClient {
       cancelled: "CANCELLED",
     };
     const artifacts: ArtifactReference[] = [];
-    const outputs = value.outputs;
-    if (typeof outputs === "object" && outputs !== null) {
-      for (const [nodeId, nodeValue] of Object.entries(outputs as Record<string, unknown>)) {
-        if (typeof nodeValue !== "object" || nodeValue === null) continue;
-        for (const [mediaKey, items] of Object.entries(nodeValue as Record<string, unknown>)) {
-          if (!Array.isArray(items)) continue;
-          for (const item of items) {
-            const parsed = ArtifactReferenceSchema.safeParse({
-              ...(typeof item === "object" && item !== null ? item : {}),
-              nodeId,
-              mediaKey,
-            });
-            if (parsed.success) artifacts.push(parsed.data);
-          }
-        }
-      }
-    }
-    return JobStatusResultSchema.parse({
+    if (value.outputs && typeof value.outputs === "object")
+      for (const [nodeId, node] of Object.entries(value.outputs as Record<string, unknown>))
+        if (node && typeof node === "object")
+          for (const [mediaKey, items] of Object.entries(node as Record<string, unknown>))
+            if (Array.isArray(items))
+              for (const item of items) {
+                const x = item as Record<string, unknown>;
+                if (
+                  typeof x.filename === "string" &&
+                  typeof x.subfolder === "string" &&
+                  typeof x.type === "string"
+                )
+                  artifacts.push({
+                    filename: x.filename,
+                    subfolder: x.subfolder,
+                    type: x.type,
+                    nodeId,
+                    mediaKey,
+                  });
+              }
+    return {
       promptId,
-      status: statusMap[String(value.status)] ?? "UNKNOWN",
+      status: map[String(value.status)] ?? "UNKNOWN",
+      outputCount: typeof value.outputs_count === "number" ? value.outputs_count : artifacts.length,
+      artifacts,
       createTime: value.create_time,
       executionStartTime: value.execution_start_time,
       executionEndTime: value.execution_end_time,
-      outputCount: typeof value.outputs_count === "number" ? value.outputs_count : artifacts.length,
       error: value.execution_error,
-      artifacts,
-    });
-  }
-
-  async cancelJob(promptId: string): Promise<boolean> {
-    const value = (await this.json(`/api/jobs/${encodeURIComponent(promptId)}/cancel`, {
-      method: "POST",
-    })) as Record<string, unknown>;
-    return value.cancelled === true;
-  }
-
-  async downloadArtifact(reference: ArtifactReference): Promise<Response> {
-    const query = new URLSearchParams({
-      filename: reference.filename,
-      subfolder: reference.subfolder,
-      type: reference.type,
-    });
-    const response = await this.request(`/view?${query.toString()}`);
-    if (!response.ok)
-      throw new ComfyUiHttpError(`ComfyUI returned HTTP ${response.status}`, response.status);
-    return response;
+    };
   }
 }

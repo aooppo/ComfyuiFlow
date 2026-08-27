@@ -1,5 +1,5 @@
-import { ProjectLibrary } from "../components/project-library";
+import { MainlineWorkspace } from "../components/mainline-workspace";
 
 export default function HomePage() {
-  return <ProjectLibrary />;
+  return <MainlineWorkspace />;
 }

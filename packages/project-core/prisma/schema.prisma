@@ -18,36 +18,6 @@ enum StoryboardStatus {
   ARCHIVED
 }
 
-enum TargetAspectRatio {
-  PORTRAIT_9_16
-  LANDSCAPE_16_9
-  SQUARE_1_1
-  PORTRAIT_4_5
-}
-
-enum VerificationStatus {
-  PRESERVED
-  VERIFIED
-  INVALID
-}
-
-enum MediaType {
-  IMAGE
-  VIDEO
-  AUDIO
-}
-
-enum AssetRole {
-  SCENE
-  PRODUCT
-  CHARACTER_FULL_BODY
-  CHARACTER_FACE
-  CHARACTER_REAR_SIDE
-  PROP
-  AUDIO
-  OTHER
-}
-
 enum AssetStatus {
   PRESERVED
   READY
@@ -55,2818 +25,371 @@ enum AssetStatus {
   REMOVED
 }
 
-enum ImportOutcome {
-  IMPORTED
-  DUPLICATE
-  REJECTED
-  FAILED
-}
-
-enum ImportAttemptStatus {
-  PROCESSING
-  TERMINAL
-}
-
-enum ImportBatchStatus {
-  PROCESSING
+enum GenerationAttemptState {
+  QUEUED
+  LEASED
+  SUBMITTING
+  SUBMITTED
+  RECONCILING
   COMPLETED
-  COMPLETED_WITH_ERRORS
   FAILED
+  AMBIGUOUS
+  CANCELLED
 }
 
-enum ProbeStatus {
-  PASS
-  FAIL
-}
-
-enum ActivityType {
-  PROJECT_CREATED
-  PROJECT_UPDATED
-  PROJECT_ARCHIVED
-  PROJECT_RESTORED
-  ASSET_IMPORTED
-  ASSET_UPDATED
-  ASSET_REMOVED
-  ASSET_REVALIDATED
-  PRODUCTION_ASSET_CREATED
-  PRODUCTION_ASSET_PUBLISHED
-  CHARACTER_STATE_PUBLISHED
-  ASSET_VERSION_FILE_BOUND
-  UNDERSTANDING_APPLIED
-}
-
-enum ProductionAssetType {
-  CHARACTER
-  OUTFIT
-  PROP
-  SCENE
-  VOICE
-  LORA
-  HAIR
-  MAKEUP
-  ACCESSORY
-  OTHER
-}
-
-enum ProductionAssetStatus {
+enum AuthorizationState {
   ACTIVE
-  INACTIVE
-  ARCHIVED
-}
-
-enum ProductionAssetVersionStatus {
-  DRAFT
-  ACTIVE
-  RETIRED
-}
-
-enum ReferenceUsage {
-  IDENTITY
-  FACE
-  FULL_BODY
-  OUTFIT_DETAIL
-  PROP_DETAIL
-  SCENE_STYLE
-  POSE
-  CONTROL
-  TRAINING_SOURCE
-}
-
-enum Viewpoint {
-  FRONT
-  FRONT_THREE_QUARTER
-  SIDE
-  REAR_THREE_QUARTER
-  REAR
-  TOP
-  LOW
-  DETAIL
-  UNSPECIFIED
-}
-
-enum ShotScale {
-  EXTREME_CLOSE_UP
-  CLOSE_UP
-  MEDIUM_CLOSE_UP
-  MEDIUM
-  MEDIUM_FULL
-  FULL
-  WIDE
-  EXTREME_WIDE
-  UNSPECIFIED
-}
-
-enum BindingApprovalStatus {
-  PENDING
-  ACCEPTED
-  REJECTED
-}
-
-enum BindingSourceType {
-  OWNER
-  MIGRATION
-  UNDERSTANDING_REVISION
-}
-
-enum BindingStatus {
-  ACTIVE
-  INACTIVE
-}
-
-enum AssetRelationType {
-  DEFAULT_VOICE
-  IDENTITY_LORA
-  REQUIRES
-  COMPATIBLE_WITH
-  PART_OF
-  DERIVED_FROM
-}
-
-enum RelationStatus {
-  ACTIVE
-  INACTIVE
-}
-
-enum CharacterStateComponentSlot {
-  OUTFIT
-  HAIR
-  MAKEUP
-  ACCESSORY
-}
-
-enum AnalysisGrantStatus {
-  CREATED
   CONSUMED
   EXPIRED
-}
-
-enum AnalysisRunStatus {
-  QUEUED
-  RUNNING
-  COMPLETED
-  FAILED
-  AMBIGUOUS
-}
-
-enum ProviderAttemptStatus {
-  STARTED
-  SUCCEEDED
-  FAILED
-  AMBIGUOUS
-}
-
-enum UnderstandingAuthorType {
-  MACHINE
-  OWNER
-}
-
-enum UnderstandingReviewDecision {
-  ACCEPTED
-  REJECTED
-}
-
-enum UnderstandingApplicationTarget {
-  PRODUCTION_ASSET_DRAFT
-  ASSET_VERSION_FILE_DRAFT
-}
-
-enum StoryboardVersionSource {
-  OWNER
-  FAKE_DIRECTOR
-  AI_DIRECTOR
-}
-
-enum StoryboardDirectorRunStatus {
-  QUEUED
-  RUNNING
-  COMPLETED
-  FAILED
-  AMBIGUOUS
-}
-
-enum StoryboardDirectorAttemptStatus {
-  STARTED
-  SUCCEEDED
-  FAILED
-  AMBIGUOUS
-}
-
-enum StoryboardDirectorProposalDecisionType {
-  REJECTED
-  ADOPTED
-}
-
-enum StoryboardDecisionType {
-  APPROVED
-  REVOKED
-}
-
-enum GenerationPlanVersionSource {
-  DETERMINISTIC_PLANNER
-  OWNER
-}
-
-enum GenerationPlanDecisionType {
-  APPROVED
-  REVOKED
-}
-
-enum GenerationBatchStatus {
-  QUEUED
-  RUNNING
-  PAUSED
-  AWAITING_HUMAN_QA
-  COMPLETED
   CANCELLED
 }
 
-enum GenerationJobStatus {
-  QUEUED
-  RUNNING
-  SUBMITTED
-  AMBIGUOUS
-  TECHNICAL_FAILED
-  AWAITING_HUMAN_QA
-  QA_PASS
-  QA_FAIL
-  CANCELLED
-}
-
-enum ExecutionOperation {
-  GENERATION_SUBMIT
-  AI_QA_REVIEW
-}
-
-enum GeneratedArtifactStatus {
-  RETAINED
-  TECHNICALLY_VALID
-  TECHNICALLY_INVALID
-}
-
-enum TechnicalCheckStatus {
-  PASS
-  FAIL
-}
-
-enum ArtifactReviewFrameRole {
-  FIRST
-  MIDDLE
-  FINAL
-}
-
-enum AiQaRunStatus {
-  RUNNING
-  COMPLETED
-  FAILED
-  AMBIGUOUS
-}
-
-enum QaAdvisoryStatus {
-  PASS
-  WARN
-  FAIL
-  NOT_ASSESSABLE
-}
-
-enum HumanQaDecisionType {
+enum OwnerDecisionType {
   PASS
   FAIL
   RISK_ACCEPTED
 }
 
-enum ContinuitySubjectKind {
-  ENVIRONMENT
-  CHARACTER
-  PRODUCT
-  PROP
-  CAMERA
-  VISUAL_STYLE
-}
-
-enum ContinuityPolicy {
-  WHOLE_FILM_HOLD
-  SHOT_CHANGE
-  UNIMPORTANT
-}
-
-enum ContinuityImportance {
-  HARD
-  SOFT
-}
-
-enum ContinuityDecisionType {
-  APPROVED
-  REJECTED
-  REVOKED
-}
-
-enum KeyframePlanStatus {
-  PLANNED
-  RUNNING
-  PAUSED
-  AWAITING_REVIEW
-  APPROVED
-  REJECTED
-}
-
-enum KeyframeAttemptStatus {
-  STARTED
-  SUCCEEDED
-  FAILED
-  AMBIGUOUS
-}
-
-enum KeyframeDecisionType {
-  APPROVED
-  REJECTED
-}
-
-enum VideoControlTier {
-  ORDINARY_REFERENCE
-  LOCKED_START
-  LOCKED_START_END
-}
-
-enum GenerationExecutorType {
-  COMFYUI_GRAPH
-  DIRECT_PROVIDER_API
-}
-
-enum GenerationImplementationStatus {
-  DISCOVERED
-  TRIAL
-  READY
-  BLOCKED
-  RETIRED
-}
-
-enum GenerationEvidenceSourceType {
-  REAL_GENERATION_JOB
-  LEGACY_REAL_ARTIFACT
-  STATIC_VALIDATION
-  READINESS
-}
-
-enum GenerationTechnicalResult {
-  TECHNICALLY_VALID
-  TECHNICAL_FAILED
-  AMBIGUOUS
-}
-
-enum ShotExecutionPlanLifecycle {
-  DRAFT
-  FROZEN
-  INVALIDATED
-  SUPERSEDED
-}
-
-enum ShotPlanningOutcome {
-  READY
-  TRIAL
-  BLOCKED
-  WAITING_FOR_UPSTREAM_REPAIR
-}
-
-enum GenerationExecutionDisposition {
-  EXECUTE
-  REUSE_ARTIFACT
-}
-
-enum GenerationEngineVersion {
-  LEGACY_V1
-  WORKFLOW_AGENT_V1
-}
-
-enum QaContinuationMode {
-  AUTO_CONTINUE_AFTER_QA_PASS
-  PAUSE_AFTER_EACH_SHOT
-}
-
-enum StoryboardDirectorRunKind {
-  STORYBOARD
-  SHOT_REPAIR
-}
-
-enum RepairAction {
-  CHANGE_IMPLEMENTATION
-  RELAX_REQUIREMENT
-  REWRITE_SHOT
-  SPLIT_SHOT
-  REPLACE_ASSET
-}
-
-enum CapabilityImplementationLifecycle {
-  DISCOVERED
-  TRIAL
-  READY
-  DEPRECATED
-  DISABLED
-}
-
-enum CapabilityDiscoveryStatus {
-  DISCOVERED
-  REVIEW_REJECTED
-  PUBLISHED
-}
-
-enum CapabilityEvidenceKind {
-  FIXTURE
-  CONTRACT
-  RUNTIME_READINESS
-  AUTHORIZED_REAL_EXECUTION
-}
-
-enum CapabilityEvidenceOutcome {
-  PASS
-  FAIL
-  AMBIGUOUS
-}
-
-enum GenerationPlanV3State {
-  DRAFT
-  VALID
-  BLOCKED
-  AUTHORIZED
-  SUBMITTED
-  COMPLETED
-  FAILED
-  CANCELLED
-}
-
-enum GenerationAuthorizationV3State {
-  ACTIVE
-  CONSUMED
-  EXPIRED
-  CANCELLED
-}
-
-enum GenerationBatchV3State {
-  QUEUED
-  RUNNING
-  COMPLETED
-  FAILED
-  CANCELLED
-}
-
-enum GenerationBatchTargetV3State {
-  QUEUED
-  RUNNING
-  SUBMITTED
-  COMPLETED
-  FAILED
-  AMBIGUOUS
-  CANCELLED
-}
-
 model Project {
-  id                                  String                               @id @default(uuid()) @db.Uuid
-  name                                String                               @db.VarChar(120)
-  brief                               String?
-  targetAspectRatio                   TargetAspectRatio
-  status                              ProjectStatus                        @default(ACTIVE)
-  archivedAt                          DateTime?
-  createdAt                           DateTime                             @default(now())
-  updatedAt                           DateTime                             @updatedAt
-  generationDefaultsJson              Json?
-  generationPolicyJson                Json?
-  continuationMode                    QaContinuationMode                   @default(AUTO_CONTINUE_AFTER_QA_PASS)
-  maximumGenerationCostMicros         BigInt?
-  generationCostCurrency              String?                              @db.Char(3)
-  assets                              Asset[]
-  importAttempts                      AssetImportAttempt[]
-  importBatches                       AssetImportBatch[]
-  activities                          ProjectActivity[]
-  productionAssets                    ProductionAsset[]
-  characterProfiles                   CharacterProfile[]
-  analysisManifests                   AssetUnderstandingManifest[]
-  analysisRuns                        AssetUnderstandingRun[]
-  storyboards                         Storyboard[]
-  storyboardVersions                  StoryboardVersion[]
-  storyboardRuns                      StoryboardDirectorRun[]
-  storyboardDirectorReferences        StoryboardDirectorInputReference[]
-  storyboardDirectorAuthorizations    StoryboardDirectorAuthorization[]
-  storyboardDirectorAttempts          StoryboardDirectorAttempt[]
-  storyboardDirectorProposals         StoryboardDirectorProposal[]
-  storyboardDirectorProposalDecisions StoryboardDirectorProposalDecision[]
-  shotAssetBindings                   ShotAssetBinding[]
-  resolutionManifests                 AssetResolutionManifest[]
-  storyboardDecisions                 StoryboardDecision[]
-  generationPlans                     GenerationPlan[]
-  generationPlanVersions              GenerationPlanVersion[]
-  generationSpecs                     GenerationSpec[]
-  generationSpecReferences            GenerationSpecReference[]
-  generationPlanDecisions             GenerationPlanDecision[]
-  generationBatches                   GenerationBatch[]
-  generationBatchTargets              GenerationBatchTarget[]
-  executionAuthorizations             ExecutionAuthorization[]
-  authorizationConsumptions           AuthorizationConsumption[]
-  generationJobs                      GenerationJob[]
-  generatedArtifacts                  GeneratedArtifact[]
-  aiQaRuns                            AiQaRun[]
-  humanQaDecisions                    HumanQaDecision[]
-  generationPlanAssemblies            GenerationPlanAssembly[]
-  generationAssemblySources           GenerationPlanAssemblySource[]
-  continuityProfiles                  ContinuityProfile[]
-  continuityProfileVersions           ContinuityProfileVersion[]
-  continuitySubjects                  ContinuitySubject[]
-  continuityDecisions                 ContinuityDecision[]
-  keyframePlans                       KeyframePlanVersion[]
-  keyframeAuthorizations              KeyframeAuthorization[]
-  keyframeAttempts                    KeyframeAttempt[]
-  keyframeArtifacts                   KeyframeArtifact[]
-  keyframeDecisions                   KeyframeDecision[]
-  generationPlanDrafts                GenerationPlanDraft[]
-  generationDraftSources              GenerationPlanDraftSource[]
-  shotExecutionPlans                  ShotExecutionPlan[]
-  trialScopeApprovals                 TrialScopeApproval[]
-
-  @@index([status, updatedAt(sort: Desc)])
+  id              String                      @id @default(uuid()) @db.Uuid
+  name            String                      @db.VarChar(240)
+  status          ProjectStatus               @default(ACTIVE)
+  createdAt       DateTime                    @default(now()) @db.Timestamptz(6)
+  assets          Asset[]
+  storyboards     Storyboard[]
+  requirements    ShotGenerationRequirement[]
+  generationPlans GenerationPlan[]
+  assemblies      GenerationAssembly[]
 }
 
-model StoredObject {
-  id                 String             @id @default(uuid()) @db.Uuid
-  sha256             String             @unique @db.Char(64)
-  byteSize           BigInt
-  detectedMimeType   String             @db.VarChar(120)
-  storageKey         String             @unique @db.VarChar(255)
-  verificationStatus VerificationStatus @default(PRESERVED)
-  createdAt          DateTime           @default(now())
-  verifiedAt         DateTime?
-  assets             Asset[]
-  probeResults       MediaProbeResult[]
-}
-
-model MediaProbeResult {
-  id             String       @id @default(uuid()) @db.Uuid
-  storedObjectId String       @db.Uuid
-  ordinal        Int
-  probeVersion   String       @db.VarChar(80)
-  status         ProbeStatus
-  mediaType      MediaType
-  container      String?      @db.VarChar(80)
-  codecFactsJson Json?
-  width          Int?
-  height         Int?
-  durationMs     Int?
-  streamCount    Int?
-  safeResultCode String       @db.VarChar(80)
-  probedAt       DateTime     @default(now())
-  storedObject   StoredObject @relation(fields: [storedObjectId], references: [id], onDelete: Restrict)
-
-  @@unique([storedObjectId, ordinal])
-  @@index([storedObjectId, probedAt(sort: Desc)])
-}
-
-// Physical table remains Asset for Phase 1 compatibility. Domain/API calls this ProjectAsset.
 model Asset {
-  id                       String                           @id @default(uuid()) @db.Uuid
-  projectId                String                           @db.Uuid
-  storedObjectId           String                           @db.Uuid
-  originalFilename         String                           @db.VarChar(255)
-  displayName              String                           @db.VarChar(120)
-  mediaType                MediaType
-  role                     AssetRole
-  notes                    String?
-  status                   AssetStatus                      @default(PRESERVED)
-  width                    Int?
-  height                   Int?
-  durationMs               Int?
-  inspectionWarning        String?                          @db.VarChar(120)
-  removedAt                DateTime?
-  createdAt                DateTime                         @default(now())
-  updatedAt                DateTime                         @updatedAt
-  project                  Project                          @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  storedObject             StoredObject                     @relation(fields: [storedObjectId], references: [id], onDelete: Restrict)
-  importAttempts           AssetImportAttempt[]
-  activities               ProjectActivity[]
-  versionFiles             AssetVersionFile[]
-  manifestItems            AssetUnderstandingManifestItem[]
-  revisions                AssetUnderstandingRevision[]
-  shotAssetBindings        ShotAssetBinding[]
-  generationSpecReferences GenerationSpecReference[]
+  id         String      @id @default(uuid()) @db.Uuid
+  projectId  String      @db.Uuid
+  storageKey String      @unique @db.VarChar(500)
+  sha256     String      @db.Char(64)
+  mediaType  String      @db.VarChar(40)
+  status     AssetStatus @default(PRESERVED)
+  createdAt  DateTime    @default(now()) @db.Timestamptz(6)
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Restrict)
 
-  @@unique([projectId, storedObjectId])
-  @@unique([projectId, id])
-  @@index([projectId, status, createdAt(sort: Desc)])
-  @@index([projectId, status, mediaType])
-  @@index([projectId, status, role])
-  @@index([projectId, displayName])
-}
-
-model AssetImportBatch {
-  id                 String               @id @default(uuid()) @db.Uuid
-  projectId          String               @db.Uuid
-  idempotencyKey     String               @db.VarChar(120)
-  requestedItemCount Int
-  status             ImportBatchStatus    @default(PROCESSING)
-  createdAt          DateTime             @default(now())
-  completedAt        DateTime?
-  project            Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  attempts           AssetImportAttempt[]
-
-  @@unique([projectId, idempotencyKey])
-  @@unique([projectId, id])
-  @@index([projectId, createdAt(sort: Desc)])
-}
-
-model AssetImportAttempt {
-  id                String              @id @default(uuid()) @db.Uuid
-  projectId         String              @db.Uuid
-  batchId           String?             @db.Uuid
-  itemIndex         Int?
-  status            ImportAttemptStatus @default(TERMINAL)
-  submittedFilename String              @db.VarChar(255)
-  submittedByteSize BigInt?
-  detectedMimeType  String?             @db.VarChar(120)
-  sha256            String?             @db.Char(64)
-  requestedRole     AssetRole
-  outcome           ImportOutcome
-  resultCode        String              @db.VarChar(80)
-  assetId           String?             @db.Uuid
-  createdAt         DateTime            @default(now())
-  completedAt       DateTime?
-  project           Project             @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  batch             AssetImportBatch?   @relation(fields: [batchId], references: [id], onDelete: Restrict)
-  asset             Asset?              @relation(fields: [assetId], references: [id], onDelete: Restrict)
-
-  @@unique([batchId, itemIndex])
-  @@index([projectId, createdAt(sort: Desc)])
-}
-
-model ProjectActivity {
-  id        String       @id @default(uuid()) @db.Uuid
-  projectId String       @db.Uuid
-  assetId   String?      @db.Uuid
-  type      ActivityType
-  summary   String       @db.VarChar(160)
-  createdAt DateTime     @default(now())
-  project   Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  asset     Asset?       @relation(fields: [assetId], references: [id], onDelete: Restrict)
-
-  @@index([projectId, createdAt(sort: Desc)])
-}
-
-model ProductionAsset {
-  id               String                   @id @default(uuid()) @db.Uuid
-  projectId        String                   @db.Uuid
-  type             ProductionAssetType
-  name             String                   @db.VarChar(120)
-  normalizedName   String                   @db.VarChar(120)
-  slug             String?                  @db.VarChar(120)
-  status           ProductionAssetStatus    @default(ACTIVE)
-  currentVersionId String?                  @db.Uuid
-  rowVersion       Int                      @default(1)
-  createdAt        DateTime                 @default(now())
-  updatedAt        DateTime                 @updatedAt
-  project          Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  versions         ProductionAssetVersion[] @relation("ProductionAssetVersions")
-  currentVersion   ProductionAssetVersion?  @relation("ProductionAssetCurrentVersion", fields: [currentVersionId], references: [id], onDelete: Restrict)
-  characterProfile CharacterProfile?
-
-  @@unique([projectId, type, normalizedName])
-  @@unique([projectId, id])
-  @@index([projectId, type, status, name])
-}
-
-model ProductionAssetVersion {
-  id                       String                       @id @default(uuid()) @db.Uuid
-  projectId                String                       @db.Uuid
-  productionAssetId        String                       @db.Uuid
-  versionNumber            Int
-  basedOnVersionId         String?                      @db.Uuid
-  status                   ProductionAssetVersionStatus @default(DRAFT)
-  displayName              String                       @db.VarChar(120)
-  description              String?
-  factsJson                Json?
-  sourceType               BindingSourceType            @default(OWNER)
-  sourceRevisionId         String?                      @db.Uuid
-  publishedAt              DateTime?
-  createdAt                DateTime                     @default(now())
-  updatedAt                DateTime                     @updatedAt
-  productionAsset          ProductionAsset              @relation("ProductionAssetVersions", fields: [productionAssetId], references: [id], onDelete: Restrict)
-  basedOnVersion           ProductionAssetVersion?      @relation("ProductionAssetVersionLineage", fields: [basedOnVersionId], references: [id], onDelete: Restrict)
-  derivedVersions          ProductionAssetVersion[]     @relation("ProductionAssetVersionLineage")
-  currentForAsset          ProductionAsset[]            @relation("ProductionAssetCurrentVersion")
-  files                    AssetVersionFile[]
-  fromRelations            ProductionAssetRelation[]    @relation("ProductionAssetRelationFrom")
-  toRelations              ProductionAssetRelation[]    @relation("ProductionAssetRelationTo")
-  characterVersions        CharacterVersion[]
-  stateComponents          CharacterStateComponent[]
-  shotAssetBindings        ShotAssetBinding[]
-  generationSpecReferences GenerationSpecReference[]
-
-  @@unique([productionAssetId, versionNumber])
-  @@unique([projectId, id])
-  @@index([projectId, status])
-}
-
-model AssetVersionFile {
-  id                       String                    @id @default(uuid()) @db.Uuid
-  projectId                String                    @db.Uuid
-  productionAssetVersionId String                    @db.Uuid
-  projectAssetId           String                    @db.Uuid
-  referenceUsage           ReferenceUsage
-  viewpoint                Viewpoint                 @default(UNSPECIFIED)
-  shotScale                ShotScale                 @default(UNSPECIFIED)
-  regionJson               Json?
-  qualityFactsJson         Json?
-  approvalStatus           BindingApprovalStatus     @default(PENDING)
-  isPreferred              Boolean                   @default(false)
-  sourceType               BindingSourceType         @default(OWNER)
-  sourceRevisionId         String?                   @db.Uuid
-  status                   BindingStatus             @default(ACTIVE)
-  createdAt                DateTime                  @default(now())
-  updatedAt                DateTime                  @updatedAt
-  productionAssetVersion   ProductionAssetVersion    @relation(fields: [productionAssetVersionId], references: [id], onDelete: Restrict)
-  projectAsset             Asset                     @relation(fields: [projectAssetId], references: [id], onDelete: Restrict)
-  shotAssetBindings        ShotAssetBinding[]
-  generationSpecReferences GenerationSpecReference[]
-
-  @@unique([productionAssetVersionId, projectAssetId, referenceUsage, viewpoint, shotScale])
-  @@unique([projectId, id])
-  @@index([projectId, referenceUsage, status, approvalStatus])
-  @@index([projectAssetId, status])
-}
-
-model ProductionAssetRelation {
-  id                 String                 @id @default(uuid()) @db.Uuid
-  projectId          String                 @db.Uuid
-  fromAssetVersionId String                 @db.Uuid
-  toAssetVersionId   String                 @db.Uuid
-  relationType       AssetRelationType
-  status             RelationStatus         @default(ACTIVE)
-  sourceType         BindingSourceType      @default(OWNER)
-  sourceRevisionId   String?                @db.Uuid
-  validFrom          DateTime?
-  validTo            DateTime?
-  createdAt          DateTime               @default(now())
-  fromAssetVersion   ProductionAssetVersion @relation("ProductionAssetRelationFrom", fields: [fromAssetVersionId], references: [id], onDelete: Restrict)
-  toAssetVersion     ProductionAssetVersion @relation("ProductionAssetRelationTo", fields: [toAssetVersionId], references: [id], onDelete: Restrict)
-
-  @@unique([fromAssetVersionId, toAssetVersionId, relationType])
-  @@unique([projectId, id])
-  @@index([projectId, status])
-}
-
-model CharacterProfile {
-  id                String             @id @default(uuid()) @db.Uuid
-  projectId         String             @db.Uuid
-  productionAssetId String             @unique @db.Uuid
-  canonicalName     String             @db.VarChar(120)
-  identityNotes     String?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  project           Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  productionAsset   ProductionAsset    @relation(fields: [productionAssetId], references: [id], onDelete: Restrict)
-  versions          CharacterVersion[]
-
-  @@unique([projectId, id])
-  @@index([projectId, canonicalName])
-}
-
-model CharacterVersion {
-  id                       String                       @id @default(uuid()) @db.Uuid
-  projectId                String                       @db.Uuid
-  characterProfileId       String                       @db.Uuid
-  productionAssetVersionId String                       @db.Uuid
-  versionNumber            Int
-  status                   ProductionAssetVersionStatus @default(DRAFT)
-  identityFactsJson        Json?
-  basedOnVersionId         String?                      @db.Uuid
-  publishedAt              DateTime?
-  createdAt                DateTime                     @default(now())
-  updatedAt                DateTime                     @updatedAt
-  characterProfile         CharacterProfile             @relation(fields: [characterProfileId], references: [id], onDelete: Restrict)
-  productionAssetVersion   ProductionAssetVersion       @relation(fields: [productionAssetVersionId], references: [id], onDelete: Restrict)
-  basedOnVersion           CharacterVersion?            @relation("CharacterVersionLineage", fields: [basedOnVersionId], references: [id], onDelete: Restrict)
-  derivedVersions          CharacterVersion[]           @relation("CharacterVersionLineage")
-  stateVersions            CharacterStateVersion[]
-
-  @@unique([characterProfileId, versionNumber])
-  @@unique([projectId, id])
-  @@index([projectId, status])
-}
-
-model CharacterStateVersion {
-  id                       String                       @id @default(uuid()) @db.Uuid
-  projectId                String                       @db.Uuid
-  characterVersionId       String                       @db.Uuid
-  stateKey                 String                       @db.VarChar(80)
-  versionNumber            Int
-  name                     String                       @db.VarChar(120)
-  status                   ProductionAssetVersionStatus @default(DRAFT)
-  description              String?
-  basedOnStateVersionId    String?                      @db.Uuid
-  publishedAt              DateTime?
-  createdAt                DateTime                     @default(now())
-  updatedAt                DateTime                     @updatedAt
-  characterVersion         CharacterVersion             @relation(fields: [characterVersionId], references: [id], onDelete: Restrict)
-  basedOnStateVersion      CharacterStateVersion?       @relation("CharacterStateLineage", fields: [basedOnStateVersionId], references: [id], onDelete: Restrict)
-  derivedStateVersions     CharacterStateVersion[]      @relation("CharacterStateLineage")
-  components               CharacterStateComponent[]
-  shotAssetBindings        ShotAssetBinding[]
-  generationSpecReferences GenerationSpecReference[]
-
-  @@unique([characterVersionId, stateKey, versionNumber])
-  @@unique([projectId, id])
-  @@index([projectId, status])
-}
-
-model CharacterStateComponent {
-  id                      String                      @id @default(uuid()) @db.Uuid
-  projectId               String                      @db.Uuid
-  characterStateVersionId String                      @db.Uuid
-  slotType                CharacterStateComponentSlot
-  componentAssetVersionId String                      @db.Uuid
-  slotKey                 String                      @default("") @db.VarChar(80)
-  sortOrder               Int                         @default(0)
-  required                Boolean                     @default(true)
-  createdAt               DateTime                    @default(now())
-  characterStateVersion   CharacterStateVersion       @relation(fields: [characterStateVersionId], references: [id], onDelete: Restrict)
-  componentAssetVersion   ProductionAssetVersion      @relation(fields: [componentAssetVersionId], references: [id], onDelete: Restrict)
-
-  @@unique([characterStateVersionId, slotType, slotKey])
-  @@unique([projectId, id])
-  @@index([projectId, slotType])
-}
-
-model AssetUnderstandingManifest {
-  id            String                           @id @default(uuid()) @db.Uuid
-  projectId     String                           @db.Uuid
-  manifestHash  String                           @unique @db.Char(64)
-  providerId    String                           @db.VarChar(80)
-  modelId       String                           @db.VarChar(160)
-  taskType      String                           @db.VarChar(80)
-  promptVersion String                           @db.VarChar(80)
-  schemaVersion String                           @db.VarChar(80)
-  maxCalls      Int                              @default(1)
-  assetCount    Int
-  totalByteSize BigInt
-  expiresAt     DateTime
-  createdAt     DateTime                         @default(now())
-  project       Project                          @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  items         AssetUnderstandingManifestItem[]
-  grants        AiCallGrant[]
-  runs          AssetUnderstandingRun[]
-
-  @@unique([projectId, id])
-  @@index([projectId, createdAt(sort: Desc)])
-}
-
-model AssetUnderstandingManifestItem {
-  id         String                     @id @default(uuid()) @db.Uuid
-  manifestId String                     @db.Uuid
-  position   Int
-  slot       String                     @db.VarChar(4)
-  assetId    String                     @db.Uuid
-  sha256     String                     @db.Char(64)
-  byteSize   BigInt
-  mediaType  MediaType
-  manifest   AssetUnderstandingManifest @relation(fields: [manifestId], references: [id], onDelete: Restrict)
-  asset      Asset                      @relation(fields: [assetId], references: [id], onDelete: Restrict)
-
-  @@unique([manifestId, position])
-  @@unique([manifestId, slot])
-  @@unique([manifestId, assetId])
-}
-
-model AiCallGrant {
-  id             String                     @id @default(uuid()) @db.Uuid
-  manifestId     String                     @db.Uuid
-  operation      String                     @db.VarChar(80)
-  providerId     String                     @db.VarChar(80)
-  modelId        String                     @db.VarChar(160)
-  maxCalls       Int                        @default(1)
-  idempotencyKey String                     @unique @db.VarChar(120)
-  status         AnalysisGrantStatus        @default(CREATED)
-  expiresAt      DateTime
-  createdAt      DateTime                   @default(now())
-  consumedAt     DateTime?
-  manifest       AssetUnderstandingManifest @relation(fields: [manifestId], references: [id], onDelete: Restrict)
-  run            AssetUnderstandingRun?
-
-  @@index([status, expiresAt])
-}
-
-model AssetUnderstandingRun {
-  id             String                       @id @default(uuid()) @db.Uuid
-  projectId      String                       @db.Uuid
-  manifestId     String                       @db.Uuid
-  grantId        String                       @unique @db.Uuid
-  idempotencyKey String                       @db.VarChar(120)
-  status         AnalysisRunStatus            @default(QUEUED)
-  resultCode     String?                      @db.VarChar(80)
-  claimedBy      String?                      @db.VarChar(120)
-  leaseExpiresAt DateTime?
-  startedAt      DateTime?
-  finishedAt     DateTime?
-  createdAt      DateTime                     @default(now())
-  project        Project                      @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  manifest       AssetUnderstandingManifest   @relation(fields: [manifestId], references: [id], onDelete: Restrict)
-  grant          AiCallGrant                  @relation(fields: [grantId], references: [id], onDelete: Restrict)
-  attempt        AiProviderAttempt?
-  revisions      AssetUnderstandingRevision[]
-
-  @@unique([projectId, idempotencyKey])
-  @@unique([projectId, id])
-  @@index([status, createdAt])
-  @@index([status, leaseExpiresAt])
-}
-
-model AiProviderAttempt {
-  id               String                       @id @default(uuid()) @db.Uuid
-  runId            String                       @unique @db.Uuid
-  attemptNumber    Int                          @default(1)
-  providerId       String                       @db.VarChar(80)
-  requestedModelId String                       @db.VarChar(160)
-  resolvedModelId  String?                      @db.VarChar(160)
-  status           ProviderAttemptStatus        @default(STARTED)
-  requestHash      String                       @db.Char(64)
-  responseId       String?                      @db.VarChar(255)
-  usageJson        Json?
-  safeErrorCode    String?                      @db.VarChar(80)
-  startedAt        DateTime                     @default(now())
-  finishedAt       DateTime?
-  run              AssetUnderstandingRun        @relation(fields: [runId], references: [id], onDelete: Restrict)
-  revisions        AssetUnderstandingRevision[]
-}
-
-model AssetUnderstandingRevision {
-  id               String                     @id @default(uuid()) @db.Uuid
-  projectAssetId   String                     @db.Uuid
-  runId            String?                    @db.Uuid
-  attemptId        String?                    @db.Uuid
-  sourceRevisionId String?                    @db.Uuid
-  ordinal          Int
-  authorType       UnderstandingAuthorType
-  schemaVersion    String                     @db.VarChar(80)
-  factsJson        Json
-  createdAt        DateTime                   @default(now())
-  projectAsset     Asset                      @relation(fields: [projectAssetId], references: [id], onDelete: Restrict)
-  run              AssetUnderstandingRun?     @relation(fields: [runId], references: [id], onDelete: Restrict)
-  attempt          AiProviderAttempt?         @relation(fields: [attemptId], references: [id], onDelete: Restrict)
-  reviews          UnderstandingReview[]
-  applications     UnderstandingApplication[]
-
-  @@unique([projectAssetId, ordinal])
-  @@unique([runId, projectAssetId])
-  @@index([projectAssetId, ordinal(sort: Desc)])
-}
-
-model UnderstandingReview {
-  id             String                      @id @default(uuid()) @db.Uuid
-  revisionId     String                      @db.Uuid
-  decision       UnderstandingReviewDecision
-  notes          String?
-  idempotencyKey String                      @unique @db.VarChar(120)
-  createdAt      DateTime                    @default(now())
-  revision       AssetUnderstandingRevision  @relation(fields: [revisionId], references: [id], onDelete: Restrict)
-
-  @@index([revisionId, createdAt(sort: Desc)])
-}
-
-model UnderstandingApplication {
-  id             String                         @id @default(uuid()) @db.Uuid
-  revisionId     String                         @db.Uuid
-  targetType     UnderstandingApplicationTarget
-  targetId       String                         @db.Uuid
-  fieldMappings  Json
-  idempotencyKey String                         @unique @db.VarChar(120)
-  createdAt      DateTime                       @default(now())
-  revision       AssetUnderstandingRevision     @relation(fields: [revisionId], references: [id], onDelete: Restrict)
-
-  @@index([revisionId, createdAt(sort: Desc)])
+  @@index([projectId, createdAt])
 }
 
 model Storyboard {
-  id                     String                       @id @default(uuid()) @db.Uuid
-  projectId              String                       @db.Uuid
-  title                  String                       @db.VarChar(120)
-  creativeBrief          String
-  headVersionId          String?                      @unique @db.Uuid
-  approvedVersionId      String?                      @unique @db.Uuid
-  status                 StoryboardStatus             @default(ACTIVE)
-  archivedAt             DateTime?
-  rowVersion             Int                          @default(0)
-  generationDefaultsJson Json?
-  createdAt              DateTime                     @default(now())
-  updatedAt              DateTime                     @updatedAt
-  project                Project                      @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  headVersion            StoryboardVersion?           @relation("StoryboardHead", fields: [headVersionId], references: [id], onDelete: Restrict)
-  approvedVersion        StoryboardVersion?           @relation("StoryboardApproved", fields: [approvedVersionId], references: [id], onDelete: Restrict)
-  versions               StoryboardVersion[]          @relation("StoryboardVersions")
-  runs                   StoryboardDirectorRun[]
-  directorProposals      StoryboardDirectorProposal[]
-  decisions              StoryboardDecision[]
-  generationPlans        GenerationPlan[]
-  continuityProfile      ContinuityProfile?
-  trialScopeApprovals    TrialScopeApproval[]
+  id        String              @id @default(uuid()) @db.Uuid
+  projectId String              @db.Uuid
+  title     String              @db.VarChar(240)
+  status    StoryboardStatus    @default(ACTIVE)
+  createdAt DateTime            @default(now()) @db.Timestamptz(6)
+  project   Project             @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  versions  StoryboardVersion[]
 
-  @@unique([projectId, id])
-  @@index([projectId, status, updatedAt(sort: Desc)])
-  @@index([projectId, updatedAt(sort: Desc)])
-}
-
-model StoryboardDirectorRun {
-  id                        String                             @id @default(uuid()) @db.Uuid
-  projectId                 String                             @db.Uuid
-  storyboardId              String                             @db.Uuid
-  providerId                String                             @db.VarChar(80)
-  requestedModelId          String                             @db.VarChar(160)
-  resolvedModelId           String?                            @db.VarChar(160)
-  contractVersion           String                             @db.VarChar(80)
-  promptTemplateVersion     String                             @db.VarChar(80)
-  requestHash               String                             @db.Char(64)
-  responseId                String?                            @db.VarChar(255)
-  status                    StoryboardDirectorRunStatus
-  safeResultCode            String                             @db.VarChar(80)
-  providerCallCount         Int                                @default(0)
-  generatedVersionId        String?                            @unique @db.Uuid
-  maxShotCount              Int?
-  headVersionId             String?                            @db.Uuid
-  headContentHash           String?                            @db.Char(64)
-  scopeHash                 String?                            @db.Char(64)
-  priceSnapshotHash         String?                            @db.Char(64)
-  billingChannel            String?                            @db.VarChar(120)
-  maxCostUsd                Decimal?                           @db.Decimal(12, 6)
-  priceEffectiveAt          DateTime?
-  priceExpiresAt            DateTime?
-  idempotencyKey            String?                            @db.VarChar(160)
-  leaseOwner                String?                            @db.VarChar(120)
-  leaseExpiresAt            DateTime?
-  runKind                   StoryboardDirectorRunKind          @default(STORYBOARD)
-  sourceStoryboardVersionId String?                            @db.Uuid
-  blockedShotKey            String?                            @db.Uuid
-  repairAction              RepairAction?
-  impactHash                String?                            @db.Char(64)
-  createdAt                 DateTime                           @default(now())
-  finishedAt                DateTime?
-  project                   Project                            @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  storyboard                Storyboard                         @relation(fields: [storyboardId], references: [id], onDelete: Restrict)
-  generatedVersion          StoryboardVersion?                 @relation("StoryboardRunVersion", fields: [generatedVersionId], references: [id], onDelete: Restrict)
-  inputReferences           StoryboardDirectorInputReference[]
-  authorization             StoryboardDirectorAuthorization?
-  attempts                  StoryboardDirectorAttempt[]
-  proposal                  StoryboardDirectorProposal?
-
-  @@unique([projectId, id])
-  @@unique([storyboardId, idempotencyKey])
-  @@index([storyboardId, createdAt(sort: Desc)])
+  @@index([projectId, createdAt])
 }
 
 model StoryboardVersion {
-  id                        String                      @id @default(uuid()) @db.Uuid
-  projectId                 String                      @db.Uuid
-  storyboardId              String                      @db.Uuid
-  versionNumber             Int
-  parentVersionId           String?                     @db.Uuid
-  source                    StoryboardVersionSource
-  creativeBrief             String
-  contractVersion           String                      @db.VarChar(80)
-  contentHash               String                      @db.Char(64)
-  createdAt                 DateTime                    @default(now())
-  project                   Project                     @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  storyboard                Storyboard                  @relation("StoryboardVersions", fields: [storyboardId], references: [id], onDelete: Restrict)
-  parentVersion             StoryboardVersion?          @relation("StoryboardVersionLineage", fields: [parentVersionId], references: [id], onDelete: Restrict)
-  childVersions             StoryboardVersion[]         @relation("StoryboardVersionLineage")
-  headFor                   Storyboard?                 @relation("StoryboardHead")
-  approvedFor               Storyboard?                 @relation("StoryboardApproved")
-  sourceRun                 StoryboardDirectorRun?      @relation("StoryboardRunVersion")
-  sourceProposalId          String?                     @unique @db.Uuid
-  sourceProposal            StoryboardDirectorProposal? @relation("StoryboardProposalVersion", fields: [sourceProposalId], references: [id], onDelete: Restrict)
-  shots                     StoryboardShot[]
-  manifest                  AssetResolutionManifest?
-  decisions                 StoryboardDecision[]
-  generationPlans           GenerationPlan[]
-  continuityProfileVersions ContinuityProfileVersion[]
-  trialScopeApprovals       TrialScopeApproval[]
+  id           String                      @id @default(uuid()) @db.Uuid
+  storyboardId String                      @db.Uuid
+  ordinal      Int
+  payloadJson  Json
+  digest       String                      @db.Char(64)
+  createdAt    DateTime                    @default(now()) @db.Timestamptz(6)
+  storyboard   Storyboard                  @relation(fields: [storyboardId], references: [id], onDelete: Restrict)
+  shots        StoryboardShot[]
+  requirements ShotGenerationRequirement[]
 
-  @@unique([storyboardId, versionNumber])
-  @@unique([storyboardId, id])
-  @@unique([projectId, id])
-  @@index([storyboardId, createdAt(sort: Desc)])
-}
-
-model StoryboardDirectorInputReference {
-  id                       String                @id @default(uuid()) @db.Uuid
-  projectId                String                @db.Uuid
-  runId                    String                @db.Uuid
-  ordinal                  Int
-  alias                    String                @db.VarChar(64)
-  kind                     String                @db.VarChar(40)
-  displayName              String                @db.VarChar(120)
-  productionAssetId        String                @db.Uuid
-  productionAssetVersionId String                @db.Uuid
-  assetVersionFileId       String                @db.Uuid
-  projectAssetId           String                @db.Uuid
-  semanticFactsJson        Json
-  sha256                   String                @db.Char(64)
-  byteSize                 BigInt
-  createdAt                DateTime              @default(now())
-  project                  Project               @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  run                      StoryboardDirectorRun @relation(fields: [runId], references: [id], onDelete: Restrict)
-
-  @@unique([runId, ordinal])
-  @@unique([runId, alias])
-  @@index([projectId, productionAssetVersionId])
-}
-
-model StoryboardDirectorAuthorization {
-  id         String                @id @default(uuid()) @db.Uuid
-  projectId  String                @db.Uuid
-  runId      String                @unique @db.Uuid
-  maxCalls   Int                   @default(1)
-  expiresAt  DateTime
-  consumedAt DateTime?
-  createdAt  DateTime              @default(now())
-  project    Project               @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  run        StoryboardDirectorRun @relation(fields: [runId], references: [id], onDelete: Restrict)
-}
-
-model StoryboardDirectorAttempt {
-  id             String                          @id @default(uuid()) @db.Uuid
-  projectId      String                          @db.Uuid
-  runId          String                          @db.Uuid
-  ordinal        Int
-  status         StoryboardDirectorAttemptStatus
-  actualModelId  String?                         @db.VarChar(160)
-  responseId     String?                         @db.VarChar(255)
-  safeResultCode String                          @db.VarChar(80)
-  startedAt      DateTime                        @default(now())
-  finishedAt     DateTime?
-  project        Project                         @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  run            StoryboardDirectorRun           @relation(fields: [runId], references: [id], onDelete: Restrict)
-
-  @@unique([runId, ordinal])
-  @@index([projectId, startedAt(sort: Desc)])
-}
-
-model StoryboardDirectorProposal {
-  id                     String                               @id @default(uuid()) @db.Uuid
-  projectId              String                               @db.Uuid
-  storyboardId           String                               @db.Uuid
-  runId                  String                               @unique @db.Uuid
-  narrativeSummary       String
-  normalizedProposalJson Json
-  outputHash             String                               @db.Char(64)
-  proposalKind           StoryboardDirectorRunKind            @default(STORYBOARD)
-  affectedShotKeysJson   Json?
-  repairPayloadJson      Json?
-  impactHash             String?                              @db.Char(64)
-  createdAt              DateTime                             @default(now())
-  project                Project                              @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  storyboard             Storyboard                           @relation(fields: [storyboardId], references: [id], onDelete: Restrict)
-  run                    StoryboardDirectorRun                @relation(fields: [runId], references: [id], onDelete: Restrict)
-  adoptedVersion         StoryboardVersion?                   @relation("StoryboardProposalVersion")
-  decisions              StoryboardDirectorProposalDecision[]
-
-  @@unique([projectId, id])
-  @@index([storyboardId, createdAt(sort: Desc)])
-}
-
-model StoryboardDirectorProposalDecision {
-  id               String                                 @id @default(uuid()) @db.Uuid
-  projectId        String                                 @db.Uuid
-  proposalId       String                                 @db.Uuid
-  type             StoryboardDirectorProposalDecisionType
-  note             String?
-  adoptedVersionId String?                                @db.Uuid
-  idempotencyKey   String                                 @unique @db.VarChar(160)
-  createdAt        DateTime                               @default(now())
-  project          Project                                @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  proposal         StoryboardDirectorProposal             @relation(fields: [proposalId], references: [id], onDelete: Restrict)
-
-  @@index([proposalId, createdAt(sort: Desc)])
+  @@unique([storyboardId, ordinal])
+  @@unique([storyboardId, digest])
 }
 
 model StoryboardShot {
-  id                     String                 @id @default(uuid()) @db.Uuid
-  projectId              String                 @db.Uuid
-  storyboardVersionId    String                 @db.Uuid
-  shotKey                String                 @db.Uuid
-  ordinal                Int
-  title                  String                 @db.VarChar(120)
-  creativeDescription    String
-  startState             String
-  action                 String
-  endState               String
-  camera                 String
-  composition            String
-  continuityRequirements Json
-  durationSeconds        Float
-  createdAt              DateTime               @default(now())
-  version                StoryboardVersion      @relation(fields: [storyboardVersionId], references: [id], onDelete: Restrict)
-  requirements           ShotAssetRequirement[]
-  generationSpecs        GenerationSpec[]
-  continuityStates       ShotContinuityState[]
+  id                  String                      @id @default(uuid()) @db.Uuid
+  storyboardVersionId String                      @db.Uuid
+  ordinal             Int
+  payloadJson         Json
+  digest              String                      @db.Char(64)
+  createdAt           DateTime                    @default(now()) @db.Timestamptz(6)
+  storyboardVersion   StoryboardVersion           @relation(fields: [storyboardVersionId], references: [id], onDelete: Restrict)
+  requirements        ShotGenerationRequirement[]
 
   @@unique([storyboardVersionId, ordinal])
-  @@unique([storyboardVersionId, shotKey])
-  @@unique([projectId, id])
-  @@index([storyboardVersionId, ordinal])
+  @@unique([storyboardVersionId, digest])
 }
 
-model ShotAssetRequirement {
-  id                       String                    @id @default(uuid()) @db.Uuid
-  projectId                String                    @db.Uuid
-  storyboardVersionId      String                    @db.Uuid
-  storyboardShotId         String                    @db.Uuid
-  requirementKey           String                    @db.VarChar(120)
-  contractVersion          String                    @db.VarChar(80)
-  inputJson                Json
-  inputHash                String                    @db.Char(64)
-  createdAt                DateTime                  @default(now())
-  shot                     StoryboardShot            @relation(fields: [storyboardShotId], references: [id], onDelete: Restrict)
-  bindings                 ShotAssetBinding[]
-  generationSpecReferences GenerationSpecReference[]
+model CapabilityProfile {
+  id               String                     @id @default(uuid()) @db.Uuid
+  ref              String                     @db.VarChar(160)
+  version          String                     @db.VarChar(80)
+  schemaVersion    Int                        @default(1)
+  payloadJson      Json
+  digest           String                     @db.Char(64)
+  createdAt        DateTime                   @default(now()) @db.Timestamptz(6)
+  runtimeContracts RuntimeContract[]
+  implementations  GenerationImplementation[]
 
-  @@unique([storyboardShotId, requirementKey])
-  @@unique([projectId, id])
-  @@index([storyboardVersionId, storyboardShotId])
+  @@unique([ref, version])
 }
 
-model AssetResolutionManifest {
-  id                        String                     @id @default(uuid()) @db.Uuid
-  projectId                 String                     @db.Uuid
-  storyboardVersionId       String                     @unique @db.Uuid
-  policyVersion             String                     @db.VarChar(80)
-  requirementsHash          String                     @db.Char(64)
-  candidateSnapshotJson     Json
-  candidateResultHash       String                     @db.Char(64)
-  finalBindingsHash         String                     @db.Char(64)
-  createdAt                 DateTime                   @default(now())
-  project                   Project                    @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  storyboardVersion         StoryboardVersion          @relation(fields: [storyboardVersionId], references: [id], onDelete: Restrict)
-  bindings                  ShotAssetBinding[]
-  decisions                 StoryboardDecision[]
-  generationPlans           GenerationPlan[]
-  continuityProfileVersions ContinuityProfileVersion[]
+model RuntimeContract {
+  id                  String                     @id @default(uuid()) @db.Uuid
+  capabilityProfileId String                     @db.Uuid
+  ref                 String                     @db.VarChar(160)
+  version             String                     @db.VarChar(80)
+  nodeClassesJson     Json
+  digest              String                     @db.Char(64)
+  createdAt           DateTime                   @default(now()) @db.Timestamptz(6)
+  capabilityProfile   CapabilityProfile          @relation(fields: [capabilityProfileId], references: [id], onDelete: Restrict)
+  implementations     GenerationImplementation[]
+  specs               GenerationSpec[]
 
-  @@unique([projectId, id])
-  @@index([projectId, createdAt(sort: Desc)])
-}
-
-model ShotAssetBinding {
-  id                       String                  @id @default(uuid()) @db.Uuid
-  projectId                String                  @db.Uuid
-  manifestId               String                  @db.Uuid
-  requirementId            String                  @db.Uuid
-  productionAssetVersionId String                  @db.Uuid
-  characterStateVersionId  String?                 @db.Uuid
-  assetVersionFileId       String                  @db.Uuid
-  projectAssetId           String                  @db.Uuid
-  createdAt                DateTime                @default(now())
-  project                  Project                 @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  manifest                 AssetResolutionManifest @relation(fields: [manifestId], references: [id], onDelete: Restrict)
-  requirement              ShotAssetRequirement    @relation(fields: [requirementId], references: [id], onDelete: Restrict)
-  productionAssetVersion   ProductionAssetVersion  @relation(fields: [productionAssetVersionId], references: [id], onDelete: Restrict)
-  characterStateVersion    CharacterStateVersion?  @relation(fields: [characterStateVersionId], references: [id], onDelete: Restrict)
-  assetVersionFile         AssetVersionFile        @relation(fields: [assetVersionFileId], references: [id], onDelete: Restrict)
-  projectAsset             Asset                   @relation(fields: [projectAssetId], references: [id], onDelete: Restrict)
-
-  @@unique([manifestId, requirementId, assetVersionFileId])
-  @@unique([projectId, id])
-  @@index([requirementId])
-}
-
-model StoryboardDecision {
-  id                  String                   @id @default(uuid()) @db.Uuid
-  projectId           String                   @db.Uuid
-  storyboardId        String                   @db.Uuid
-  storyboardVersionId String                   @db.Uuid
-  manifestId          String?                  @db.Uuid
-  decision            StoryboardDecisionType
-  idempotencyKey      String                   @unique @db.VarChar(120)
-  notes               String?
-  createdAt           DateTime                 @default(now())
-  project             Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  storyboard          Storyboard               @relation(fields: [storyboardId], references: [id], onDelete: Restrict)
-  storyboardVersion   StoryboardVersion        @relation(fields: [storyboardVersionId], references: [id], onDelete: Restrict)
-  manifest            AssetResolutionManifest? @relation(fields: [manifestId], references: [id], onDelete: Restrict)
-
-  @@unique([projectId, id])
-  @@index([storyboardId, createdAt(sort: Desc)])
-}
-
-model GenerationPlan {
-  id                  String                   @id @default(uuid()) @db.Uuid
-  projectId           String                   @db.Uuid
-  storyboardId        String                   @db.Uuid
-  storyboardVersionId String                   @db.Uuid
-  manifestId          String                   @db.Uuid
-  idempotencyKey      String                   @unique @db.VarChar(120)
-  requestHash         String                   @db.Char(64)
-  headVersionId       String?                  @unique @db.Uuid
-  approvedVersionId   String?                  @unique @db.Uuid
-  rowVersion          Int                      @default(0)
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
-  project             Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  storyboard          Storyboard               @relation(fields: [storyboardId], references: [id], onDelete: Restrict)
-  storyboardVersion   StoryboardVersion        @relation(fields: [storyboardVersionId], references: [id], onDelete: Restrict)
-  manifest            AssetResolutionManifest  @relation(fields: [manifestId], references: [id], onDelete: Restrict)
-  headVersion         GenerationPlanVersion?   @relation("GenerationPlanHead", fields: [headVersionId], references: [id], onDelete: Restrict)
-  approvedVersion     GenerationPlanVersion?   @relation("GenerationPlanApproved", fields: [approvedVersionId], references: [id], onDelete: Restrict)
-  versions            GenerationPlanVersion[]  @relation("GenerationPlanVersions")
-  decisions           GenerationPlanDecision[]
-  assemblies          GenerationPlanAssembly[]
-  drafts              GenerationPlanDraft[]
-
-  @@unique([projectId, id])
-  @@index([storyboardId, createdAt(sort: Desc)])
-}
-
-model GenerationPlanVersion {
-  id                                String                      @id @default(uuid()) @db.Uuid
-  projectId                         String                      @db.Uuid
-  generationPlanId                  String                      @db.Uuid
-  versionNumber                     Int
-  parentVersionId                   String?                     @db.Uuid
-  source                            GenerationPlanVersionSource
-  plannerVersion                    String                      @db.VarChar(80)
-  contractVersion                   String                      @db.VarChar(80)
-  inputHash                         String                      @db.Char(64)
-  referencesHash                    String                      @db.Char(64)
-  outputHash                        String                      @db.Char(64)
-  planningPreferencesJson           Json?
-  planningPreferencesHash           String?                     @db.Char(64)
-  planningPreferencesIdempotencyKey String?                     @unique @db.VarChar(120)
-  createdAt                         DateTime                    @default(now())
-  project                           Project                     @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  generationPlan                    GenerationPlan              @relation("GenerationPlanVersions", fields: [generationPlanId], references: [id], onDelete: Restrict)
-  parentVersion                     GenerationPlanVersion?      @relation("GenerationPlanVersionLineage", fields: [parentVersionId], references: [id], onDelete: Restrict)
-  childVersions                     GenerationPlanVersion[]     @relation("GenerationPlanVersionLineage")
-  headFor                           GenerationPlan?             @relation("GenerationPlanHead")
-  approvedFor                       GenerationPlan?             @relation("GenerationPlanApproved")
-  specs                             GenerationSpec[]
-  decisions                         GenerationPlanDecision[]
-  generationBatches                 GenerationBatch[]
-  assemblies                        GenerationPlanAssembly[]
-  drafts                            GenerationPlanDraft[]
-  shotExecutionPlans                ShotExecutionPlan[]
-
-  @@unique([generationPlanId, versionNumber])
-  @@unique([generationPlanId, id])
-  @@unique([projectId, id])
-  @@index([generationPlanId, createdAt(sort: Desc)])
-}
-
-model GenerationSpec {
-  id                      String                         @id @default(uuid()) @db.Uuid
-  projectId               String                         @db.Uuid
-  generationPlanVersionId String                         @db.Uuid
-  storyboardShotId        String                         @db.Uuid
-  shotKey                 String                         @db.Uuid
-  ordinal                 Int
-  startState              String
-  action                  String
-  endState                String
-  camera                  String
-  composition             String
-  continuityRequirements  Json
-  durationSeconds         Float
-  contractVersion         String                         @default("generation-spec-v1") @db.VarChar(80)
-  requirementSpecJson     Json?
-  requirementHash         String?                        @db.Char(64)
-  positivePrompt          String?
-  capabilityRequirements  Json?
-  inputHash               String                         @db.Char(64)
-  referencesHash          String                         @db.Char(64)
-  outputHash              String                         @db.Char(64)
-  createdAt               DateTime                       @default(now())
-  project                 Project                        @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  generationPlanVersion   GenerationPlanVersion          @relation(fields: [generationPlanVersionId], references: [id], onDelete: Restrict)
-  storyboardShot          StoryboardShot                 @relation(fields: [storyboardShotId], references: [id], onDelete: Restrict)
-  references              GenerationSpecReference[]
-  generationTargets       GenerationBatchTarget[]
-  assemblySources         GenerationPlanAssemblySource[]
-  draftSources            GenerationPlanDraftSource[]
-  shotExecutionPlans      ShotExecutionPlan[]
-
-  @@unique([generationPlanVersionId, ordinal])
-  @@unique([generationPlanVersionId, shotKey])
-  @@unique([generationPlanVersionId, id])
-  @@unique([projectId, id])
-  @@index([generationPlanVersionId, ordinal])
-}
-
-model GenerationSpecReference {
-  id                       String                 @id @default(uuid()) @db.Uuid
-  projectId                String                 @db.Uuid
-  generationSpecId         String                 @db.Uuid
-  requirementId            String                 @db.Uuid
-  productionAssetVersionId String                 @db.Uuid
-  characterStateVersionId  String?                @db.Uuid
-  assetVersionFileId       String                 @db.Uuid
-  projectAssetId           String                 @db.Uuid
-  expectedSha256           String                 @db.Char(64)
-  referenceUsage           ReferenceUsage
-  createdAt                DateTime               @default(now())
-  project                  Project                @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  generationSpec           GenerationSpec         @relation(fields: [generationSpecId], references: [id], onDelete: Restrict)
-  requirement              ShotAssetRequirement   @relation(fields: [requirementId], references: [id], onDelete: Restrict)
-  productionAssetVersion   ProductionAssetVersion @relation(fields: [productionAssetVersionId], references: [id], onDelete: Restrict)
-  characterStateVersion    CharacterStateVersion? @relation(fields: [characterStateVersionId], references: [id], onDelete: Restrict)
-  assetVersionFile         AssetVersionFile       @relation(fields: [assetVersionFileId], references: [id], onDelete: Restrict)
-  projectAsset             Asset                  @relation(fields: [projectAssetId], references: [id], onDelete: Restrict)
-
-  @@unique([generationSpecId, requirementId, assetVersionFileId])
-  @@unique([projectId, id])
-  @@index([generationSpecId])
+  @@unique([ref, version])
 }
 
 model GenerationImplementation {
-  id                      String                             @id @default(uuid()) @db.Uuid
-  implementationKey       String                             @db.VarChar(160)
-  version                 String                             @db.VarChar(40)
-  providerProfileId       String                             @db.VarChar(160)
-  modelProfileId          String                             @db.VarChar(160)
-  executorType            GenerationExecutorType
-  adapterId               String                             @db.VarChar(160)
-  adapterVersion          String                             @db.VarChar(40)
-  registrySha256          String                             @db.Char(64)
-  capabilitySnapshotHash  String                             @db.Char(64)
-  constraintsSnapshotHash String                             @db.Char(64)
-  patternSnapshotHash     String                             @db.Char(64)
-  runtimeSnapshotHash     String                             @db.Char(64)
-  compilerSnapshotHash    String                             @db.Char(64)
-  status                  GenerationImplementationStatus
-  statusReasonCode        String?                            @db.VarChar(160)
-  statusUpdatedAt         DateTime                           @default(now())
-  createdAt               DateTime                           @default(now())
-  retiredAt               DateTime?
-  evidence                GenerationImplementationEvidence[]
-  shotExecutionPlans      ShotExecutionPlan[]
+  id                  String            @id @default(uuid()) @db.Uuid
+  capabilityProfileId String            @db.Uuid
+  runtimeContractId   String            @db.Uuid
+  ref                 String            @db.VarChar(160)
+  version             String            @db.VarChar(80)
+  providerRef         Json
+  modelRef            Json
+  adapterRef          Json
+  compilerRef         Json
+  validatorRef        Json
+  lifecycle           String            @db.VarChar(20)
+  digest              String            @db.Char(64)
+  createdAt           DateTime          @default(now()) @db.Timestamptz(6)
+  capabilityProfile   CapabilityProfile @relation(fields: [capabilityProfileId], references: [id], onDelete: Restrict)
+  runtimeContract     RuntimeContract   @relation(fields: [runtimeContractId], references: [id], onDelete: Restrict)
+  specs               GenerationSpec[]
 
-  @@unique([implementationKey, version])
-  @@index([status, statusUpdatedAt(sort: Desc)])
+  @@unique([ref, version])
 }
 
-model GenerationImplementationEvidence {
-  id                  String                       @id @default(uuid()) @db.Uuid
-  implementationId    String                       @db.Uuid
-  sourceType          GenerationEvidenceSourceType
-  sourceId            String                       @db.VarChar(255)
-  jobId               String?                      @db.Uuid
-  artifactId          String?                      @db.Uuid
-  planTemplateSha256  String?                      @db.Char(64)
-  runtimeSnapshotHash String                       @db.Char(64)
-  catalogSnapshotHash String                       @db.Char(64)
-  technicalResult     GenerationTechnicalResult
-  providerCallCount   Int                          @default(0)
-  recordedAt          DateTime                     @default(now())
-  implementation      GenerationImplementation     @relation(fields: [implementationId], references: [id], onDelete: Restrict)
-  job                 GenerationJob?               @relation(fields: [jobId], references: [id], onDelete: Restrict)
-  artifact            GeneratedArtifact?           @relation(fields: [artifactId], references: [id], onDelete: Restrict)
+model ShotGenerationRequirement {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  projectId           String                  @db.Uuid
+  storyboardVersionId String                  @db.Uuid
+  shotId              String                  @db.Uuid
+  payloadJson         Json
+  digest              String                  @db.Char(64)
+  createdAt           DateTime                @default(now()) @db.Timestamptz(6)
+  project             Project                 @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  storyboardVersion   StoryboardVersion       @relation(fields: [storyboardVersionId], references: [id], onDelete: Restrict)
+  shot                StoryboardShot          @relation(fields: [shotId], references: [id], onDelete: Restrict)
+  snapshots           PlanningInputSnapshot[]
 
-  @@unique([implementationId, sourceType, sourceId])
-  @@index([implementationId, recordedAt(sort: Desc)])
-  @@index([jobId])
-  @@index([artifactId])
+  @@unique([shotId, digest])
 }
 
-model ShotExecutionPlan {
-  id                       String                     @id @default(uuid()) @db.Uuid
-  projectId                String                     @db.Uuid
-  generationPlanVersionId  String                     @db.Uuid
-  generationSpecId         String                     @db.Uuid
-  implementationId         String?                    @db.Uuid
-  executorType             GenerationExecutorType?
-  adapterId                String?                    @db.VarChar(160)
-  adapterVersion           String?                    @db.VarChar(40)
-  planningInputHash        String                     @db.Char(64)
-  requirementsHash         String                     @db.Char(64)
-  capabilitySnapshotHash   String                     @db.Char(64)
-  payloadJson              Json
-  planTemplateSha256       String                     @db.Char(64)
-  estimatedCostMicros      BigInt?
-  maximumCostMicros        BigInt?
-  currency                 String?                    @db.Char(3)
-  estimatedGenerationCalls Int                        @default(0)
-  estimatedQaCalls         Int                        @default(0)
-  lifecycleStatus          ShotExecutionPlanLifecycle @default(DRAFT)
-  planningOutcome          ShotPlanningOutcome
-  blockerCode              String?                    @db.VarChar(160)
-  frozenAt                 DateTime?
-  invalidatedAt            DateTime?
-  invalidationCode         String?                    @db.VarChar(160)
-  supersededById           String?                    @unique @db.Uuid
-  createdAt                DateTime                   @default(now())
-  project                  Project                    @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  generationPlanVersion    GenerationPlanVersion      @relation(fields: [projectId, generationPlanVersionId], references: [projectId, id], onDelete: Restrict)
-  generationSpec           GenerationSpec             @relation(fields: [generationPlanVersionId, generationSpecId], references: [generationPlanVersionId, id], onDelete: Restrict)
-  implementation           GenerationImplementation?  @relation(fields: [implementationId], references: [id], onDelete: Restrict)
-  supersededBy             ShotExecutionPlan?         @relation("ShotExecutionPlanSupersession", fields: [supersededById], references: [id], onDelete: Restrict)
-  supersedes               ShotExecutionPlan[]        @relation("ShotExecutionPlanSupersession")
-  batchTargets             GenerationBatchTarget[]
+model PlanningInputSnapshot {
+  id            String                    @id @default(uuid()) @db.Uuid
+  requirementId String                    @db.Uuid
+  payloadJson   Json
+  digest        String                    @db.Char(64)
+  createdAt     DateTime                  @default(now()) @db.Timestamptz(6)
+  requirement   ShotGenerationRequirement @relation(fields: [requirementId], references: [id], onDelete: Restrict)
+  specs         GenerationSpec[]
 
-  @@unique([generationPlanVersionId, generationSpecId, planningInputHash])
-  @@unique([projectId, id])
-  @@index([projectId, planTemplateSha256])
-  @@index([generationPlanVersionId, planningOutcome])
+  @@unique([requirementId, digest])
 }
 
-model GenerationPlanDecision {
+model GenerationSpec {
   id                      String                     @id @default(uuid()) @db.Uuid
-  projectId               String                     @db.Uuid
-  generationPlanId        String                     @db.Uuid
-  generationPlanVersionId String                     @db.Uuid
-  decision                GenerationPlanDecisionType
-  idempotencyKey          String                     @unique @db.VarChar(120)
-  requestHash             String                     @db.Char(64)
-  notes                   String?
-  createdAt               DateTime                   @default(now())
-  project                 Project                    @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  generationPlan          GenerationPlan             @relation(fields: [generationPlanId], references: [id], onDelete: Restrict)
-  generationPlanVersion   GenerationPlanVersion      @relation(fields: [generationPlanVersionId], references: [id], onDelete: Restrict)
+  planningInputSnapshotId String                     @db.Uuid
+  implementationId        String                     @db.Uuid
+  runtimeContractId       String                     @db.Uuid
+  payloadJson             Json
+  digest                  String                     @db.Char(64)
+  createdAt               DateTime                   @default(now()) @db.Timestamptz(6)
+  planningInputSnapshot   PlanningInputSnapshot      @relation(fields: [planningInputSnapshotId], references: [id], onDelete: Restrict)
+  implementation          GenerationImplementation   @relation(fields: [implementationId], references: [id], onDelete: Restrict)
+  runtimeContract         RuntimeContract            @relation(fields: [runtimeContractId], references: [id], onDelete: Restrict)
+  referencePlan           ReferencePlan?
+  graphSnapshot           MaterializedGraphSnapshot?
+  targets                 GenerationTarget[]
 
-  @@unique([projectId, id])
-  @@index([generationPlanId, createdAt(sort: Desc)])
+  @@unique([planningInputSnapshotId, digest])
+}
+
+model ReferencePlan {
+  id               String                      @id @default(uuid()) @db.Uuid
+  generationSpecId String                      @unique @db.Uuid
+  payloadJson      Json
+  digest           String                      @unique @db.Char(64)
+  createdAt        DateTime                    @default(now()) @db.Timestamptz(6)
+  generationSpec   GenerationSpec              @relation(fields: [generationSpecId], references: [id], onDelete: Restrict)
+  graphSnapshots   MaterializedGraphSnapshot[]
+}
+
+model MaterializedGraphSnapshot {
+  id                    String         @id @default(uuid()) @db.Uuid
+  generationSpecId      String         @unique @db.Uuid
+  referencePlanId       String         @db.Uuid
+  graphJson             Json
+  graphSha256           String         @unique @db.Char(64)
+  runtimeContractDigest String         @db.Char(64)
+  outputNodeId          String         @db.VarChar(160)
+  outputMediaKey        String         @db.VarChar(160)
+  createdAt             DateTime       @default(now()) @db.Timestamptz(6)
+  generationSpec        GenerationSpec @relation(fields: [generationSpecId], references: [id], onDelete: Restrict)
+  referencePlan         ReferencePlan  @relation(fields: [referencePlanId], references: [id], onDelete: Restrict)
+}
+
+model GenerationPlan {
+  id             String                    @id @default(uuid()) @db.Uuid
+  projectId      String                    @db.Uuid
+  payloadJson    Json
+  digest         String                    @db.Char(64)
+  createdAt      DateTime                  @default(now()) @db.Timestamptz(6)
+  project        Project                   @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  authorizations GenerationAuthorization[]
+  batches        GenerationBatch[]
+
+  @@unique([projectId, digest])
+}
+
+model GenerationAuthorization {
+  id                    String                     @id @default(uuid()) @db.Uuid
+  generationPlanId      String                     @db.Uuid
+  scopeJson             Json
+  generationLimit       Int
+  aiQaLimit             Int
+  generationPriceMicros BigInt?
+  aiQaPriceMicros       BigInt?
+  expiresAt             DateTime                   @db.Timestamptz(6)
+  state                 AuthorizationState         @default(ACTIVE)
+  createdAt             DateTime                   @default(now()) @db.Timestamptz(6)
+  generationPlan        GenerationPlan             @relation(fields: [generationPlanId], references: [id], onDelete: Restrict)
+  batch                 GenerationBatch?
+  consumptions          AuthorizationConsumption[]
 }
 
 model GenerationBatch {
-  id                         String                    @id @default(uuid()) @db.Uuid
-  projectId                  String                    @db.Uuid
-  generationPlanVersionId    String                    @db.Uuid
-  providerProfileId          String?                   @db.VarChar(80)
-  providerId                 String?                   @db.VarChar(80)
-  modelId                    String?                   @db.VarChar(160)
-  workflowId                 String?                   @db.VarChar(120)
-  workflowVersion            String?                   @db.VarChar(80)
-  workflowSha256             String?                   @db.Char(64)
-  engineVersion              GenerationEngineVersion   @default(LEGACY_V1)
-  estimatedCostMicros        BigInt?
-  maximumCostMicros          BigInt?
-  currency                   String?                   @db.Char(3)
-  pricingSnapshotHash        String?                   @db.Char(64)
-  continuationPolicyHash     String?                   @db.Char(64)
-  supersedesBatchId          String?                   @db.Uuid
-  continuityProfileVersionId String?                   @db.Uuid
-  keyframePlanVersionId      String?                   @db.Uuid
-  continuityScopeHash        String?                   @db.Char(64)
-  videoControlTier           VideoControlTier?
-  previewHash                String                    @db.Char(64)
-  scopeHash                  String                    @db.Char(64)
-  idempotencyKey             String                    @unique @db.VarChar(120)
-  status                     GenerationBatchStatus     @default(QUEUED)
-  rowVersion                 Int                       @default(0)
-  createdAt                  DateTime                  @default(now())
-  updatedAt                  DateTime                  @updatedAt
-  project                    Project                   @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  generationPlanVersion      GenerationPlanVersion     @relation(fields: [projectId, generationPlanVersionId], references: [projectId, id], onDelete: Restrict)
-  targets                    GenerationBatchTarget[]
-  authorization              ExecutionAuthorization?
-  jobs                       GenerationJob[]
-  continuityProfileVersion   ContinuityProfileVersion? @relation(fields: [continuityProfileVersionId], references: [id], onDelete: Restrict)
-  keyframePlanVersion        KeyframePlanVersion?      @relation(fields: [keyframePlanVersionId], references: [id], onDelete: Restrict)
-  supersedesBatch            GenerationBatch?          @relation("GenerationBatchSupersession", fields: [supersedesBatchId], references: [id], onDelete: Restrict)
-  supersededByBatches        GenerationBatch[]         @relation("GenerationBatchSupersession")
-
-  @@unique([projectId, id])
-  @@index([projectId, status, createdAt(sort: Desc)])
+  id               String                  @id @default(uuid()) @db.Uuid
+  generationPlanId String                  @db.Uuid
+  authorizationId  String                  @unique @db.Uuid
+  idempotencyKey   String                  @unique @db.VarChar(160)
+  createdAt        DateTime                @default(now()) @db.Timestamptz(6)
+  generationPlan   GenerationPlan          @relation(fields: [generationPlanId], references: [id], onDelete: Restrict)
+  authorization    GenerationAuthorization @relation(fields: [authorizationId], references: [id], onDelete: Restrict)
+  targets          GenerationTarget[]
 }
 
-model GenerationBatchTarget {
-  id                          String                         @id @default(uuid()) @db.Uuid
-  projectId                   String                         @db.Uuid
-  generationBatchId           String                         @db.Uuid
-  generationSpecId            String                         @db.Uuid
-  ordinal                     Int
-  targetHash                  String                         @db.Char(64)
-  promptHash                  String?                        @db.Char(64)
-  referencesHash              String                         @db.Char(64)
-  compiledPrompt              String?
-  slotManifestJson            Json?
-  shotExecutionPlanId         String?                        @db.Uuid
-  executionDisposition        GenerationExecutionDisposition @default(EXECUTE)
-  sourceArtifactId            String?                        @db.Uuid
-  executionInputSnapshotJson  Json?
-  materializedInputHash       String?                        @db.Char(64)
-  materializedExecutionSha256 String?                        @db.Char(64)
-  startBoundaryHash           String?                        @db.Char(64)
-  endBoundaryHash             String?                        @db.Char(64)
-  startKeyframeHash           String?                        @db.Char(64)
-  endKeyframeHash             String?                        @db.Char(64)
-  endKeyframeSoftTarget       Boolean                        @default(false)
-  retryOfJobId                String?                        @db.Uuid
-  createdAt                   DateTime                       @default(now())
-  project                     Project                        @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  generationBatch             GenerationBatch                @relation(fields: [projectId, generationBatchId], references: [projectId, id], onDelete: Restrict)
-  generationSpec              GenerationSpec                 @relation(fields: [projectId, generationSpecId], references: [projectId, id], onDelete: Restrict)
-  retryOfJob                  GenerationJob?                 @relation("GenerationRetrySource", fields: [retryOfJobId], references: [id], onDelete: Restrict)
-  job                         GenerationJob?                 @relation("GenerationTargetJob")
-  consumptions                AuthorizationConsumption[]
-  shotExecutionPlan           ShotExecutionPlan?             @relation(fields: [projectId, shotExecutionPlanId], references: [projectId, id], onDelete: Restrict)
-  sourceArtifact              GeneratedArtifact?             @relation("GenerationTargetReuse", fields: [sourceArtifactId], references: [id], onDelete: Restrict)
+model GenerationTarget {
+  id                String             @id @default(uuid()) @db.Uuid
+  generationBatchId String             @db.Uuid
+  generationSpecId  String             @db.Uuid
+  ordinal           Int
+  createdAt         DateTime           @default(now()) @db.Timestamptz(6)
+  generationBatch   GenerationBatch    @relation(fields: [generationBatchId], references: [id], onDelete: Restrict)
+  generationSpec    GenerationSpec     @relation(fields: [generationSpecId], references: [id], onDelete: Restrict)
+  attempt           GenerationAttempt?
 
-  @@unique([generationBatchId, generationSpecId])
   @@unique([generationBatchId, ordinal])
-  @@unique([projectId, id])
-  @@index([generationSpecId])
-  @@index([shotExecutionPlanId])
-  @@index([sourceArtifactId])
 }
 
-model ExecutionAuthorization {
-  id                     String                     @id @default(uuid()) @db.Uuid
-  projectId              String                     @db.Uuid
-  generationBatchId      String                     @unique @db.Uuid
-  scopeHash              String                     @db.Char(64)
-  maximumGenerationCalls Int                        @default(0)
-  maximumAiQaCalls       Int                        @default(0)
-  maximumCostMicros      BigInt?
-  currency               String?                    @db.Char(3)
-  pricingSnapshotHash    String?                    @db.Char(64)
-  confirmedAt            DateTime
-  expiresAt              DateTime
-  createdAt              DateTime                   @default(now())
-  project                Project                    @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  generationBatch        GenerationBatch            @relation(fields: [projectId, generationBatchId], references: [projectId, id], onDelete: Restrict)
-  consumptions           AuthorizationConsumption[]
+model GenerationAttempt {
+  id                    String                     @id @default(uuid()) @db.Uuid
+  generationTargetId    String                     @unique @db.Uuid
+  adapterRef            Json
+  runtimeRef            Json
+  runtimeContractDigest String                     @db.Char(64)
+  graphSha256           String                     @db.Char(64)
+  state                 GenerationAttemptState     @default(QUEUED)
+  providerTaskId        String?                    @unique @db.VarChar(500)
+  terminalCode          String?                    @db.VarChar(160)
+  createdAt             DateTime                   @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime                   @default(now()) @db.Timestamptz(6)
+  generationTarget      GenerationTarget           @relation(fields: [generationTargetId], references: [id], onDelete: Restrict)
+  events                GenerationAttemptEvent[]
+  consumptions          AuthorizationConsumption[]
+  artifact              GenerationArtifact?
+}
 
-  @@unique([projectId, id])
-  @@unique([projectId, generationBatchId])
-  @@index([projectId, expiresAt])
+model GenerationAttemptEvent {
+  id        String                 @id @default(uuid()) @db.Uuid
+  attemptId String                 @db.Uuid
+  state     GenerationAttemptState
+  taskId    String?                @db.VarChar(500)
+  code      String?                @db.VarChar(160)
+  createdAt DateTime               @default(now()) @db.Timestamptz(6)
+  attempt   GenerationAttempt      @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+
+  @@unique([attemptId, state, createdAt])
 }
 
 model AuthorizationConsumption {
-  id                       String                 @id @default(uuid()) @db.Uuid
-  projectId                String                 @db.Uuid
-  executionAuthorizationId String                 @db.Uuid
-  generationBatchTargetId  String                 @db.Uuid
-  generationJobId          String?                @db.Uuid
-  operation                ExecutionOperation
-  requestHash              String                 @db.Char(64)
-  reservedCostMicros       BigInt?
-  materializedPlanSha256   String?                @db.Char(64)
-  consumedAt               DateTime               @default(now())
-  project                  Project                @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  executionAuthorization   ExecutionAuthorization @relation(fields: [projectId, executionAuthorizationId], references: [projectId, id], onDelete: Restrict)
-  generationBatchTarget    GenerationBatchTarget  @relation(fields: [projectId, generationBatchTargetId], references: [projectId, id], onDelete: Restrict)
-  generationJob            GenerationJob?         @relation(fields: [generationJobId], references: [id], onDelete: Restrict)
+  id              String                  @id @default(uuid()) @db.Uuid
+  authorizationId String                  @db.Uuid
+  attemptId       String                  @db.Uuid
+  operation       String                  @db.VarChar(20)
+  createdAt       DateTime                @default(now()) @db.Timestamptz(6)
+  authorization   GenerationAuthorization @relation(fields: [authorizationId], references: [id], onDelete: Restrict)
+  attempt         GenerationAttempt       @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  aiQaRun         AiQaRun?
 
-  @@unique([executionAuthorizationId, generationBatchTargetId, operation])
-  @@unique([projectId, id])
-  @@index([generationJobId])
+  @@unique([attemptId, operation])
 }
 
-model GenerationJob {
-  id                      String                             @id @default(uuid()) @db.Uuid
-  projectId               String                             @db.Uuid
-  generationBatchId       String                             @db.Uuid
-  generationBatchTargetId String                             @unique @db.Uuid
-  attemptNumber           Int                                @default(1)
-  status                  GenerationJobStatus                @default(QUEUED)
-  providerTaskId          String?                            @unique @db.VarChar(255)
-  providerIdempotencyKey  String?                            @unique @db.VarChar(255)
-  safeResultCode          String                             @default("QUEUED") @db.VarChar(80)
-  claimOwner              String?                            @db.VarChar(160)
-  claimedAt               DateTime?
-  leaseExpiresAt          DateTime?
-  providerCallCount       Int                                @default(0)
-  createdAt               DateTime                           @default(now())
-  updatedAt               DateTime                           @updatedAt
-  finishedAt              DateTime?
-  project                 Project                            @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  generationBatch         GenerationBatch                    @relation(fields: [projectId, generationBatchId], references: [projectId, id], onDelete: Restrict)
-  generationBatchTarget   GenerationBatchTarget              @relation("GenerationTargetJob", fields: [projectId, generationBatchTargetId], references: [projectId, id], onDelete: Restrict)
-  retryTargets            GenerationBatchTarget[]            @relation("GenerationRetrySource")
-  events                  GenerationJobEvent[]
-  consumptions            AuthorizationConsumption[]
-  artifacts               GeneratedArtifact[]
-  implementationEvidence  GenerationImplementationEvidence[]
-
-  @@unique([projectId, id])
-  @@unique([projectId, generationBatchTargetId])
-  @@index([generationBatchId, status])
-  @@index([status, createdAt])
-}
-
-model GenerationJobEvent {
-  id              String        @id @default(uuid()) @db.Uuid
-  generationJobId String        @db.Uuid
-  sequence        Int
-  eventType       String        @db.VarChar(80)
-  safePayloadJson Json?
-  createdAt       DateTime      @default(now())
-  generationJob   GenerationJob @relation(fields: [generationJobId], references: [id], onDelete: Restrict)
-
-  @@unique([generationJobId, sequence])
-  @@index([generationJobId, createdAt])
-}
-
-model GeneratedArtifact {
-  id                     String                             @id @default(uuid()) @db.Uuid
-  projectId              String                             @db.Uuid
-  generationJobId        String                             @db.Uuid
-  storageKey             String                             @db.VarChar(255)
-  sha256                 String                             @db.Char(64)
-  byteSize               BigInt
-  detectedMimeType       String                             @db.VarChar(120)
-  providerReferenceJson  Json?
-  status                 GeneratedArtifactStatus            @default(RETAINED)
-  retainedAt             DateTime                           @default(now())
-  project                Project                            @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  generationJob          GenerationJob                      @relation(fields: [projectId, generationJobId], references: [projectId, id], onDelete: Restrict)
-  technicalChecks        ArtifactTechnicalCheck[]
-  reviewFrames           ArtifactReviewFrame[]
-  aiQaRuns               AiQaRun[]
-  humanQaDecisions       HumanQaDecision[]
-  assemblySources        GenerationPlanAssemblySource[]
-  draftSources           GenerationPlanDraftSource[]
-  reuseTargets           GenerationBatchTarget[]            @relation("GenerationTargetReuse")
-  implementationEvidence GenerationImplementationEvidence[]
-
-  @@unique([projectId, id])
-  @@index([generationJobId, retainedAt])
-  @@index([storageKey])
-}
-
-model ArtifactTechnicalCheck {
-  id                  String               @id @default(uuid()) @db.Uuid
-  generatedArtifactId String               @db.Uuid
-  checkerVersion      String               @db.VarChar(80)
-  status              TechnicalCheckStatus
-  safeResultCode      String               @db.VarChar(80)
-  container           String?              @db.VarChar(80)
-  videoCodec          String?              @db.VarChar(80)
-  audioCodec          String?              @db.VarChar(80)
-  width               Int?
-  height              Int?
-  fps                 Float?
-  durationSeconds     Float?
-  bitrate             BigInt?
-  audioFactsJson      Json?
-  checkedAt           DateTime             @default(now())
-  generatedArtifact   GeneratedArtifact    @relation(fields: [generatedArtifactId], references: [id], onDelete: Restrict)
-
-  @@unique([generatedArtifactId, checkerVersion])
-}
-
-model ArtifactReviewFrame {
-  id                  String                  @id @default(uuid()) @db.Uuid
-  generatedArtifactId String                  @db.Uuid
-  role                ArtifactReviewFrameRole
-  requestedTimestamp  Float
-  actualTimestamp     Float
-  frameIndex          BigInt?
-  pts                 BigInt?
-  timeBaseNumerator   Int?
-  timeBaseDenominator Int?
-  extractorVersion    String                  @db.VarChar(80)
-  storageKey          String                  @db.VarChar(255)
-  sha256              String                  @db.Char(64)
-  byteSize            BigInt
-  mimeType            String                  @db.VarChar(120)
-  createdAt           DateTime                @default(now())
-  generatedArtifact   GeneratedArtifact       @relation(fields: [generatedArtifactId], references: [id], onDelete: Restrict)
-
-  @@unique([generatedArtifactId, role, extractorVersion])
+model GenerationArtifact {
+  id             String            @id @default(uuid()) @db.Uuid
+  attemptId      String            @unique @db.Uuid
+  storageKey     String            @unique @db.VarChar(500)
+  sha256         String            @db.Char(64)
+  ffprobeJson    Json
+  framesJson     Json
+  createdAt      DateTime          @default(now()) @db.Timestamptz(6)
+  attempt        GenerationAttempt @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  aiQaRuns       AiQaRun[]
+  ownerDecisions OwnerDecision[]
 }
 
 model AiQaRun {
-  id                  String            @id @default(uuid()) @db.Uuid
-  projectId           String            @db.Uuid
-  generatedArtifactId String            @db.Uuid
-  providerId          String            @db.VarChar(80)
-  requestedModelId    String            @db.VarChar(160)
-  resolvedModelId     String?           @db.VarChar(160)
-  requestHash         String            @db.Char(64)
-  inputHash           String            @db.Char(64)
-  responseId          String?           @db.VarChar(255)
-  status              AiQaRunStatus
-  safeResultCode      String            @db.VarChar(80)
-  providerCallCount   Int               @default(0)
-  usageJson           Json?
-  createdAt           DateTime          @default(now())
-  finishedAt          DateTime?
-  project             Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  generatedArtifact   GeneratedArtifact @relation(fields: [projectId, generatedArtifactId], references: [projectId, id], onDelete: Restrict)
-  result              AiQaResult?
-
-  @@unique([generatedArtifactId, requestHash])
-  @@unique([projectId, id])
+  id                         String                   @id @default(uuid()) @db.Uuid
+  artifactId                 String                   @db.Uuid
+  authorizationConsumptionId String                   @unique @db.Uuid
+  state                      String                   @db.VarChar(20)
+  createdAt                  DateTime                 @default(now()) @db.Timestamptz(6)
+  artifact                   GenerationArtifact       @relation(fields: [artifactId], references: [id], onDelete: Restrict)
+  authorizationConsumption   AuthorizationConsumption @relation(fields: [authorizationConsumptionId], references: [id], onDelete: Restrict)
+  result                     AiQaResult?
 }
 
 model AiQaResult {
-  id                        String           @id @default(uuid()) @db.Uuid
-  aiQaRunId                 String           @unique @db.Uuid
-  contractVersion           String           @db.VarChar(80)
-  promptVersion             String           @db.VarChar(80)
-  overallStatus             QaAdvisoryStatus
-  summary                   String
-  limitationsJson           Json
-  criteriaJson              Json
-  outputHash                String           @db.Char(64)
-  continuationDecision      String?          @db.VarChar(80)
-  continuationPolicyVersion String?          @db.VarChar(80)
-  continuationPolicyHash    String?          @db.Char(64)
-  createdAt                 DateTime         @default(now())
-  aiQaRun                   AiQaRun          @relation(fields: [aiQaRunId], references: [id], onDelete: Restrict)
-}
-
-model HumanQaDecision {
-  id                  String              @id @default(uuid()) @db.Uuid
-  projectId           String              @db.Uuid
-  generatedArtifactId String              @db.Uuid
-  decision            HumanQaDecisionType
-  notes               String?
-  idempotencyKey      String              @unique @db.VarChar(120)
-  requestHash         String              @db.Char(64)
-  createdAt           DateTime            @default(now())
-  project             Project             @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  generatedArtifact   GeneratedArtifact   @relation(fields: [projectId, generatedArtifactId], references: [projectId, id], onDelete: Restrict)
-
-  @@unique([projectId, id])
-  @@index([generatedArtifactId, createdAt(sort: Desc)])
-}
-
-model GenerationPlanAssembly {
-  id                      String                         @id @default(uuid()) @db.Uuid
-  projectId               String                         @db.Uuid
-  generationPlanId        String                         @db.Uuid
-  generationPlanVersionId String                         @db.Uuid
-  sourceSetHash           String                         @db.Char(64)
-  storageKey              String                         @db.VarChar(255)
-  sha256                  String                         @db.Char(64)
-  byteSize                BigInt
-  detectedMimeType        String                         @db.VarChar(120)
-  container               String                         @db.VarChar(80)
-  videoCodec              String                         @db.VarChar(80)
-  width                   Int
-  height                  Int
-  fps                     Float
-  durationSeconds         Float
-  hasAudio                Boolean                        @default(false)
-  assemblerVersion        String                         @db.VarChar(80)
-  createdAt               DateTime                       @default(now())
-  project                 Project                        @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  generationPlan          GenerationPlan                 @relation(fields: [generationPlanId], references: [id], onDelete: Restrict)
-  generationPlanVersion   GenerationPlanVersion          @relation(fields: [generationPlanVersionId], references: [id], onDelete: Restrict)
-  sources                 GenerationPlanAssemblySource[]
-
-  @@unique([generationPlanVersionId, sourceSetHash])
-  @@unique([projectId, id])
-  @@index([generationPlanId, createdAt(sort: Desc)])
-}
-
-model GenerationPlanAssemblySource {
-  id                       String                 @id @default(uuid()) @db.Uuid
-  projectId                String                 @db.Uuid
-  generationPlanAssemblyId String                 @db.Uuid
-  generationSpecId         String                 @db.Uuid
-  generatedArtifactId      String                 @db.Uuid
-  ordinal                  Int
-  sourceSha256             String                 @db.Char(64)
-  sourceByteSize           BigInt
-  sourceMimeType           String                 @db.VarChar(120)
-  createdAt                DateTime               @default(now())
-  project                  Project                @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  generationPlanAssembly   GenerationPlanAssembly @relation(fields: [generationPlanAssemblyId], references: [id], onDelete: Restrict)
-  generationSpec           GenerationSpec         @relation(fields: [generationSpecId], references: [id], onDelete: Restrict)
-  generatedArtifact        GeneratedArtifact      @relation(fields: [generatedArtifactId], references: [id], onDelete: Restrict)
-
-  @@unique([generationPlanAssemblyId, ordinal])
-  @@unique([generationPlanAssemblyId, generationSpecId])
-  @@unique([projectId, id])
-  @@index([generatedArtifactId])
-}
-
-model ContinuityProfile {
-  id                String                     @id @default(uuid()) @db.Uuid
-  projectId         String                     @db.Uuid
-  storyboardId      String                     @unique @db.Uuid
-  headVersionId     String?                    @unique @db.Uuid
-  approvedVersionId String?                    @unique @db.Uuid
-  rowVersion        Int                        @default(0)
-  createdAt         DateTime                   @default(now())
-  updatedAt         DateTime                   @updatedAt
-  project           Project                    @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  storyboard        Storyboard                 @relation(fields: [storyboardId], references: [id], onDelete: Restrict)
-  headVersion       ContinuityProfileVersion?  @relation("ContinuityProfileHead", fields: [headVersionId], references: [id], onDelete: Restrict)
-  approvedVersion   ContinuityProfileVersion?  @relation("ContinuityProfileApproved", fields: [approvedVersionId], references: [id], onDelete: Restrict)
-  versions          ContinuityProfileVersion[] @relation("ContinuityProfileVersions")
-  decisions         ContinuityDecision[]
-
-  @@unique([projectId, id])
-  @@index([projectId, updatedAt(sort: Desc)])
-}
-
-model ContinuityProfileVersion {
-  id                  String                     @id @default(uuid()) @db.Uuid
-  projectId           String                     @db.Uuid
-  continuityProfileId String                     @db.Uuid
-  storyboardVersionId String                     @db.Uuid
-  manifestId          String                     @db.Uuid
-  parentVersionId     String?                    @db.Uuid
-  versionNumber       Int
-  registryVersion     String                     @db.VarChar(80)
-  inputHash           String                     @db.Char(64)
-  outputHash          String                     @db.Char(64)
-  idempotencyKey      String                     @unique @db.VarChar(120)
-  createdAt           DateTime                   @default(now())
-  project             Project                    @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  continuityProfile   ContinuityProfile          @relation("ContinuityProfileVersions", fields: [continuityProfileId], references: [id], onDelete: Restrict)
-  storyboardVersion   StoryboardVersion          @relation(fields: [storyboardVersionId], references: [id], onDelete: Restrict)
-  manifest            AssetResolutionManifest    @relation(fields: [manifestId], references: [id], onDelete: Restrict)
-  parentVersion       ContinuityProfileVersion?  @relation("ContinuityVersionLineage", fields: [parentVersionId], references: [id], onDelete: Restrict)
-  childVersions       ContinuityProfileVersion[] @relation("ContinuityVersionLineage")
-  headFor             ContinuityProfile?         @relation("ContinuityProfileHead")
-  approvedFor         ContinuityProfile?         @relation("ContinuityProfileApproved")
-  subjects            ContinuitySubject[]
-  boundaries          ShotBoundary[]
-  shotStates          ShotContinuityState[]
-  decisions           ContinuityDecision[]
-  keyframePlans       KeyframePlanVersion[]
-  generationBatches   GenerationBatch[]
-
-  @@unique([continuityProfileId, versionNumber])
-  @@unique([projectId, id])
-  @@index([storyboardVersionId, createdAt(sort: Desc)])
-}
-
-model ContinuitySubject {
-  id                         String                   @id @default(uuid()) @db.Uuid
-  projectId                  String                   @db.Uuid
-  continuityProfileVersionId String                   @db.Uuid
-  subjectKey                 String                   @db.VarChar(160)
-  kind                       ContinuitySubjectKind
-  label                      String                   @db.VarChar(160)
-  productionAssetVersionId   String?                  @db.Uuid
-  assetVersionFileId         String?                  @db.Uuid
-  sourceSha256               String?                  @db.Char(64)
-  factsJson                  Json
-  createdAt                  DateTime                 @default(now())
-  project                    Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  continuityProfileVersion   ContinuityProfileVersion @relation(fields: [continuityProfileVersionId], references: [id], onDelete: Restrict)
-  rules                      ContinuityRule[]
-
-  @@unique([continuityProfileVersionId, subjectKey])
-  @@unique([projectId, id])
-  @@index([continuityProfileVersionId, kind])
-}
-
-model ContinuityRule {
-  id                  String               @id @default(uuid()) @db.Uuid
-  continuitySubjectId String               @db.Uuid
-  propertyKey         String               @db.VarChar(120)
-  policy              ContinuityPolicy
-  importance          ContinuityImportance
-  expectedValueJson   Json
-  explanation         String?
-  createdAt           DateTime             @default(now())
-  continuitySubject   ContinuitySubject    @relation(fields: [continuitySubjectId], references: [id], onDelete: Restrict)
-
-  @@unique([continuitySubjectId, propertyKey])
-}
-
-model ShotBoundary {
-  id                         String                   @id @default(uuid()) @db.Uuid
-  continuityProfileVersionId String                   @db.Uuid
-  boundaryIndex              Int
-  label                      String                   @db.VarChar(160)
-  stateJson                  Json
-  stateHash                  String                   @db.Char(64)
-  createdAt                  DateTime                 @default(now())
-  continuityProfileVersion   ContinuityProfileVersion @relation(fields: [continuityProfileVersionId], references: [id], onDelete: Restrict)
-  startingShots              ShotContinuityState[]    @relation("ShotStartBoundary")
-  endingShots                ShotContinuityState[]    @relation("ShotEndBoundary")
-  keyframeTargets            KeyframeTarget[]
-
-  @@unique([continuityProfileVersionId, boundaryIndex])
-  @@unique([continuityProfileVersionId, id])
-  @@index([continuityProfileVersionId, boundaryIndex])
-}
-
-model ShotContinuityState {
-  id                         String                   @id @default(uuid()) @db.Uuid
-  projectId                  String                   @db.Uuid
-  continuityProfileVersionId String                   @db.Uuid
-  storyboardShotId           String                   @db.Uuid
-  ordinal                    Int
-  startBoundaryId            String                   @db.Uuid
-  endBoundaryId              String                   @db.Uuid
-  declaredChangesJson        Json
-  createdAt                  DateTime                 @default(now())
-  continuityProfileVersion   ContinuityProfileVersion @relation(fields: [continuityProfileVersionId], references: [id], onDelete: Restrict)
-  storyboardShot             StoryboardShot           @relation(fields: [storyboardShotId], references: [id], onDelete: Restrict)
-  startBoundary              ShotBoundary             @relation("ShotStartBoundary", fields: [startBoundaryId], references: [id], onDelete: Restrict)
-  endBoundary                ShotBoundary             @relation("ShotEndBoundary", fields: [endBoundaryId], references: [id], onDelete: Restrict)
-
-  @@unique([continuityProfileVersionId, storyboardShotId])
-  @@unique([continuityProfileVersionId, ordinal])
-  @@unique([projectId, id])
-}
-
-model ContinuityDecision {
-  id                         String                   @id @default(uuid()) @db.Uuid
-  projectId                  String                   @db.Uuid
-  continuityProfileId        String                   @db.Uuid
-  continuityProfileVersionId String                   @db.Uuid
-  decision                   ContinuityDecisionType
-  preflightHash              String                   @db.Char(64)
-  idempotencyKey             String                   @unique @db.VarChar(120)
-  notes                      String?
-  createdAt                  DateTime                 @default(now())
-  project                    Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  continuityProfile          ContinuityProfile        @relation(fields: [continuityProfileId], references: [id], onDelete: Restrict)
-  continuityProfileVersion   ContinuityProfileVersion @relation(fields: [continuityProfileVersionId], references: [id], onDelete: Restrict)
-
-  @@unique([projectId, id])
-  @@index([continuityProfileId, createdAt(sort: Desc)])
-}
-
-model KeyframePlanVersion {
-  id                         String                   @id @default(uuid()) @db.Uuid
-  projectId                  String                   @db.Uuid
-  continuityProfileVersionId String                   @db.Uuid
-  providerProfileId          String                   @db.VarChar(80)
-  providerId                 String                   @db.VarChar(80)
-  modelId                    String                   @db.VarChar(160)
-  modelSnapshot              String                   @db.VarChar(160)
-  capabilitiesJson           Json
-  width                      Int
-  height                     Int
-  quality                    String                   @db.VarChar(40)
-  priceFactsJson             Json
-  priceAsOf                  DateTime?
-  priceExpiresAt             DateTime?
-  maximumCalls               Int
-  planHash                   String                   @unique @db.Char(64)
-  status                     KeyframePlanStatus       @default(PLANNED)
-  rowVersion                 Int                      @default(0)
-  createdAt                  DateTime                 @default(now())
-  updatedAt                  DateTime                 @updatedAt
-  project                    Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  continuityProfileVersion   ContinuityProfileVersion @relation(fields: [continuityProfileVersionId], references: [id], onDelete: Restrict)
-  targets                    KeyframeTarget[]
-  authorization              KeyframeAuthorization?
-  generationBatches          GenerationBatch[]
-
-  @@unique([projectId, id])
-  @@index([continuityProfileVersionId, createdAt(sort: Desc)])
-}
-
-model KeyframeTarget {
-  id                    String              @id @default(uuid()) @db.Uuid
-  keyframePlanVersionId String              @db.Uuid
-  shotBoundaryId        String              @db.Uuid
-  boundaryIndex         Int
-  stateHash             String              @db.Char(64)
-  referencesJson        Json
-  referencesHash        String              @db.Char(64)
-  prompt                String
-  promptHash            String              @db.Char(64)
-  targetHash            String              @db.Char(64)
-  createdAt             DateTime            @default(now())
-  keyframePlanVersion   KeyframePlanVersion @relation(fields: [keyframePlanVersionId], references: [id], onDelete: Restrict)
-  shotBoundary          ShotBoundary        @relation(fields: [shotBoundaryId], references: [id], onDelete: Restrict)
-  attempts              KeyframeAttempt[]
-
-  @@unique([keyframePlanVersionId, boundaryIndex])
-  @@unique([keyframePlanVersionId, shotBoundaryId])
-  @@unique([keyframePlanVersionId, targetHash])
-}
-
-model KeyframeAuthorization {
-  id                    String              @id @default(uuid()) @db.Uuid
-  projectId             String              @db.Uuid
-  keyframePlanVersionId String              @unique @db.Uuid
-  planHash              String              @db.Char(64)
-  maximumCalls          Int
-  idempotencyKey        String              @unique @db.VarChar(120)
-  confirmedAt           DateTime
-  expiresAt             DateTime
-  createdAt             DateTime            @default(now())
-  project               Project             @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  keyframePlanVersion   KeyframePlanVersion @relation(fields: [keyframePlanVersionId], references: [id], onDelete: Restrict)
-  attempts              KeyframeAttempt[]
-
-  @@unique([projectId, id])
-  @@index([projectId, expiresAt])
-}
-
-model KeyframeAttempt {
-  id                      String                @id @default(uuid()) @db.Uuid
-  projectId               String                @db.Uuid
-  keyframeAuthorizationId String                @db.Uuid
-  keyframeTargetId        String                @db.Uuid
-  providerId              String                @db.VarChar(80)
-  modelSnapshot           String                @db.VarChar(160)
-  requestHash             String                @db.Char(64)
-  status                  KeyframeAttemptStatus @default(STARTED)
-  safeResultCode          String                @db.VarChar(80)
-  providerCallCount       Int                   @default(0)
-  usageJson               Json?
-  costFactsJson           Json?
-  responseId              String?               @db.VarChar(255)
-  createdAt               DateTime              @default(now())
-  finishedAt              DateTime?
-  project                 Project               @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  keyframeAuthorization   KeyframeAuthorization @relation(fields: [keyframeAuthorizationId], references: [id], onDelete: Restrict)
-  keyframeTarget          KeyframeTarget        @relation(fields: [keyframeTargetId], references: [id], onDelete: Restrict)
-  artifact                KeyframeArtifact?
-
-  @@unique([keyframeAuthorizationId, keyframeTargetId])
-  @@unique([projectId, id])
-  @@index([keyframeAuthorizationId, createdAt])
-}
-
-model KeyframeArtifact {
-  id                String             @id @default(uuid()) @db.Uuid
-  projectId         String             @db.Uuid
-  keyframeAttemptId String             @unique @db.Uuid
-  storageKey        String             @db.VarChar(255)
-  sha256            String             @db.Char(64)
-  byteSize          BigInt
-  detectedMimeType  String             @db.VarChar(120)
-  width             Int
-  height            Int
-  retainedAt        DateTime           @default(now())
-  project           Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  keyframeAttempt   KeyframeAttempt    @relation(fields: [keyframeAttemptId], references: [id], onDelete: Restrict)
-  decisions         KeyframeDecision[]
-
-  @@unique([projectId, id])
-  @@index([storageKey])
-}
-
-model KeyframeDecision {
-  id                 String               @id @default(uuid()) @db.Uuid
-  projectId          String               @db.Uuid
-  keyframeArtifactId String               @db.Uuid
-  decision           KeyframeDecisionType
-  idempotencyKey     String               @unique @db.VarChar(120)
-  notes              String?
-  createdAt          DateTime             @default(now())
-  project            Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  keyframeArtifact   KeyframeArtifact     @relation(fields: [keyframeArtifactId], references: [id], onDelete: Restrict)
-
-  @@unique([projectId, id])
-  @@index([keyframeArtifactId, createdAt(sort: Desc)])
-}
-
-model GenerationPlanDraft {
-  id                      String                      @id @default(uuid()) @db.Uuid
-  projectId               String                      @db.Uuid
-  generationPlanId        String                      @db.Uuid
-  generationPlanVersionId String                      @db.Uuid
-  sourceSetHash           String                      @db.Char(64)
-  warningsJson            Json
-  warningsHash            String                      @db.Char(64)
-  storageKey              String                      @db.VarChar(255)
-  sha256                  String                      @db.Char(64)
-  byteSize                BigInt
-  detectedMimeType        String                      @db.VarChar(120)
-  container               String                      @db.VarChar(80)
-  videoCodec              String                      @db.VarChar(80)
-  width                   Int
-  height                  Int
-  fps                     Float
-  durationSeconds         Float
-  hasAudio                Boolean                     @default(false)
-  assemblerVersion        String                      @db.VarChar(80)
-  createdAt               DateTime                    @default(now())
-  project                 Project                     @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  generationPlan          GenerationPlan              @relation(fields: [generationPlanId], references: [id], onDelete: Restrict)
-  generationPlanVersion   GenerationPlanVersion       @relation(fields: [generationPlanVersionId], references: [id], onDelete: Restrict)
-  sources                 GenerationPlanDraftSource[]
-
-  @@unique([generationPlanVersionId, sourceSetHash, warningsHash])
-  @@unique([projectId, id])
-  @@index([generationPlanId, createdAt(sort: Desc)])
-}
-
-model GenerationPlanDraftSource {
-  id                    String              @id @default(uuid()) @db.Uuid
-  projectId             String              @db.Uuid
-  generationPlanDraftId String              @db.Uuid
-  generationSpecId      String              @db.Uuid
-  generatedArtifactId   String              @db.Uuid
-  ordinal               Int
-  sourceSha256          String              @db.Char(64)
-  sourceByteSize        BigInt
-  sourceMimeType        String              @db.VarChar(120)
-  humanQaState          String              @db.VarChar(40)
-  warningsJson          Json
-  createdAt             DateTime            @default(now())
-  project               Project             @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  generationPlanDraft   GenerationPlanDraft @relation(fields: [generationPlanDraftId], references: [id], onDelete: Restrict)
-  generationSpec        GenerationSpec      @relation(fields: [generationSpecId], references: [id], onDelete: Restrict)
-  generatedArtifact     GeneratedArtifact   @relation(fields: [generatedArtifactId], references: [id], onDelete: Restrict)
-
-  @@unique([generationPlanDraftId, ordinal])
-  @@unique([generationPlanDraftId, generationSpecId])
-  @@unique([projectId, id])
-  @@index([generatedArtifactId])
-}
-
-model CapabilityRuntimeProfile {
   id          String   @id @default(uuid()) @db.Uuid
-  profileKey  String   @db.VarChar(160)
-  version     String   @db.VarChar(80)
-  kind        String   @db.VarChar(40)
+  aiQaRunId   String   @unique @db.Uuid
   payloadJson Json
-  payloadHash String   @db.Char(64)
-  createdAt   DateTime @default(now())
-
-  @@unique([profileKey, version])
+  digest      String   @db.Char(64)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  aiQaRun     AiQaRun  @relation(fields: [aiQaRunId], references: [id], onDelete: Restrict)
 }
 
-model CapabilityProviderProfile {
-  id          String   @id @default(uuid()) @db.Uuid
-  profileKey  String   @db.VarChar(160)
-  version     String   @db.VarChar(80)
-  kind        String   @db.VarChar(40)
-  payloadJson Json
-  payloadHash String   @db.Char(64)
-  createdAt   DateTime @default(now())
-
-  @@unique([profileKey, version])
-}
-
-model CapabilityModelProfile {
-  id              String   @id @default(uuid()) @db.Uuid
-  profileKey      String   @db.VarChar(160)
-  version         String   @db.VarChar(80)
-  providerKey     String   @db.VarChar(160)
-  providerVersion String   @db.VarChar(80)
-  payloadJson     Json
-  payloadHash     String   @db.Char(64)
-  createdAt       DateTime @default(now())
-
-  @@unique([profileKey, version])
-  @@index([providerKey, providerVersion])
-}
-
-model CapabilityAdapterProfile {
-  id          String   @id @default(uuid()) @db.Uuid
-  profileKey  String   @db.VarChar(160)
-  version     String   @db.VarChar(80)
-  factoryKey  String   @db.VarChar(160)
-  payloadJson Json
-  payloadHash String   @db.Char(64)
-  createdAt   DateTime @default(now())
-
-  @@unique([profileKey, version])
-  @@index([factoryKey, version])
-}
-
-model CapabilityCompilerProfile {
-  id          String   @id @default(uuid()) @db.Uuid
-  profileKey  String   @db.VarChar(160)
-  version     String   @db.VarChar(80)
-  compilerKey String   @db.VarChar(160)
-  payloadJson Json
-  payloadHash String   @db.Char(64)
-  createdAt   DateTime @default(now())
-
-  @@unique([profileKey, version])
-  @@index([compilerKey, version])
-}
-
-model CapabilityGenerationImplementation {
-  id                  String                            @id @default(uuid()) @db.Uuid
-  implementationKey   String                            @db.VarChar(160)
-  version             String                            @db.VarChar(80)
-  runtimeKey          String                            @db.VarChar(160)
-  runtimeVersion      String                            @db.VarChar(80)
-  providerKey         String                            @db.VarChar(160)
-  providerVersion     String                            @db.VarChar(80)
-  modelKey            String                            @db.VarChar(160)
-  modelVersion        String                            @db.VarChar(80)
-  adapterKey          String                            @db.VarChar(160)
-  adapterVersion      String                            @db.VarChar(80)
-  compilerKey         String                            @db.VarChar(160)
-  compilerVersion     String                            @db.VarChar(80)
-  capabilityJson      Json
-  costPolicyJson      Json
-  compositionHash     String                            @db.Char(64)
-  lifecycle           CapabilityImplementationLifecycle
-  lifecycleReasonCode String?                           @db.VarChar(160)
-  evidencePolicy      String                            @default("EXACT_VERSION_REAL_RESULT") @db.VarChar(80)
-  testOnly            Boolean                           @default(false)
-  lifecycleUpdatedAt  DateTime                          @default(now())
-  createdAt           DateTime                          @default(now())
-
-  @@unique([implementationKey, version])
-  @@index([lifecycle, lifecycleUpdatedAt(sort: Desc)])
-}
-
-model CapabilityDiscoveryCandidate {
-  id              String                    @id @default(uuid()) @db.Uuid
-  candidateKey    String                    @db.VarChar(160)
-  version         String                    @db.VarChar(80)
-  runtimeKey      String                    @db.VarChar(160)
-  runtimeVersion  String                    @db.VarChar(80)
-  sourceDigest    String                    @db.Char(64)
-  nodeIdentifier  String                    @db.VarChar(160)
-  normalizedJson  Json
-  rawSchemaRef    String                    @db.VarChar(160)
-  status          CapabilityDiscoveryStatus @default(DISCOVERED)
-  statusReason    String?                   @db.VarChar(160)
-  discoveredAt    DateTime                  @default(now())
-  statusUpdatedAt DateTime                  @default(now())
-
-  @@unique([candidateKey, version])
-  @@unique([runtimeKey, runtimeVersion, sourceDigest, nodeIdentifier])
-  @@index([status, discoveredAt(sort: Desc)])
-}
-
-model CapabilityRegistryPublication {
-  id                      String   @id @default(uuid()) @db.Uuid
-  publicationKey          String   @db.VarChar(160)
-  version                 String   @db.VarChar(80)
-  candidateKey            String   @db.VarChar(160)
-  candidateVersion        String   @db.VarChar(80)
-  sourceDigest            String   @db.Char(64)
-  implementationKey       String   @db.VarChar(160)
-  implementationVersion   String   @db.VarChar(80)
-  reviewedCompositionJson Json
-  publicationHash         String   @db.Char(64)
-  reviewerRef             String   @db.VarChar(160)
-  reviewedAt              DateTime
-  createdAt               DateTime @default(now())
-
-  @@unique([publicationKey, version])
-  @@unique([candidateKey, candidateVersion])
-  @@index([implementationKey, implementationVersion])
-}
-
-model CapabilityImplementationEvidence {
-  id                    String                    @id @default(uuid()) @db.Uuid
-  implementationKey     String                    @db.VarChar(160)
-  implementationVersion String                    @db.VarChar(80)
-  compilerKey           String                    @db.VarChar(160)
-  compilerVersion       String                    @db.VarChar(80)
-  kind                  CapabilityEvidenceKind
-  outcome               CapabilityEvidenceOutcome
-  evidenceJson          Json
-  evidenceHash          String                    @db.Char(64)
-  callCount             Int                       @default(0)
-  costDigest            String?                   @db.Char(64)
-  reviewerRef           String?                   @db.VarChar(160)
-  recordedAt            DateTime                  @default(now())
-
-  @@unique([implementationKey, implementationVersion, kind, evidenceHash])
-  @@index([implementationKey, implementationVersion, recordedAt(sort: Desc)])
-}
-
-model ShotRequirementSpecV3Record {
-  id                  String   @id @default(uuid()) @db.Uuid
-  projectId           String   @db.Uuid
-  storyboardVersionId String   @db.Uuid
-  storyboardShotId    String   @db.Uuid
-  shotId              String   @db.Uuid
-  version             String   @db.VarChar(80)
-  payloadJson         Json
-  requirementHash     String   @db.Char(64)
-  createdAt           DateTime @default(now())
-
-  @@unique([shotId, version])
-  @@unique([storyboardShotId, requirementHash])
-  @@index([projectId, storyboardVersionId])
-}
-
-model PlanningInputSnapshotV3Record {
-  id                    String   @id @default(uuid()) @db.Uuid
-  projectId             String   @db.Uuid
-  requirementSpecId     String   @db.Uuid
-  version               String   @db.VarChar(80)
-  implementationKey     String   @db.VarChar(160)
-  implementationVersion String   @db.VarChar(80)
-  compilerKey           String   @db.VarChar(160)
-  compilerVersion       String   @db.VarChar(80)
-  payloadJson           Json
-  sourceDigest          String   @db.Char(64)
-  capabilityDigest      String   @db.Char(64)
-  snapshotHash          String   @db.Char(64)
-  createdAt             DateTime @default(now())
-
-  @@unique([requirementSpecId, version])
-  @@unique([projectId, snapshotHash])
-}
-
-model GenerationSpecV3Record {
-  id                      String                          @id @default(uuid()) @db.Uuid
-  projectId               String                          @db.Uuid
-  shotId                  String                          @db.Uuid
-  storyboardVersionId     String                          @db.Uuid
-  requirementSpecId       String                          @db.Uuid
-  planningInputSnapshotId String                          @db.Uuid
-  implementationKey       String                          @db.VarChar(160)
-  implementationVersion   String                          @db.VarChar(80)
-  runtimeKey              String                          @db.VarChar(160)
-  runtimeVersion          String                          @db.VarChar(80)
-  providerKey             String                          @db.VarChar(160)
-  providerVersion         String                          @db.VarChar(80)
-  modelKey                String                          @db.VarChar(160)
-  modelVersion            String                          @db.VarChar(80)
-  adapterKey              String                          @db.VarChar(160)
-  adapterVersion          String                          @db.VarChar(80)
-  compilerKey             String                          @db.VarChar(160)
-  compilerVersion         String                          @db.VarChar(80)
-  version                 String                          @db.VarChar(80)
-  payloadJson             Json
-  compiledRequestDigest   String                          @db.Char(64)
-  inputHash               String                          @db.Char(64)
-  dependencyHash          String                          @db.Char(64)
-  outputHash              String                          @db.Char(64)
-  createdAt               DateTime                        @default(now())
-  batchTargets            GenerationBatchTargetV3Record[]
-  trialScopeItems         TrialScopeApprovalItem[]
-
-  @@unique([shotId, version])
-  @@unique([projectId, outputHash])
-  @@index([planningInputSnapshotId])
-}
-
-model ReferencePlanV3Record {
-  id                    String   @id @default(uuid()) @db.Uuid
-  projectId             String   @db.Uuid
-  shotId                String   @db.Uuid
-  storyboardVersionId   String   @db.Uuid
-  generationSpecId      String   @unique @db.Uuid
-  implementationKey     String   @db.VarChar(160)
-  implementationVersion String   @db.VarChar(80)
-  compilerKey           String   @db.VarChar(160)
-  compilerVersion       String   @db.VarChar(80)
-  referencePlanDigest   String   @unique @db.Char(64)
-  payloadJson           Json
-  createdAt             DateTime @default(now())
-
-  @@index([projectId, storyboardVersionId, shotId])
-}
-
-model MaterializedGraphSnapshotV3Record {
-  id                       String   @id @default(uuid()) @db.Uuid
-  projectId                String   @db.Uuid
-  generationSpecId         String   @unique @db.Uuid
-  referencePlanDigest      String   @unique @db.Char(64)
-  implementationKey        String   @db.VarChar(160)
-  implementationVersion    String   @db.VarChar(80)
-  compilerKey              String   @db.VarChar(160)
-  compilerVersion          String   @db.VarChar(80)
-  validatorKey             String   @db.VarChar(160)
-  validatorVersion         String   @db.VarChar(80)
-  materializedGraphSha256  String   @unique @db.Char(64)
-  capabilityEnvelopeDigest String   @db.Char(64)
-  runtimeContractDigest    String   @db.Char(64)
-  payloadJson              Json
-  createdAt                DateTime @default(now())
-
-  @@index([projectId, createdAt(sort: Desc)])
-}
-
-model AuthorizationConsumptionV3Record {
-  id                      String   @id @default(uuid()) @db.Uuid
-  projectId               String   @db.Uuid
-  authorizationId         String   @db.Uuid
-  generationBatchTargetId String   @db.Uuid
-  attemptId               String   @db.Uuid
-  operation               String   @db.VarChar(40)
-  sequence                Int
-  consumedCalls           Int      @default(1)
-  consumedCostMicros      BigInt?
-  payloadJson             Json
-  createdAt               DateTime @default(now())
-
-  @@unique([authorizationId, sequence])
-  @@unique([attemptId, operation])
-  @@index([projectId, authorizationId, createdAt])
-}
-
-model GenerationAttemptV3Record {
-  id                         String   @id @default(uuid()) @db.Uuid
-  projectId                  String   @db.Uuid
-  generationBatchTargetId    String   @db.Uuid
-  retryOfAttemptId           String?  @db.Uuid
-  generationSpecId           String   @db.Uuid
-  authorizationConsumptionId String   @unique @db.Uuid
-  referencePlanDigest        String   @db.Char(64)
-  materializedGraphSha256    String   @db.Char(64)
-  compilerKey                String   @db.VarChar(160)
-  compilerVersion            String   @db.VarChar(80)
-  validatorKey               String   @db.VarChar(160)
-  validatorVersion           String   @db.VarChar(80)
-  capabilityEnvelopeDigest   String   @db.Char(64)
-  runtimeContractDigest      String   @db.Char(64)
-  attemptNumber              Int
-  idempotencyKey             String   @unique @db.VarChar(160)
-  state                      String   @db.VarChar(40)
-  providerTaskId             String?  @unique @db.VarChar(500)
-  providerCallCount          Int      @default(0)
-  safeResultCode             String?  @db.VarChar(160)
-  payloadJson                Json
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
-
-  @@unique([generationBatchTargetId, attemptNumber])
-  @@index([projectId, generationSpecId, attemptNumber])
-  @@index([projectId, state, createdAt])
-}
-
-model GenerationArtifactV3Record {
-  id                  String   @id @default(uuid()) @db.Uuid
-  projectId           String   @db.Uuid
-  attemptId           String   @unique @db.Uuid
-  storageKey          String   @unique @db.VarChar(500)
-  mediaType           String   @db.VarChar(120)
-  byteSize            BigInt
-  sha256              String   @db.Char(64)
-  technicalStatus     String   @db.VarChar(40)
-  technicalResultCode String?  @db.VarChar(160)
-  ffprobeJson         Json?
-  reviewFramesJson    Json?
-  aiQaStatus          String   @default("PENDING") @db.VarChar(60)
-  aiQaResultJson      Json?
-  payloadJson         Json
-  createdAt           DateTime @default(now())
-
-  @@index([projectId, createdAt(sort: Desc)])
-}
-
-model AiQaRunV3Record {
-  id                         String   @id @default(uuid()) @db.Uuid
-  projectId                  String   @db.Uuid
-  attemptId                  String   @unique @db.Uuid
-  artifactId                 String   @db.Uuid
-  authorizationConsumptionId String   @unique @db.Uuid
-  providerId                 String   @db.VarChar(160)
-  requestedModelId           String   @db.VarChar(160)
-  resolvedModelId            String?  @db.VarChar(160)
-  requestHash                String   @db.Char(64)
-  inputHash                  String   @db.Char(64)
-  responseId                 String?  @db.VarChar(255)
-  status                     String   @db.VarChar(40)
-  safeResultCode             String   @db.VarChar(160)
-  providerCallCount          Int      @default(0)
-  usageJson                  Json?
-  createdAt                  DateTime @default(now())
-  finishedAt                 DateTime?
-
-  @@unique([artifactId, requestHash])
-  @@index([projectId, attemptId, createdAt(sort: Desc)])
-}
-
-model AiQaResultV3Record {
-  id              String   @id @default(uuid()) @db.Uuid
-  aiQaRunId       String   @unique @db.Uuid
-  contractVersion String   @db.VarChar(80)
-  overallStatus   String   @db.VarChar(40)
-  summary         String
-  limitationsJson Json
-  criteriaJson    Json
-  outputHash      String   @db.Char(64)
-  payloadJson     Json
-  createdAt       DateTime @default(now())
-
-  @@index([createdAt(sort: Desc)])
-}
-
-model GenerationOwnerDecisionV3Record {
-  id             String   @id @default(uuid()) @db.Uuid
-  projectId      String   @db.Uuid
-  artifactId     String   @db.Uuid
-  decision       String   @db.VarChar(40)
-  reasonCode     String?  @db.VarChar(160)
-  notes          String?
-  actorRef       String   @db.VarChar(160)
-  idempotencyKey String   @unique @db.VarChar(160)
-  createdAt      DateTime @default(now())
-
-  @@unique([artifactId, createdAt])
-  @@index([projectId, artifactId, createdAt(sort: Desc)])
-}
-
-model GenerationRetryPreviewV3Record {
-  id                      String   @id @default(uuid()) @db.Uuid
-  projectId               String   @db.Uuid
-  failedAttemptId         String   @db.Uuid
-  nextAttemptNumber       Int
-  generationSpecId        String   @db.Uuid
-  materializedGraphSha256 String   @db.Char(64)
-  expectedCalls           Int      @default(1)
-  maximumCalls            Int      @default(1)
-  maximumAiQaCalls        Int      @default(1)
-  maximumCostMicros       BigInt?
-  maximumAiQaCostMicros   BigInt?
-  maximumTotalCostMicros  BigInt?
-  previewDigest           String   @unique @db.Char(64)
-  payloadJson             Json
-  createdAt               DateTime @default(now())
-
-  @@unique([failedAttemptId, nextAttemptNumber])
-  @@index([projectId, createdAt(sort: Desc)])
-}
-
-model GenerationAssemblyV3Record {
-  id                  String   @id @default(uuid()) @db.Uuid
-  projectId           String   @db.Uuid
-  storyboardVersionId String   @db.Uuid
-  inputDigest         String   @unique @db.Char(64)
-  idempotencyKey      String   @unique @db.VarChar(160)
-  state               String   @db.VarChar(40)
-  outputStorageKey    String?  @unique @db.VarChar(500)
-  outputSha256        String?  @db.Char(64)
-  outputByteSize      BigInt?
-  outputFfprobeJson   Json?
-  payloadJson         Json
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  @@index([projectId, storyboardVersionId, createdAt(sort: Desc)])
-}
-
-model GenerationAssemblySourceV3Record {
-  id         String   @id @default(uuid()) @db.Uuid
-  assemblyId String   @db.Uuid
-  artifactId String   @db.Uuid
-  ordinal    Int
-  sha256     String   @db.Char(64)
-  createdAt  DateTime @default(now())
-
-  @@unique([assemblyId, ordinal])
-  @@unique([assemblyId, artifactId])
-}
-
-model GenerationPlanV3Record {
-  id                  String                            @id @default(uuid()) @db.Uuid
-  projectId           String                            @db.Uuid
-  version             String                            @db.VarChar(80)
-  payloadJson         Json
-  planDigest          String                            @db.Char(64)
-  state               GenerationPlanV3State             @default(DRAFT)
-  stateReasonCode     String?                           @db.VarChar(160)
-  stateUpdatedAt      DateTime                          @default(now())
-  createdAt           DateTime                          @default(now())
-  authorizations      GenerationAuthorizationV3Record[]
-  batches             GenerationBatchV3Record[]
-  trialScopeApprovals TrialScopeApproval[]
-
-  @@unique([projectId, planDigest])
-  @@index([projectId, state, createdAt(sort: Desc)])
-}
-
-model GenerationAuthorizationV3Record {
-  id                String                         @id @default(uuid()) @db.Uuid
-  projectId         String                         @db.Uuid
-  generationPlanId  String                         @db.Uuid
-  planDigest        String                         @db.Char(64)
-  scopeJson         Json
-  scopeHash         String                         @db.Char(64)
-  expectedCalls     Int
-  maximumCalls      Int
-  consumedCalls     Int                            @default(0)
-  maximumAiQaCalls  Int                            @default(0)
-  consumedAiQaCalls Int                            @default(0)
-  maximumCostMicros BigInt?
-  maximumAiQaCostMicros BigInt?
-  maximumTotalCostMicros BigInt?
-  aiQaProviderId    String?                        @db.VarChar(160)
-  aiQaModelId       String?                        @db.VarChar(160)
-  aiQaPricingJson   Json?
-  expiresAt         DateTime
-  noRetry           Boolean                        @default(true)
-  noFallback        Boolean                        @default(true)
-  state             GenerationAuthorizationV3State @default(ACTIVE)
-  stateUpdatedAt    DateTime                       @default(now())
-  createdAt         DateTime                       @default(now())
-  generationPlan    GenerationPlanV3Record         @relation(fields: [generationPlanId], references: [id], onDelete: Restrict)
-  batch             GenerationBatchV3Record?
-
-  @@unique([generationPlanId, scopeHash])
-  @@index([projectId, state, expiresAt])
-}
-
-model GenerationBatchV3Record {
-  id                        String                          @id @default(uuid()) @db.Uuid
-  projectId                 String                          @db.Uuid
-  generationPlanId          String                          @db.Uuid
-  generationAuthorizationId String                          @unique @db.Uuid
-  planDigest                String                          @db.Char(64)
-  previewHash               String                          @db.Char(64)
-  scopeHash                 String                          @db.Char(64)
-  selectedShotIdsJson       Json
-  expectedCalls             Int
-  maximumCalls              Int
-  maximumAiQaCalls          Int
-  consumedAiQaCalls         Int                             @default(0)
-  costPolicyDigest          String                          @db.Char(64)
-  maximumCostMicros         BigInt?
-  maximumAiQaCostMicros     BigInt?
-  maximumTotalCostMicros    BigInt?
-  aiQaProviderId            String?                         @db.VarChar(160)
-  aiQaModelId               String?                         @db.VarChar(160)
-  aiQaPricingJson           Json?
-  currency                  String?                         @db.Char(3)
-  idempotencyKey            String                          @unique @db.VarChar(160)
-  state                     GenerationBatchV3State          @default(QUEUED)
-  safeResultCode            String                          @default("QUEUED") @db.VarChar(160)
-  createdAt                 DateTime                        @default(now())
-  updatedAt                 DateTime                        @updatedAt
-  generationPlan            GenerationPlanV3Record          @relation(fields: [generationPlanId], references: [id], onDelete: Restrict)
-  authorization             GenerationAuthorizationV3Record @relation(fields: [generationAuthorizationId], references: [id], onDelete: Restrict)
-  targets                   GenerationBatchTargetV3Record[]
-
-  @@unique([generationPlanId, scopeHash])
-  @@index([projectId, state, createdAt(sort: Desc)])
-}
-
-model GenerationBatchTargetV3Record {
-  id                    String                       @id @default(uuid()) @db.Uuid
-  projectId             String                       @db.Uuid
-  generationBatchId     String                       @db.Uuid
-  shotId                String                       @db.Uuid
-  generationSpecId      String                       @db.Uuid
-  retryOfAttemptId      String?                      @db.Uuid
-  ordinal               Int
-  targetDigest          String                       @db.Char(64)
-  implementationKey     String                       @db.VarChar(160)
-  implementationVersion String                       @db.VarChar(80)
-  adapterKey            String                       @db.VarChar(160)
-  adapterVersion        String                       @db.VarChar(80)
-  compilerKey           String                       @db.VarChar(160)
-  compilerVersion       String                       @db.VarChar(80)
-  state                 GenerationBatchTargetV3State @default(QUEUED)
-  safeResultCode        String                       @default("QUEUED") @db.VarChar(160)
-  providerTaskId        String?                      @unique @db.VarChar(255)
-  providerCallCount     Int                          @default(0)
-  callConsumedAt        DateTime?
-  createdAt             DateTime                     @default(now())
-  updatedAt             DateTime                     @updatedAt
-  generationBatch       GenerationBatchV3Record      @relation(fields: [generationBatchId], references: [id], onDelete: Restrict)
-  generationSpec        GenerationSpecV3Record       @relation(fields: [generationSpecId], references: [id], onDelete: Restrict)
-
-  @@unique([generationBatchId, shotId])
-  @@unique([generationBatchId, ordinal])
-  @@index([projectId, state, createdAt])
-}
-
-model TrialScopeApproval {
-  id                    String                   @id @default(uuid()) @db.Uuid
-  projectId             String                   @db.Uuid
-  storyboardId          String                   @db.Uuid
-  storyboardVersionId   String                   @db.Uuid
-  storyboardVersionHash String                   @db.Char(64)
-  generationPlanId      String                   @db.Uuid
-  generationPlanVersion String                   @db.VarChar(80)
-  planDigest            String                   @db.Char(64)
-  requestHash           String                   @db.Char(64)
-  scopeDigest           String                   @db.Char(64)
-  idempotencyKey        String                   @db.VarChar(160)
-  actorRef              String                   @db.VarChar(160)
-  expiresAt             DateTime
-  createdAt             DateTime                 @default(now())
-  project               Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  storyboard            Storyboard               @relation(fields: [storyboardId], references: [id], onDelete: Restrict)
-  storyboardVersion     StoryboardVersion        @relation(fields: [storyboardVersionId], references: [id], onDelete: Restrict)
-  generationPlan        GenerationPlanV3Record   @relation(fields: [generationPlanId], references: [id], onDelete: Restrict)
-  items                 TrialScopeApprovalItem[]
-  revocation            TrialScopeRevocation?
-
-  @@unique([storyboardVersionId, idempotencyKey])
-  @@index([projectId, storyboardId, createdAt(sort: Desc)])
-  @@index([storyboardVersionId, expiresAt])
-}
-
-model TrialScopeApprovalItem {
-  id                    String                 @id @default(uuid()) @db.Uuid
-  approvalId            String                 @db.Uuid
-  shotId                String                 @db.Uuid
-  generationSpecId      String                 @db.Uuid
-  generationSpecVersion String                 @db.VarChar(80)
-  implementationKey     String                 @db.VarChar(160)
-  implementationVersion String                 @db.VarChar(80)
-  runtimeKey            String                 @db.VarChar(160)
-  runtimeVersion        String                 @db.VarChar(80)
-  providerKey           String                 @db.VarChar(160)
-  providerVersion       String                 @db.VarChar(80)
-  modelKey              String                 @db.VarChar(160)
-  modelVersion          String                 @db.VarChar(80)
-  adapterKey            String                 @db.VarChar(160)
-  adapterVersion        String                 @db.VarChar(80)
-  compilerKey           String                 @db.VarChar(160)
-  compilerVersion       String                 @db.VarChar(80)
-  compiledRequestDigest String                 @db.Char(64)
-  costPolicyDigest      String                 @db.Char(64)
-  compositionDigest     String                 @db.Char(64)
-  createdAt             DateTime               @default(now())
-  approval              TrialScopeApproval     @relation(fields: [approvalId], references: [id], onDelete: Restrict)
-  generationSpec        GenerationSpecV3Record @relation(fields: [generationSpecId], references: [id], onDelete: Restrict)
-
-  @@unique([approvalId, shotId])
-  @@index([shotId, implementationKey, implementationVersion])
-}
-
-model TrialScopeRevocation {
+model OwnerDecision {
   id             String             @id @default(uuid()) @db.Uuid
-  approvalId     String             @unique @db.Uuid
-  reasonCode     String             @db.VarChar(80)
+  artifactId     String             @db.Uuid
+  decision       OwnerDecisionType
   actorRef       String             @db.VarChar(160)
   idempotencyKey String             @unique @db.VarChar(160)
-  createdAt      DateTime           @default(now())
-  approval       TrialScopeApproval @relation(fields: [approvalId], references: [id], onDelete: Restrict)
+  createdAt      DateTime           @default(now()) @db.Timestamptz(6)
+  artifact       GenerationArtifact @relation(fields: [artifactId], references: [id], onDelete: Restrict)
+  retryPreview   RetryPreview?
+}
 
-  @@index([createdAt(sort: Desc)])
+model RetryPreview {
+  id              String        @id @default(uuid()) @db.Uuid
+  ownerDecisionId String        @unique @db.Uuid
+  payloadJson     Json
+  digest          String        @unique @db.Char(64)
+  createdAt       DateTime      @default(now()) @db.Timestamptz(6)
+  ownerDecision   OwnerDecision @relation(fields: [ownerDecisionId], references: [id], onDelete: Restrict)
+}
+
+model GenerationAssembly {
+  id             String   @id @default(uuid()) @db.Uuid
+  projectId      String   @db.Uuid
+  inputDigest    String   @unique @db.Char(64)
+  idempotencyKey String   @unique @db.VarChar(160)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Restrict)
 }

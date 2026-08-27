@@ -1,7 +1,0 @@
-{
-  "generationRegistrySha256": "c48af7ca5b2f39c8aea92dcd824647ba3eeb7881730712e6a7b04986de5be651",
-  "workflowRegistrySha256": "3128cd0d67bbd5d55cbcb8d524a8007f285a08dc8241bac59a7fd97865e05cc1",
-  "projectShotWorkflowId": "minimax-h3-project-shot-4s-v1",
-  "projectShotWorkflowSha256": "6eb380b17fd775ee15e45cc7a65b5fb80478954bc51c027faff67dcd5b0d1d7a",
-  "generationProviderProfileIds": ["fake-video-v1", "minimax-h3-4s-v1"]
-}

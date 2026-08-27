@@ -1,5 +1,9 @@
 # Feature Specification: Dynamic Hailuo 03 Capability V3
 
+> **Superseded by Feature 017 (2026-08-27).** This specification remains immutable historical
+> context only. Feature 017 replaces its product generation path, schemas, routes, and verification
+> scope; do not extend Feature 016 for production work.
+
 **Feature Branch**: `codex/016-dynamic-hailuo-v3`
 
 **Created**: 2026-08-26

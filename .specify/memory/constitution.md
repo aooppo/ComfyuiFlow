@@ -1,38 +1,40 @@
 <!--
 Sync Impact Report
-- Version change: 1.0.0 -> 2.0.0
+- Version change: 2.0.0 -> 3.0.0
 - Modified principles:
-  - III. Provider-Neutral Contracts and Honest Capabilities: READY is evidence-scoped,
-    not a blanket quality guarantee.
-  - IV. Zero-Call Defaults and Bounded Live Execution: video and AI-QA authority are
-    separately bounded and consumed before their respective network attempts.
-  - V. Durable Provenance and Verification: server-owned real-execution evidence and
-    explicit operator promotion are required for READY.
-- Added sections: none
-- Removed sections: none
+  - I. Prove the Video Path First -> I. One Dynamic Capability Mainline.
+  - II. Separate Creative Intelligence from Generation: execution now freezes capability identities
+    rather than depending on a GenerationProvider abstraction.
+  - III. Provider-Neutral Contracts and Honest Capabilities: RuntimeContract is a first-class,
+    evidence-scoped capability identity.
+  - IV. Zero-Call Defaults and Bounded Live Execution: retained with independent video and AI-QA
+    authorization, price, expiry, and consumption boundaries.
+  - V. Durable Provenance and Verification: canonical append-only Generation lineage replaces all
+    historical generation record families.
+- Added sections: Canonical Data Reset and Recovery in MVP Technical Constraints.
+- Removed sections: legacy GenerationProvider execution and dual-read compatibility.
 - Deferred items: none
 -->
 # ComfyuiFlow Constitution
 
 ## Core Principles
 
-### I. Prove the Video Path First
-The project MUST validate the smallest real path from prompt and reference images to one playable
-video shot before investing in broad product features. Phase 0A MUST discover an existing ComfyUI
-MCP; if none is usable, Phase 0B MUST build the smallest application-owned MCP bridge over
-confirmed ComfyUI HTTP/WebSocket contracts. Phase 0.5 MUST stop at an explicitly authorized,
-single-shot vertical spike. Project UI, multi-shot orchestration, QA, and assembly MUST NOT be
-treated as validated until this path succeeds.
+### I. One Dynamic Capability Mainline
+The product MUST expose exactly one production generation chain:
+`GenerationSpec -> exact GenerationImplementation -> frozen MaterializedGraphSnapshot ->
+AdapterRegistry -> Adapter -> Provider`. A capability is selected only during planning; execution
+MUST consume frozen identity references and MUST NOT branch on provider nicknames, workflow IDs,
+or implementation profiles. Historical execution services, records, routes, and compatibility
+reads MUST be removed rather than retained as a fallback.
 
-Rationale: the dominant feasibility risk is reference-conditioned video quality and provider
-integration, not CRUD or UI implementation.
+Rationale: a single explicit chain makes capability selection explainable, removes accidental
+fallbacks, and prevents prior implementation semantics from surviving a destructive replacement.
 
 ### II. Separate Creative Intelligence from Generation
 Creative tasks MUST follow `User Intent -> AI Director -> Storyboard -> Shot Planner ->
-GenerationSpec`. Video execution MUST follow `GenerationSpec -> GenerationProvider -> ComfyUI
-MCP`. Storyboard and domain services MUST NOT depend on ComfyUI node names, workflow JSON, or
-provider-specific parameters. Frontend routes MUST NOT send unstructured prompts directly to
-ComfyUI.
+GenerationSpec`. Video execution MUST follow the canonical mainline in Principle I. Storyboard and
+domain services MUST NOT depend on ComfyUI node names, workflow JSON, or provider-specific
+parameters. Frontend routes MUST NOT send unstructured prompts or raw graphs directly to ComfyUI.
 
 Rationale: the separation preserves continuity reasoning, testability, and future provider
 replacement without turning the application into a thin ComfyUI UI.
@@ -41,9 +43,11 @@ replacement without turning the application into a thin ComfyUI UI.
 Asset understanding, AI Director, and AI QA MUST depend on a provider-neutral `AiModelProvider`
 contract and validated structured schemas. OpenAI is implemented first for the vertical slice;
 Qwen is added after the three-shot path unless multi-model comparison is explicitly promoted to
-the active experiment. Provider capabilities MUST be registered and verified. The system MUST NOT
-invent MCP tools, silently fall back to another model, or claim unsupported audio, video,
-continuity, cancellation, or artifact behavior.
+the active experiment. Provider capabilities, RuntimeContracts, compilers, validators, adapters,
+models, and implementations MUST be registered and cross-validated. A RuntimeContract is owned by
+a capability and defines allowed node and runtime facts. The system MUST NOT invent MCP tools,
+silently fall back to another model, accept a browser/worker/LLM raw graph, or claim unsupported
+audio, video, continuity, cancellation, or artifact behavior.
 
 `READY` MUST mean that the exact implementation/compiler/validator/adapter/runtime identity has
 at least one authorized real E2E success within its published capability envelope. It applies to
@@ -71,12 +75,13 @@ current price facts MUST block preview before a batch is created.
 Rationale: paid or GPU-backed operations are irreversible cost and idempotency boundaries.
 
 ### V. Durable Provenance and Verification
-Original assets MUST be preserved with SHA-256 metadata. `AiRun`, storyboard revisions,
-`GenerationJob`, provider task identifiers, `Artifact`, and `QAResult` MUST be append-only; retries
+Original assets MUST be preserved with SHA-256 metadata. Planning inputs, specs, reference plans,
+materialized graphs, plans, authorizations, batches, targets, consumptions, attempts, artifacts,
+AI-QA runs/results, Owner decisions, retry previews, and assemblies MUST be append-only; retries
 and model changes create new records. Completion claims MUST be backed by automated tests and by
-verification at the actual boundary: MCP request/response, persisted job state, playable media,
-FFprobe facts, and explicit human review where required. Provider technical success MUST NOT be
-reported as semantic or human quality approval.
+verification at the actual boundary: MCP request/response, persisted attempt state, playable
+media, FFprobe facts, and explicit human review where required. Provider technical success MUST
+NOT be reported as semantic or human quality approval.
 
 Only a server-owned action that reads persisted Attempt, Artifact, consumption, price, FFprobe,
 three-frame, AI-QA, and Owner-decision records may append authorized real-execution evidence. A
@@ -97,6 +102,15 @@ Rationale: reproducibility and failure recovery require immutable lineage, not o
   artifact retrieval, queue inspection, and cancellation only where the confirmed API supports it.
 - OpenAI and Qwen credentials and endpoints MUST be environment-only and MUST NOT be stored,
   logged, committed, or returned through APIs.
+- The Capability Registry is the sole production registration source. Its first released schema
+  version is 1; product type and route names MUST NOT encode V1, V2, V3, provider codenames, or
+  retired workflow variants.
+- Database rollback is Git reversion plus a verified database and storage backup restore. A reset
+  MUST stop relevant processes first, produce an inspectable PostgreSQL dump and storage SHA-256
+  manifest, move source and generated material to timestamped offline backup, then create an empty
+  product store. Backups MUST NOT be readable by product code.
+- Fake providers are test-only dependency injections. They MUST NOT be registered, configured,
+  rendered, or exposed in production UI or APIs.
 - Redis, Kafka, Temporal, Kubernetes, multi-tenancy, billing, arbitrary compatible endpoints,
   automatic LoRA training, lip sync, music generation, and professional timeline editing are out
   of scope for the MVP.
@@ -132,4 +146,4 @@ changes, MINOR for new principles or materially expanded policy, and PATCH for n
 clarification. Compliance MUST be reviewed before implementation begins and again during
 convergence.
 
-**Version**: 2.0.0 | **Ratified**: 2026-08-23 | **Last Amended**: 2026-08-27
+**Version**: 3.0.0 | **Ratified**: 2026-08-23 | **Last Amended**: 2026-08-27
