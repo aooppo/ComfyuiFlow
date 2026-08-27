@@ -521,3 +521,20 @@ packages/project-core/prisma/schema.prisma`; `pnpm typecheck`; `pnpm lint`; targ
   Hailuo/video Provider 0. T132 and T134-T138 remain open: Assembly source-digest concurrency coverage,
   deeper QA immutable/ambiguity coverage, browser acceptance, performance, converge,
   and the separately bounded LIVE preflight.
+
+## Test A preflight read-only boundary - 2026-08-27
+
+- Target identity is correct and clean at `82e54dd` in
+  `/Users/tj/Documents/ChatGPT/ComfyuiFlow-dynamic-v3` on
+  `codex/016-dynamic-hailuo-v3`. The main checkout and Phase 14 worktree were not changed.
+- No non-example `.env` file is present in the target worktree, and no target Web, Worker, ComfyUI, or
+  MCP process is running. The only ComfyuiFlow PostgreSQL container is the Phase 14 listener on 5448;
+  it was not queried, migrated, reset, or otherwise used.
+- Therefore a LIVE readiness/health result, ComfyUI source/runtime digest, MCP status, `/prompt`
+  baseline, actual target database state, Hailuo price, and QA price/expiry cannot be truthfully read
+  from this target. The preflight stops here: no environment file was copied, no process was started,
+  and no external request was made. External calls remain Director 0, AI QA 0, ComfyUI `/prompt` 0,
+  Hailuo/video Provider 0.
+- To resume T138, provide or associate the existing private target environment and start (or identify)
+  target-worktree Web/Worker/ComfyUI processes. A subsequent preflight must read back those facts and
+  show the exact one-Shot call/price/expiry scope before a separate action-time submission confirmation.
